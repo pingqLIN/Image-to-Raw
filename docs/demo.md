@@ -41,6 +41,8 @@ The script creates:
 
 The samples are generated locally and should not be committed as binary fixtures.
 
+For the staged visual-demo workflow, image category allocation, and contact-sheet tasks, see [docs/i18n/zh-TW/demo-visualization-workflow.md](i18n/zh-TW/demo-visualization-workflow.md).
+
 ## Application Scenarios
 
 - **AI image provenance research**: preserve prompt hash, model metadata, and synthetic camera semantics in a DNG container.
