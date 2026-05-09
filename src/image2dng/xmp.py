@@ -27,6 +27,16 @@ def build_xmp_packet(ai: AIMetadataModel) -> bytes:
         attrs["xmpAI:simulatedWhiteBalanceKelvin"] = f"{ai.white_balance_kelvin:g}"
     if ai.cfa_pattern is not None:
         attrs["xmpAI:cfaPattern"] = ai.cfa_pattern
+    if ai.sensor_noise_model is not None:
+        attrs["xmpAI:sensorNoiseModel"] = ai.sensor_noise_model
+    if ai.shot_noise is not None:
+        attrs["xmpAI:shotNoise"] = f"{ai.shot_noise:g}"
+    if ai.read_noise is not None:
+        attrs["xmpAI:readNoise"] = f"{ai.read_noise:g}"
+    if ai.row_noise is not None:
+        attrs["xmpAI:rowNoise"] = f"{ai.row_noise:g}"
+    if ai.sensor_effect_seed is not None:
+        attrs["xmpAI:sensorEffectSeed"] = str(ai.sensor_effect_seed)
     if ai.prompt_plaintext is not None:
         attrs["xmpAI:promptPlaintext"] = ai.prompt_plaintext
 

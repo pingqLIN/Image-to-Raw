@@ -82,6 +82,10 @@ result = convert(
     cfa_pattern="rggb",
     iso=100,
     white_balance_kelvin=6500,
+    shot_noise=0.0,
+    read_noise=0.0,
+    row_noise=0.0,
+    sensor_effect_seed=None,
     prompt_hash="sha256:...",
     scene_description="synthetic test scene",
     overwrite=False,
@@ -89,6 +93,14 @@ result = convert(
 ```
 
 public API 會丟出 `Image2DNGError` 子類別，而不是結束整個 process。CLI 與 library API 產出應在 `image2dng validate` 下語意等價。
+
+## 產生示範樣張
+
+```powershell
+uv run python scripts/generate_demo_samples.py --output-dir demo-output
+```
+
+架構 demo、sample set 與應用情境見 [docs/demo.md](docs/demo.md)。
 
 ## 測試
 
@@ -103,13 +115,14 @@ uv run ruff check
 
 - 16-bit uncompressed LinearRaw DNG。
 - 明確 opt-in 的 simulated CFA mosaic mode。
+- 可選 deterministic synthetic sensor effects，供 demo 與 compatibility testing 使用。
 - RGB input normalization 與 simple virtual camera transform。
 - XMP custom namespace：`https://example.org/ns/xmp/ai/1.0/`。
 - 永遠寫入 synthetic provenance。
 
 已知限制：
 
-- 尚未支援 shot/read noise model。
+- Sensor effects 是簡化 synthetic controls，不是物理相機模型。
 - 尚未支援 preview IFD、EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
 - 相容性目前以結構驗證與 optional local smoke tools 為主，尚未納入 Adobe DNG SDK 自動驗證。
 

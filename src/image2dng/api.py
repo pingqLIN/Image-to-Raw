@@ -9,6 +9,7 @@ import numpy as np
 from image2dng.dng_writer import write_dng
 from image2dng.image_processing import InputSpace, build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel, CfaPattern
+from image2dng.sensor_effects import SensorEffectModel
 
 OutputMode = Literal["linearraw", "cfa"]
 
@@ -53,6 +54,10 @@ def convert(
     cfa_pattern: CfaPattern = "rggb",
     iso: int = 100,
     white_balance_kelvin: float = 6500.0,
+    shot_noise: float = 0.0,
+    read_noise: float = 0.0,
+    row_noise: float = 0.0,
+    sensor_effect_seed: int | None = None,
     prompt_hash: str | None = None,
     prompt_plaintext: str | None = None,
     scene_description: str = "",
@@ -71,6 +76,15 @@ def convert(
         raise InvalidMetadataError("iso must be positive")
     if white_balance_kelvin <= 0:
         raise InvalidMetadataError("white_balance_kelvin must be positive")
+    try:
+        sensor_effects = SensorEffectModel(
+            shot_noise=shot_noise,
+            read_noise=read_noise,
+            row_noise=row_noise,
+            seed=sensor_effect_seed,
+        )
+    except ValueError as exc:
+        raise InvalidMetadataError(str(exc)) from exc
 
     try:
         if mode == "cfa":
@@ -78,9 +92,14 @@ def convert(
                 input_path,
                 input_space,
                 cfa_pattern=cfa_pattern,
+                sensor_effects=sensor_effects,
             )
         else:
-            raw_buffer, core = build_linearraw_buffer(input_path, input_space)
+            raw_buffer, core = build_linearraw_buffer(
+                input_path,
+                input_space,
+                sensor_effects=sensor_effects,
+            )
     except ValueError as exc:
         raise UnsupportedInputError(str(exc)) from exc
 
@@ -98,6 +117,11 @@ def convert(
             prompt_plaintext=prompt_plaintext,
             raw_mode=mode,
             cfa_pattern=cfa_pattern if mode == "cfa" else None,
+            sensor_noise_model="synthetic-simple-v1" if sensor_effects.enabled else None,
+            shot_noise=shot_noise if shot_noise > 0 else None,
+            read_noise=read_noise if read_noise > 0 else None,
+            row_noise=row_noise if row_noise > 0 else None,
+            sensor_effect_seed=sensor_effect_seed if sensor_effects.enabled else None,
         )
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc

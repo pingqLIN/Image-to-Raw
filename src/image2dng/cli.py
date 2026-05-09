@@ -36,6 +36,10 @@ def build_generate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cfa-pattern", choices=["rggb", "bggr", "grbg", "gbrg"], default="rggb")
     parser.add_argument("--iso", type=int, default=100)
     parser.add_argument("--white-balance", type=float, default=6500.0)
+    parser.add_argument("--shot-noise", type=float, default=0.0)
+    parser.add_argument("--read-noise", type=float, default=0.0)
+    parser.add_argument("--row-noise", type=float, default=0.0)
+    parser.add_argument("--seed", type=int, default=None, help="deterministic sensor-effect seed")
     parser.add_argument("--prompt-hash", default="")
     parser.add_argument("--scene-description", default="")
     parser.add_argument("--model-name", default="")
@@ -81,6 +85,10 @@ def _run_generate(args: argparse.Namespace) -> int:
             cfa_pattern=args.cfa_pattern,
             iso=args.iso,
             white_balance_kelvin=args.white_balance,
+            shot_noise=args.shot_noise,
+            read_noise=args.read_noise,
+            row_noise=args.row_noise,
+            sensor_effect_seed=args.seed,
             prompt_hash=args.prompt_hash,
             prompt_plaintext=args.prompt_plaintext,
             scene_description=args.scene_description,

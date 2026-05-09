@@ -40,7 +40,10 @@ Recommended fixtures:
 - `acescg-gradient`
 - `xyz-gradient`
 - `linear-rec709-cfa-rggb`
+- `linear-rec709-cfa-rggb-noisy`
 
 Each fixture should use a small deterministic RGB gradient with channel ramps, near-black patches, and near-white patches so channel order, clipping, black level, white level, and transfer assumptions remain visible.
 
 CFA fixtures should additionally record the selected CFA pattern and confirm that the raw buffer is single-channel with `CFARepeatPatternDim = 2,2` and a four-entry `CFAPattern`.
+
+Sensor-effect fixtures should record the enabled effect parameters and deterministic seed so generated outputs can be reproduced.

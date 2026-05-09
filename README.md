@@ -88,6 +88,10 @@ result = convert(
     cfa_pattern="rggb",
     iso=100,
     white_balance_kelvin=6500,
+    shot_noise=0.0,
+    read_noise=0.0,
+    row_noise=0.0,
+    sensor_effect_seed=None,
     prompt_hash="sha256:...",
     scene_description="synthetic test scene",
     overwrite=False,
@@ -95,6 +99,14 @@ result = convert(
 ```
 
 The public API raises `Image2DNGError` subclasses instead of exiting the process. CLI and library outputs are expected to be semantically equivalent under `image2dng validate`.
+
+## Generate demo samples
+
+```powershell
+uv run python scripts/generate_demo_samples.py --output-dir demo-output
+```
+
+See [docs/demo.md](docs/demo.md) for the architecture demo, sample set, and application scenarios.
 
 ## Tests
 
@@ -117,13 +129,14 @@ Current MVP:
 
 - 16-bit uncompressed LinearRaw DNG.
 - Explicit simulated CFA mosaic mode.
+- Optional deterministic synthetic sensor effects for demos and compatibility testing.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.
 - Synthetic provenance always written.
 
 Known limitations:
 
-- No shot/read noise model yet.
+- Sensor effects are simple synthetic controls, not a physical camera model.
 - No preview IFD, EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
 - Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
 

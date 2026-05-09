@@ -82,6 +82,17 @@ The CFA DNG writes:
 
 This is still synthetic data. The XMP packet records `xmpAI:rawMode="cfa"` and `xmpAI:cfaPattern`, and camera parameters remain marked as simulated. CFA mode does not add sensor noise by default, does not add optical black borders, and does not claim to represent a real camera sensor capture.
 
+## Synthetic sensor effects
+
+Phase 3 adds optional deterministic sensor-effect controls for demos and compatibility experiments:
+
+- `shot_noise`: signal-dependent Gaussian variation.
+- `read_noise`: additive Gaussian variation.
+- `row_noise`: row-level offset variation.
+- `sensor_effect_seed`: deterministic seed for reproducible sample generation.
+
+These effects are applied in virtual camera RGB before quantization or CFA mosaicing. XMP records `xmpAI:sensorNoiseModel="synthetic-simple-v1"` plus the enabled parameters. The model is intentionally simple; it is not a physical sensor simulator and should not be used to impersonate real camera behavior.
+
 ## DNG tag layout
 
 目前 MVP 寫入單一主 IFD。另一種可行 layout 是 IFD0 + Raw SubIFD，但現階段主 IFD 已包含可獨立讀取的 Raw image data 與 DNG metadata。

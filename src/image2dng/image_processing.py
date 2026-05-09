@@ -8,6 +8,7 @@ import png
 import tifffile
 
 from image2dng.models import CfaPattern, CoreRawModel
+from image2dng.sensor_effects import SensorEffectModel, apply_sensor_effects
 
 InputSpace = Literal["srgb", "linear-rec709", "acescg", "xyz"]
 
@@ -102,8 +103,10 @@ def build_linearraw_buffer(
     *,
     black_level: int = 512,
     white_level: int = 65535,
+    sensor_effects: SensorEffectModel | None = None,
 ) -> tuple[np.ndarray, CoreRawModel]:
     camera_native, width, height = build_camera_native(input_path, input_space)
+    camera_native = apply_sensor_effects(camera_native, sensor_effects or SensorEffectModel())
     core = CoreRawModel.for_linearraw(
         width=width,
         height=height,
@@ -121,8 +124,10 @@ def build_cfa_buffer(
     cfa_pattern: CfaPattern = "rggb",
     black_level: int = 512,
     white_level: int = 65535,
+    sensor_effects: SensorEffectModel | None = None,
 ) -> tuple[np.ndarray, CoreRawModel]:
     camera_native, width, height = build_camera_native(input_path, input_space)
+    camera_native = apply_sensor_effects(camera_native, sensor_effects or SensorEffectModel())
     linear_core = CoreRawModel.for_linearraw(
         width=width,
         height=height,

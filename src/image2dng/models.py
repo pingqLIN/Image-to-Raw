@@ -148,6 +148,11 @@ class AIMetadataModel:
     prompt_plaintext: str | None = None
     raw_mode: str = "linearraw"
     cfa_pattern: str | None = None
+    sensor_noise_model: str | None = None
+    shot_noise: float | None = None
+    read_noise: float | None = None
+    row_noise: float | None = None
+    sensor_effect_seed: int | None = None
 
     def __post_init__(self) -> None:
         if self.provenance_type != "synthetic":

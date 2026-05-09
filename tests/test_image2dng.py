@@ -144,6 +144,56 @@ def test_public_convert_api_generates_cfa_dng(tmp_path):
     assert 'xmpAI:cfaPattern="rggb"' in xmp
 
 
+def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
+    input_path = tmp_path / "sensor-effects.tif"
+    output_a = tmp_path / "sensor-effects-a.dng"
+    output_b = tmp_path / "sensor-effects-b.dng"
+    tifffile.imwrite(input_path, _gradient_image(24, 24), photometric="rgb")
+
+    result_a = convert(
+        input_path=input_path,
+        output_path=output_a,
+        input_space="linear-rec709",
+        shot_noise=0.01,
+        read_noise=0.002,
+        row_noise=0.001,
+        sensor_effect_seed=1234,
+        prompt_hash="sha256:sensor-effects",
+    )
+    result_b = convert(
+        input_path=input_path,
+        output_path=output_b,
+        input_space="linear-rec709",
+        shot_noise=0.01,
+        read_noise=0.002,
+        row_noise=0.001,
+        sensor_effect_seed=1234,
+        prompt_hash="sha256:sensor-effects",
+    )
+
+    assert result_a.raw_data_unique_id == result_b.raw_data_unique_id
+    validation = validate_dng(output_a, run_smoke=False)
+    assert validation.ok, validation.errors
+    with tifffile.TiffFile(output_a) as tif:
+        xmp = tif.pages[0].tags[TAG_XMP].value.decode("utf-8")
+    assert 'xmpAI:sensorNoiseModel="synthetic-simple-v1"' in xmp
+    assert 'xmpAI:shotNoise="0.01"' in xmp
+    assert 'xmpAI:readNoise="0.002"' in xmp
+    assert 'xmpAI:rowNoise="0.001"' in xmp
+    assert 'xmpAI:sensorEffectSeed="1234"' in xmp
+
+
+def test_cli_rejects_negative_sensor_effects(tmp_path, capsys):
+    input_path = tmp_path / "negative-noise.tif"
+    output_path = tmp_path / "negative-noise.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    exit_code = main([str(input_path), str(output_path), "--shot-noise", "-0.1"])
+
+    assert exit_code == 3
+    assert "shot_noise must be non-negative" in capsys.readouterr().err
+
+
 def test_cfa_mosaic_uses_requested_pattern(tmp_path):
     input_path = tmp_path / "cfa-pattern.tif"
     source = np.zeros((2, 2, 3), dtype=np.uint16)

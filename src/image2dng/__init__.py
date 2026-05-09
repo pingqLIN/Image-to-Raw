@@ -12,6 +12,7 @@ from image2dng.api import (
     convert,
 )
 from image2dng.models import AIMetadataModel, CameraProfileModel, CoreRawModel
+from image2dng.sensor_effects import SensorEffectModel
 
 __all__ = [
     "AIMetadataModel",
@@ -21,6 +22,7 @@ __all__ = [
     "Image2DNGError",
     "InvalidMetadataError",
     "OutputExistsError",
+    "SensorEffectModel",
     "UnsupportedInputError",
     "ValidationError",
     "convert",
