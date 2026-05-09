@@ -39,6 +39,7 @@ Recommended fixtures:
 - `linear-rec709-gradient`
 - `acescg-gradient`
 - `xyz-gradient`
+- `prophoto-rgb-chart`
 - `linear-rec709-cfa-rggb`
 - `linear-rec709-cfa-rggb-noisy`
 

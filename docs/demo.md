@@ -55,6 +55,15 @@ The visual generator currently creates synthetic, redistributable demo inputs fo
 
 JPEG printer evaluation charts can be used as local reference assets, but they require preprocessing into supported 16-bit TIFF/PNG inputs before conversion.
 
+Include local 16-bit ProPhoto TIFF assets:
+
+```powershell
+uv run python scripts/generate_visual_demo.py `
+  --output-dir demo-output `
+  --prophoto-tiff "demo-output/PrinterEvaluationImage_V002_ProPhoto.tiff" `
+  --prophoto-tiff "demo-output/03. Skin Tone_ProPhoto.tiff"
+```
+
 For the staged visual-demo workflow, image category allocation, and contact-sheet tasks, see [docs/i18n/zh-TW/demo-visualization-workflow.md](i18n/zh-TW/demo-visualization-workflow.md).
 
 ## Application Scenarios

@@ -46,6 +46,7 @@ MVP 目標是把 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成合法、可�
 2. `srgb` 輸入套用 inverse sRGB OETF，其它 input space 視為 scene-linear。
 3. `linear-rec709`/`srgb` 直接視為 virtual camera native RGB。
 4. `acescg`/`xyz` 先轉到 XYZ，再轉到 virtual camera native RGB。
+5. `prophoto-rgb` 套用 ROMM-style 1.8 inverse transfer，再由 D50 ProPhoto RGB 經 Bradford adaptation 到 D65，最後轉到 virtual camera native RGB。
 5. 加入 black level offset，clip 到 white level。
 6. quantize 為 16-bit LinearRaw buffer。
 

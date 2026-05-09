@@ -94,6 +94,29 @@ def test_generate_16bit_png_dng(tmp_path):
     assert result.ok, result.errors
 
 
+def test_generate_16bit_prophoto_rgba_tiff_dng(tmp_path):
+    input_path = tmp_path / "prophoto-rgba.tif"
+    output_path = tmp_path / "prophoto-rgba.dng"
+    rgb = _gradient_image(24, 24)
+    alpha = np.full((24, 24, 1), 65535, dtype=np.uint16)
+    tifffile.imwrite(input_path, np.concatenate([rgb, alpha], axis=2), photometric="rgb")
+
+    exit_code = main(
+        [
+            str(input_path),
+            str(output_path),
+            "--input-space",
+            "prophoto-rgb",
+            "--prompt-hash",
+            "sha256:prophoto",
+        ]
+    )
+
+    assert exit_code == 0
+    result = validate_dng(output_path, run_smoke=False)
+    assert result.ok, result.errors
+
+
 def test_public_convert_api_returns_result(tmp_path):
     input_path = tmp_path / "api-input.tif"
     output_path = tmp_path / "api-output.dng"

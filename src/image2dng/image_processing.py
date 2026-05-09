@@ -10,7 +10,7 @@ import tifffile
 from image2dng.models import CfaPattern, CoreRawModel
 from image2dng.sensor_effects import SensorEffectModel, apply_sensor_effects
 
-InputSpace = Literal["srgb", "linear-rec709", "acescg", "xyz"]
+InputSpace = Literal["srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"]
 
 ACESCG_TO_XYZ = np.array(
     [
@@ -26,6 +26,24 @@ XYZ_TO_CAMERA_NATIVE = np.array(
         [3.2404542, -1.5371385, -0.4985314],
         [-0.9692660, 1.8760108, 0.0415560],
         [0.0556434, -0.2040259, 1.0572252],
+    ],
+    dtype=np.float64,
+)
+
+PROPHOTO_RGB_TO_XYZ_D50 = np.array(
+    [
+        [0.7976749, 0.1351917, 0.0313534],
+        [0.2880402, 0.7118741, 0.0000857],
+        [0.0000000, 0.0000000, 0.8252100],
+    ],
+    dtype=np.float64,
+)
+
+BRADFORD_D50_TO_D65 = np.array(
+    [
+        [0.9555766, -0.0230393, 0.0631636],
+        [-0.0282895, 1.0099416, 0.0210077],
+        [0.0122982, -0.0204830, 1.3299098],
     ],
     dtype=np.float64,
 )
@@ -86,6 +104,11 @@ def inverse_srgb_oetf(rgb: np.ndarray) -> np.ndarray:
     return np.where(clipped <= 0.04045, clipped / 12.92, ((clipped + 0.055) / 1.055) ** 2.4)
 
 
+def inverse_prophoto_oetf(rgb: np.ndarray) -> np.ndarray:
+    clipped = np.clip(rgb, 0.0, 1.0)
+    return np.where(clipped < 16 / 512, clipped / 16, clipped**1.8)
+
+
 def to_camera_native(linear: np.ndarray, input_space: InputSpace) -> np.ndarray:
     if input_space in {"srgb", "linear-rec709"}:
         return linear
@@ -94,6 +117,10 @@ def to_camera_native(linear: np.ndarray, input_space: InputSpace) -> np.ndarray:
     if input_space == "acescg":
         xyz = linear @ ACESCG_TO_XYZ.T
         return xyz @ XYZ_TO_CAMERA_NATIVE.T
+    if input_space == "prophoto-rgb":
+        xyz_d50 = linear @ PROPHOTO_RGB_TO_XYZ_D50.T
+        xyz_d65 = xyz_d50 @ BRADFORD_D50_TO_D65.T
+        return xyz_d65 @ XYZ_TO_CAMERA_NATIVE.T
     raise ValueError(f"unsupported input space: {input_space}")
 
 
@@ -152,7 +179,12 @@ def build_camera_native(
     rgb = load_input_image(input_path)
     height, width, _ = rgb.shape
     normalized = normalize_to_float(rgb)
-    scene_linear = inverse_srgb_oetf(normalized) if input_space == "srgb" else normalized
+    if input_space == "srgb":
+        scene_linear = inverse_srgb_oetf(normalized)
+    elif input_space == "prophoto-rgb":
+        scene_linear = inverse_prophoto_oetf(normalized)
+    else:
+        scene_linear = normalized
     camera_native = to_camera_native(scene_linear, input_space)
     return camera_native, width, height
 

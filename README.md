@@ -38,6 +38,7 @@ Supported input spaces:
 - `linear-rec709`: scene-linear Rec.709/sRGB primaries.
 - `acescg`: scene-linear ACEScg/AP1, converted through XYZ into the virtual camera space.
 - `xyz`: scene-linear CIE XYZ, converted into the virtual camera space.
+- `prophoto-rgb`: encoded ProPhoto RGB / ROMM-style 1.8 transfer, adapted from D50 to D65.
 
 Supported output modes:
 

@@ -34,6 +34,7 @@ CLI 預設不會覆寫既有輸出檔。只有在確定要替換輸出時才傳�
 - `linear-rec709`：scene-linear Rec.709/sRGB primaries。
 - `acescg`：scene-linear ACEScg/AP1，經 XYZ 轉換到 virtual camera space。
 - `xyz`：scene-linear CIE XYZ，轉換到 virtual camera space。
+- `prophoto-rgb`：encoded ProPhoto RGB / ROMM-style 1.8 transfer，並從 D50 adapted 到 D65。
 
 支援的輸出模式：
 

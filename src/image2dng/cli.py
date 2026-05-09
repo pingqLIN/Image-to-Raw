@@ -29,7 +29,7 @@ def build_generate_parser() -> argparse.ArgumentParser:
     parser.add_argument("output", type=Path, help="output DNG path")
     parser.add_argument(
         "--input-space",
-        choices=["srgb", "linear-rec709", "acescg", "xyz"],
+        choices=["srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"],
         default="srgb",
     )
     parser.add_argument("--mode", choices=["linearraw", "cfa"], default="linearraw")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,13 @@ Asset = tuple[str, str, np.ndarray]
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate staged visual demo samples.")
     parser.add_argument("--output-dir", type=Path, default=Path("demo-output"))
+    parser.add_argument(
+        "--prophoto-tiff",
+        action="append",
+        type=Path,
+        default=[],
+        help="external 16-bit ProPhoto RGB TIFF to include in the local demo run",
+    )
     args = parser.parse_args()
 
     root = args.output_dir
@@ -40,30 +48,33 @@ def main() -> int:
 
     manifest: dict[str, object] = {
         "description": "Staged image2dng visual demo outputs.",
-        "external_assets": [
-            {
-                "name": "PrinterEvaluationImage_V002_sRGB.jpg",
-                "status": "available as local reference only; JPEG requires preprocessing",
-            },
-            {
-                "name": "PrinterEvaluationImage_V002_AdobePhoto.jpg",
-                "status": "available as local reference only; JPEG requires preprocessing",
-            },
-        ],
+        "external_assets": [],
         "assets": [],
         "contact_sheets": [],
     }
+    for path in args.prophoto_tiff:
+        if not path.exists():
+            raise FileNotFoundError(path)
+        image = tifffile.imread(path)
+        assets.append((safe_slug(path.stem), f"external 16-bit ProPhoto TIFF: {path.name}", image))
+        manifest["external_assets"].append(
+            {
+                "name": path.name,
+                "status": "included in local run as prophoto-rgb input",
+            }
+        )
 
     contact_rows = []
     for slug, description, image in assets:
         input_path = inputs_dir / f"{slug}.tif"
         tifffile.imwrite(input_path, image, photometric="rgb")
-        write_png_rgb8(inputs_dir / f"{slug}-source-preview.png", preview_rgb(image))
+        write_png_rgb8(inputs_dir / f"{slug}-source-preview.png", fit_preview(preview_rgb(image)))
 
         outputs = generate_asset_outputs(
             slug=slug,
             description=description,
             input_path=input_path,
+            input_space="prophoto-rgb" if "ProPhoto" in description else "linear-rec709",
             phase15_dir=phase15_dir,
             phase2_dir=phase2_dir,
             phase3_dir=phase3_dir,
@@ -103,6 +114,7 @@ def generate_asset_outputs(
     slug: str,
     description: str,
     input_path: Path,
+    input_space: str,
     phase15_dir: Path,
     phase2_dir: Path,
     phase3_dir: Path,
@@ -115,7 +127,7 @@ def generate_asset_outputs(
     convert(
         input_path=input_path,
         output_path=linear_path,
-        input_space="linear-rec709",
+        input_space=input_space,
         mode="linearraw",
         prompt_hash=f"sha256:demo-{slug}-linearraw",
         scene_description=f"{description}; LinearRaw visual demo",
@@ -124,7 +136,7 @@ def generate_asset_outputs(
     convert(
         input_path=input_path,
         output_path=cfa_path,
-        input_space="linear-rec709",
+        input_space=input_space,
         mode="cfa",
         cfa_pattern="rggb",
         prompt_hash=f"sha256:demo-{slug}-cfa",
@@ -134,7 +146,7 @@ def generate_asset_outputs(
     convert(
         input_path=input_path,
         output_path=linear_noisy_path,
-        input_space="linear-rec709",
+        input_space=input_space,
         mode="linearraw",
         shot_noise=0.01,
         read_noise=0.002,
@@ -147,7 +159,7 @@ def generate_asset_outputs(
     convert(
         input_path=input_path,
         output_path=cfa_noisy_path,
-        input_space="linear-rec709",
+        input_space=input_space,
         mode="cfa",
         cfa_pattern="rggb",
         shot_noise=0.01,
@@ -159,7 +171,7 @@ def generate_asset_outputs(
         overwrite=True,
     )
 
-    source_preview = preview_rgb(tifffile.imread(input_path))
+    source_preview = fit_preview(preview_rgb(tifffile.imread(input_path)))
     linear_preview = dng_preview(linear_path)
     cfa_preview = dng_preview(cfa_path, cfa_pattern="rggb")
     linear_noisy_preview = dng_preview(linear_noisy_path)
@@ -198,6 +210,7 @@ def generate_asset_outputs(
         "manifest": {
             "slug": slug,
             "description": description,
+            "input_space": input_space,
             "input": str(input_path),
             "outputs": {
                 "phase_15_linearraw": str(linear_path),
@@ -327,8 +340,8 @@ def daily_objects(size: int = 256) -> np.ndarray:
 def dng_preview(path: Path, *, cfa_pattern: str | None = None) -> np.ndarray:
     data = tifffile.imread(path)
     if data.ndim == 2:
-        return cfa_false_color(data, cfa_pattern or "rggb")
-    return preview_rgb(data)
+        return fit_preview(cfa_false_color(data, cfa_pattern or "rggb"))
+    return fit_preview(preview_rgb(data))
 
 
 def cfa_false_color(mosaic: np.ndarray, cfa_pattern: str) -> np.ndarray:
@@ -379,6 +392,24 @@ def make_contact_sheet(rows: list[list[np.ndarray]], gutter: int = 8) -> np.ndar
             x0 = gutter + col_index * (cell_w + gutter)
             sheet[y0 : y0 + cell_h, x0 : x0 + cell_w] = image
     return sheet
+
+
+def fit_preview(image: np.ndarray, *, size: int = 256) -> np.ndarray:
+    height, width = image.shape[:2]
+    scale = size / min(height, width)
+    new_height = max(size, int(round(height * scale)))
+    new_width = max(size, int(round(width * scale)))
+    y_index = np.linspace(0, height - 1, new_height).astype(int)
+    x_index = np.linspace(0, width - 1, new_width).astype(int)
+    resized = image[y_index][:, x_index]
+    y0 = (new_height - size) // 2
+    x0 = (new_width - size) // 2
+    return resized[y0 : y0 + size, x0 : x0 + size]
+
+
+def safe_slug(name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").lower()
+    return slug or "external-prophoto"
 
 
 def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> np.ndarray:
