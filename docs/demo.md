@@ -41,6 +41,20 @@ The script creates:
 
 The samples are generated locally and should not be committed as binary fixtures.
 
+Generate staged visual demo outputs with PNG previews, validation JSON, and contact sheets:
+
+```powershell
+uv run python scripts/generate_visual_demo.py --output-dir demo-output
+```
+
+The visual generator currently creates synthetic, redistributable demo inputs for:
+
+- standard chart and tonal gradients;
+- skin-tone panels and simple portrait shapes;
+- everyday object and material samples.
+
+JPEG printer evaluation charts can be used as local reference assets, but they require preprocessing into supported 16-bit TIFF/PNG inputs before conversion.
+
 For the staged visual-demo workflow, image category allocation, and contact-sheet tasks, see [docs/i18n/zh-TW/demo-visualization-workflow.md](i18n/zh-TW/demo-visualization-workflow.md).
 
 ## Application Scenarios
