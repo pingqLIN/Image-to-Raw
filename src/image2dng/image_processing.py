@@ -7,7 +7,7 @@ import numpy as np
 import png
 import tifffile
 
-from image2dng.models import CoreRawModel
+from image2dng.models import CfaPattern, CoreRawModel
 
 InputSpace = Literal["srgb", "linear-rec709", "acescg", "xyz"]
 
@@ -103,19 +103,53 @@ def build_linearraw_buffer(
     black_level: int = 512,
     white_level: int = 65535,
 ) -> tuple[np.ndarray, CoreRawModel]:
-    rgb = load_input_image(input_path)
-    height, width, _ = rgb.shape
-    core = CoreRawModel.for_dimensions(
+    camera_native, width, height = build_camera_native(input_path, input_space)
+    core = CoreRawModel.for_linearraw(
         width=width,
         height=height,
         black_level=black_level,
         white_level=white_level,
     )
+    quantized = quantize_linearraw(camera_native, core)
+    return quantized, core
+
+
+def build_cfa_buffer(
+    input_path: str | Path,
+    input_space: InputSpace,
+    *,
+    cfa_pattern: CfaPattern = "rggb",
+    black_level: int = 512,
+    white_level: int = 65535,
+) -> tuple[np.ndarray, CoreRawModel]:
+    camera_native, width, height = build_camera_native(input_path, input_space)
+    linear_core = CoreRawModel.for_linearraw(
+        width=width,
+        height=height,
+        black_level=black_level,
+        white_level=white_level,
+    )
+    linear = quantize_linearraw(camera_native, linear_core)
+    core = CoreRawModel.for_cfa(
+        width=width,
+        height=height,
+        cfa_pattern=cfa_pattern,
+        black_level=black_level,
+        white_level=white_level,
+    )
+    return mosaic_cfa(linear, cfa_pattern), core
+
+
+def build_camera_native(
+    input_path: str | Path,
+    input_space: InputSpace,
+) -> tuple[np.ndarray, int, int]:
+    rgb = load_input_image(input_path)
+    height, width, _ = rgb.shape
     normalized = normalize_to_float(rgb)
     scene_linear = inverse_srgb_oetf(normalized) if input_space == "srgb" else normalized
     camera_native = to_camera_native(scene_linear, input_space)
-    quantized = quantize_linearraw(camera_native, core)
-    return quantized, core
+    return camera_native, width, height
 
 
 def quantize_linearraw(camera_native: np.ndarray, core: CoreRawModel) -> np.ndarray:
@@ -124,3 +158,23 @@ def quantize_linearraw(camera_native: np.ndarray, core: CoreRawModel) -> np.ndar
     white = np.asarray(core.white_level, dtype=np.float64)
     scaled = black + clipped * (white - black)
     return np.rint(np.clip(scaled, black, white)).astype(np.uint16)
+
+
+def mosaic_cfa(linear_rgb: np.ndarray, cfa_pattern: CfaPattern) -> np.ndarray:
+    pattern = _cfa_channel_pattern(cfa_pattern)
+    height, width, _ = linear_rgb.shape
+    mosaic = np.empty((height, width), dtype=np.uint16)
+    for y in range(height):
+        for x in range(width):
+            mosaic[y, x] = linear_rgb[y, x, pattern[y % 2][x % 2]]
+    return mosaic
+
+
+def _cfa_channel_pattern(cfa_pattern: CfaPattern) -> tuple[tuple[int, int], tuple[int, int]]:
+    patterns = {
+        "rggb": ((0, 1), (1, 2)),
+        "bggr": ((2, 1), (1, 0)),
+        "grbg": ((1, 0), (2, 1)),
+        "gbrg": ((1, 2), (0, 1)),
+    }
+    return patterns[cfa_pattern]

@@ -35,6 +35,22 @@ CLI 預設不會覆寫既有輸出檔。只有在確定要替換輸出時才傳�
 - `acescg`：scene-linear ACEScg/AP1，經 XYZ 轉換到 virtual camera space。
 - `xyz`：scene-linear CIE XYZ，轉換到 virtual camera space。
 
+支援的輸出模式：
+
+- `linearraw`：預設三通道 16-bit LinearRaw DNG。
+- `cfa`：明確 opt-in 的 simulated single-channel CFA mosaic DNG。
+
+CFA 輸出範例：
+
+```powershell
+uv run image2dng input.tif output-cfa.dng `
+  --mode cfa `
+  --cfa-pattern rggb `
+  --input-space linear-rec709
+```
+
+CFA mode 是為相容性與工作流研究設計的簡化模擬。它不宣稱是真實 sensor capture，且預設不加入 sensor noise。
+
 ## 驗證 DNG
 
 ```powershell
@@ -63,6 +79,7 @@ result = convert(
     output_path=Path("output.dng"),
     input_space="srgb",
     mode="linearraw",
+    cfa_pattern="rggb",
     iso=100,
     white_balance_kelvin=6500,
     prompt_hash="sha256:...",
@@ -85,13 +102,13 @@ uv run ruff check
 目前 MVP：
 
 - 16-bit uncompressed LinearRaw DNG。
+- 明確 opt-in 的 simulated CFA mosaic mode。
 - RGB input normalization 與 simple virtual camera transform。
 - XMP custom namespace：`https://example.org/ns/xmp/ai/1.0/`。
 - 永遠寫入 synthetic provenance。
 
 已知限制：
 
-- 尚未支援 CFA Bayer mosaic。
 - 尚未支援 shot/read noise model。
 - 尚未支援 preview IFD、EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
 - 相容性目前以結構驗證與 optional local smoke tools 為主，尚未納入 Adobe DNG SDK 自動驗證。

@@ -22,12 +22,13 @@
 - DxO 支持「Linear DNG 是實際工作流中有意義的交付形式」；
 - Kronometric 支持「Linear DNG 在格式概念上可以容納非傳統相機 RAW 的線性影像表示」。
 
-因此目前設計維持：
+因此設計路線維持：
 
 - 先把 DNG/TIFF container correctness 做穩；
 - 先把 synthetic provenance 與 simulated camera metadata 寫誠實；
 - 先以 `LinearRaw` 作為可互通的 MVP；
-- CFA、noise、depth、semantic mask，以及更接近研究型 inverse-ISP / raw-generation 的方向，均不屬於目前 MVP。
+- CFA 必須是明確 opt-in 的 simulated mode；
+- noise、depth、semantic mask，以及更接近研究型 inverse-ISP / raw-generation 的方向，不屬於 LinearRaw MVP。
 
 ## LinearRaw MVP scope
 
@@ -60,6 +61,26 @@ LinearRaw 先保證：
 - RAW 軟體能看到線性主影像與基本 profile。
 - AI metadata 不影響主影像可讀性。
 - 不需要在概念驗證階段承諾 CFA sensor simulation。
+
+## Simulated CFA mode
+
+Phase 2 introduces an explicit `--mode cfa` path for compatibility and workflow research. This mode converts the virtual camera RGB buffer into a single-channel 2x2 Bayer mosaic. Supported patterns are:
+
+- `rggb`
+- `bggr`
+- `grbg`
+- `gbrg`
+
+The CFA DNG writes:
+
+- `PhotometricInterpretation = 32803` (`ColorFilterArray`)
+- `SamplesPerPixel = 1`
+- `CFARepeatPatternDim = 2,2`
+- `CFAPattern` for the selected Bayer pattern
+- `CFAPlaneColor = 0,1,2`
+- `BlackLevelRepeatDim = 2,2`
+
+This is still synthetic data. The XMP packet records `xmpAI:rawMode="cfa"` and `xmpAI:cfaPattern`, and camera parameters remain marked as simulated. CFA mode does not add sensor noise by default, does not add optical black borders, and does not claim to represent a real camera sensor capture.
 
 ## DNG tag layout
 

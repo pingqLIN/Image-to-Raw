@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 PHOTOMETRIC_LINEAR_RAW = 34892
+PHOTOMETRIC_CFA = 32803
 SYNTHETIC_CAMERA_MODEL = "Synthetic Camera v1"
 
-PhotometricName = Literal["LinearRaw"]
+CfaPattern = Literal["rggb", "bggr", "grbg", "gbrg"]
+PhotometricName = Literal["LinearRaw", "ColorFilterArray"]
 
 
 @dataclass(frozen=True)
@@ -17,8 +19,9 @@ class CoreRawModel:
     bits_per_sample: int = 16
     samples_per_pixel: int = 3
     photometric: PhotometricName = "LinearRaw"
-    black_level: tuple[int, int, int] = (512, 512, 512)
-    white_level: tuple[int, int, int] = (65535, 65535, 65535)
+    black_level: tuple[int, ...] = (512, 512, 512)
+    white_level: tuple[int, ...] = (65535, 65535, 65535)
+    cfa_pattern: CfaPattern | None = None
     active_area: tuple[int, int, int, int] | None = None
     default_crop_origin: tuple[int, int] = (0, 0)
     default_crop_size: tuple[int, int] | None = None
@@ -28,19 +31,39 @@ class CoreRawModel:
             raise ValueError("width and height must be positive")
         if self.bits_per_sample != 16:
             raise ValueError("MVP only supports 16-bit output")
-        if self.samples_per_pixel != 3:
-            raise ValueError("LinearRaw MVP expects three samples per pixel")
-        if self.photometric != "LinearRaw":
-            raise ValueError("MVP only supports LinearRaw photometric mode")
+        if self.photometric == "LinearRaw" and self.samples_per_pixel != 3:
+            raise ValueError("LinearRaw output expects three samples per pixel")
+        if self.photometric == "ColorFilterArray" and self.samples_per_pixel != 1:
+            raise ValueError("CFA output expects one sample per pixel")
+        if self.photometric == "ColorFilterArray" and self.cfa_pattern is None:
+            raise ValueError("CFA output requires a CFA pattern")
+        if self.photometric == "LinearRaw" and self.cfa_pattern is not None:
+            raise ValueError("LinearRaw output must not set a CFA pattern")
         if any(level < 0 for level in self.black_level):
             raise ValueError("black levels must be non-negative")
-        if any(
-            white <= black for black, white in zip(self.black_level, self.white_level, strict=True)
-        ):
+        if not self.white_level:
+            raise ValueError("at least one white level is required")
+        if any(self.white_level[0] <= black for black in self.black_level):
             raise ValueError("white levels must be greater than black levels")
 
     @classmethod
     def for_dimensions(
+        cls,
+        width: int,
+        height: int,
+        *,
+        black_level: int = 512,
+        white_level: int = 65535,
+    ) -> CoreRawModel:
+        return cls.for_linearraw(
+            width=width,
+            height=height,
+            black_level=black_level,
+            white_level=white_level,
+        )
+
+    @classmethod
+    def for_linearraw(
         cls,
         width: int,
         height: int,
@@ -53,6 +76,28 @@ class CoreRawModel:
             height=height,
             black_level=(black_level, black_level, black_level),
             white_level=(white_level, white_level, white_level),
+            active_area=(0, 0, height, width),
+            default_crop_size=(width, height),
+        )
+
+    @classmethod
+    def for_cfa(
+        cls,
+        width: int,
+        height: int,
+        *,
+        cfa_pattern: CfaPattern,
+        black_level: int = 512,
+        white_level: int = 65535,
+    ) -> CoreRawModel:
+        return cls(
+            width=width,
+            height=height,
+            samples_per_pixel=1,
+            photometric="ColorFilterArray",
+            black_level=(black_level, black_level, black_level, black_level),
+            white_level=(white_level,),
+            cfa_pattern=cfa_pattern,
             active_area=(0, 0, height, width),
             default_crop_size=(width, height),
         )
@@ -101,6 +146,8 @@ class AIMetadataModel:
     iso: int | None = None
     white_balance_kelvin: float | None = None
     prompt_plaintext: str | None = None
+    raw_mode: str = "linearraw"
+    cfa_pattern: str | None = None
 
     def __post_init__(self) -> None:
         if self.provenance_type != "synthetic":

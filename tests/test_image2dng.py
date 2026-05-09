@@ -9,8 +9,8 @@ import tifffile
 
 from image2dng import OutputExistsError, convert
 from image2dng.cli import main
-from image2dng.dng_writer import TAG_XMP
-from image2dng.image_processing import build_linearraw_buffer
+from image2dng.dng_writer import TAG_CFA_PATTERN, TAG_CFA_REPEAT_PATTERN_DIM, TAG_XMP
+from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel
 from image2dng.validate import TAG_MAKER_NOTE, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
@@ -117,6 +117,58 @@ def test_public_convert_api_returns_result(tmp_path):
     assert validation.ok, validation.errors
 
 
+def test_public_convert_api_generates_cfa_dng(tmp_path):
+    input_path = tmp_path / "api-cfa-input.tif"
+    output_path = tmp_path / "api-cfa-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(24, 24), photometric="rgb")
+
+    result = convert(
+        input_path=input_path,
+        output_path=output_path,
+        input_space="linear-rec709",
+        mode="cfa",
+        cfa_pattern="rggb",
+        prompt_hash="sha256:cfa",
+    )
+
+    assert result.mode == "cfa"
+    validation = validate_dng(output_path, run_smoke=False)
+    assert validation.ok, validation.errors
+    with tifffile.TiffFile(output_path) as tif:
+        page = tif.pages[0]
+        assert page.asarray().shape == (24, 24)
+        assert page.tags[TAG_CFA_REPEAT_PATTERN_DIM].value == (2, 2)
+        assert tuple(page.tags[TAG_CFA_PATTERN].value) == (0, 1, 1, 2)
+        xmp = page.tags[TAG_XMP].value.decode("utf-8")
+    assert 'xmpAI:rawMode="cfa"' in xmp
+    assert 'xmpAI:cfaPattern="rggb"' in xmp
+
+
+def test_cfa_mosaic_uses_requested_pattern(tmp_path):
+    input_path = tmp_path / "cfa-pattern.tif"
+    source = np.zeros((2, 2, 3), dtype=np.uint16)
+    source[0, 0] = (1000, 2000, 3000)
+    source[0, 1] = (4000, 5000, 6000)
+    source[1, 0] = (7000, 8000, 9000)
+    source[1, 1] = (10000, 11000, 12000)
+    tifffile.imwrite(input_path, source, photometric="rgb")
+
+    raw, core = build_cfa_buffer(
+        input_path,
+        "linear-rec709",
+        cfa_pattern="bggr",
+        black_level=0,
+        white_level=65535,
+    )
+
+    assert core.photometric == "ColorFilterArray"
+    assert raw.shape == (2, 2)
+    assert raw[0, 0] == 3000
+    assert raw[0, 1] == 5000
+    assert raw[1, 0] == 8000
+    assert raw[1, 1] == 10000
+
+
 def test_public_convert_refuses_existing_output_without_overwrite(tmp_path):
     input_path = tmp_path / "api-input.tif"
     output_path = tmp_path / "api-output.dng"
@@ -188,7 +240,13 @@ def test_validate_json_output(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["ok"] is True
     assert report["path"] == str(output_path)
-    assert report["checks"] == []
+    assert report["checks"] == [
+        {
+            "message": "DNG structural checks passed",
+            "name": "structure",
+            "status": "passed",
+        }
+    ]
     assert report["errors"] == []
     assert report["warnings"] == []
     assert report["smoke_tests"] == {}
@@ -207,7 +265,8 @@ def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
         "darktable-cli": "skipped: not found",
         "rawtherapee-cli": "skipped: not found",
     }
-    assert {check.status for check in result.checks} == {"skipped"}
+    smoke_checks = [check for check in result.checks if check.name.startswith("smoke:")]
+    assert {check.status for check in smoke_checks} == {"skipped"}
 
 
 def _write_test_dng(tmp_path, *, prompt_hash: str):

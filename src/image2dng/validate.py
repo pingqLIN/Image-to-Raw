@@ -14,6 +14,9 @@ from image2dng.dng_writer import (
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
     TAG_CALIBRATION_ILLUMINANT_1,
+    TAG_CFA_PATTERN,
+    TAG_CFA_PLANE_COLOR,
+    TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_COLOR_MATRIX_1,
     TAG_DNG_BACKWARD_VERSION,
     TAG_DNG_VERSION,
@@ -21,7 +24,7 @@ from image2dng.dng_writer import (
     TAG_WHITE_LEVEL,
     TAG_XMP,
 )
-from image2dng.models import PHOTOMETRIC_LINEAR_RAW
+from image2dng.models import PHOTOMETRIC_CFA, PHOTOMETRIC_LINEAR_RAW
 from image2dng.xmp import XMP_AI_NAMESPACE
 
 TAG_BITS_PER_SAMPLE = 258
@@ -115,11 +118,15 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             _check_required_tags(page, result)
             _check_geometry(page, result)
             _check_levels(page, result)
+            _check_cfa_tags(page, result)
             _check_xmp(page, result)
             _check_makernote(page, result)
     except Exception as exc:  # noqa: BLE001
         result.errors.append(f"failed to parse DNG: {exc}")
         return result
+
+    if not result.errors:
+        result.add_check("structure", "passed", "DNG structural checks passed")
 
     if run_smoke:
         _run_external_smoke_tests(target, result)
@@ -151,10 +158,13 @@ def _check_required_tags(page: tifffile.TiffPage, result: ValidationResult) -> N
             result.errors.append(f"missing required tag: {name} ({code})")
 
     photometric = _tag_value(page, TAG_PHOTOMETRIC)
-    if photometric is not None and int(photometric) != PHOTOMETRIC_LINEAR_RAW:
+    if photometric is not None and int(photometric) not in {
+        PHOTOMETRIC_LINEAR_RAW,
+        PHOTOMETRIC_CFA,
+    }:
         result.errors.append(
             "PhotometricInterpretation must be LinearRaw "
-            f"({PHOTOMETRIC_LINEAR_RAW}), got {photometric}"
+            f"({PHOTOMETRIC_LINEAR_RAW}) or CFA ({PHOTOMETRIC_CFA}), got {photometric}"
         )
 
 
@@ -163,19 +173,27 @@ def _check_geometry(page: tifffile.TiffPage, result: ValidationResult) -> None:
     height = _tag_value(page, TAG_IMAGE_LENGTH)
     bits = _as_tuple(_tag_value(page, TAG_BITS_PER_SAMPLE))
     samples = _tag_value(page, TAG_SAMPLES_PER_PIXEL)
+    photometric = _tag_value(page, TAG_PHOTOMETRIC)
     if width is None or height is None or not bits or samples is None:
         return
     if any(int(bit) != 16 for bit in bits):
         result.errors.append(f"BitsPerSample must be 16 for MVP output, got {bits}")
-    if int(samples) != 3:
-        result.errors.append(f"SamplesPerPixel must be 3 for LinearRaw MVP, got {samples}")
+    expected_samples = 1 if int(photometric or 0) == PHOTOMETRIC_CFA else 3
+    if int(samples) != expected_samples:
+        result.errors.append(
+            f"SamplesPerPixel must be {expected_samples} for this output mode, got {samples}"
+        )
 
     try:
         data = page.asarray()
     except Exception as exc:  # noqa: BLE001
         result.errors.append(f"failed to read image buffer: {exc}")
         return
-    expected_shape = (int(height), int(width), int(samples))
+    expected_shape = (
+        (int(height), int(width), int(samples))
+        if int(samples) > 1
+        else (int(height), int(width))
+    )
     if data.shape != expected_shape:
         result.errors.append(f"image shape mismatch: expected {expected_shape}, got {data.shape}")
 
@@ -192,19 +210,41 @@ def _check_levels(page: tifffile.TiffPage, result: ValidationResult) -> None:
     white_levels = [int(value) for value in _as_tuple(_tag_value(page, TAG_WHITE_LEVEL))]
     if not black_levels or not white_levels:
         return
-    if len(black_levels) not in {1, 3}:
-        result.errors.append(f"BlackLevel should have 1 or 3 values, got {len(black_levels)}")
+    if len(black_levels) not in {1, 3, 4}:
+        result.errors.append(f"BlackLevel should have 1, 3, or 4 values, got {len(black_levels)}")
     if len(white_levels) not in {1, 3}:
         result.errors.append(f"WhiteLevel should have 1 or 3 values, got {len(white_levels)}")
-    for black, white in zip(
-        _expand_to_three(black_levels), _expand_to_three(white_levels), strict=True
-    ):
+    white_reference = white_levels[0]
+    for black in black_levels:
         if black < 0:
             result.errors.append(f"BlackLevel must be non-negative, got {black}")
+        if black >= white_reference:
+            result.errors.append(
+                f"BlackLevel must be less than WhiteLevel, got {black}/{white_reference}"
+            )
+    for white in white_levels:
         if white > 65535:
             result.errors.append(f"WhiteLevel must be <= 65535, got {white}")
-        if black >= white:
-            result.errors.append(f"BlackLevel must be less than WhiteLevel, got {black}/{white}")
+
+
+def _check_cfa_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
+    photometric = _tag_value(page, TAG_PHOTOMETRIC)
+    if photometric is None or int(photometric) != PHOTOMETRIC_CFA:
+        return
+    required = {
+        TAG_CFA_REPEAT_PATTERN_DIM: "CFARepeatPatternDim",
+        TAG_CFA_PATTERN: "CFAPattern",
+        TAG_CFA_PLANE_COLOR: "CFAPlaneColor",
+    }
+    for code, name in required.items():
+        if code not in page.tags:
+            result.errors.append(f"missing CFA tag: {name} ({code})")
+    repeat = _as_tuple(_tag_value(page, TAG_CFA_REPEAT_PATTERN_DIM))
+    if repeat and tuple(int(value) for value in repeat) != (2, 2):
+        result.errors.append(f"CFARepeatPatternDim must be 2x2, got {repeat}")
+    pattern = _as_tuple(_tag_value(page, TAG_CFA_PATTERN))
+    if pattern and len(pattern) != 4:
+        result.errors.append(f"CFAPattern must contain 4 entries, got {len(pattern)}")
 
 
 def _check_xmp(page: tifffile.TiffPage, result: ValidationResult) -> None:
@@ -304,6 +344,8 @@ def _tag_value(page: tifffile.TiffPage, code: int):
 def _as_tuple(value) -> tuple:
     if value is None:
         return ()
+    if isinstance(value, bytes):
+        return tuple(value)
     if isinstance(value, tuple):
         return value
     if isinstance(value, list):

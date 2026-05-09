@@ -19,11 +19,14 @@ def build_xmp_packet(ai: AIMetadataModel) -> bytes:
         "xmpAI:lighting": ai.lighting,
         "xmpAI:weather": ai.weather,
         "xmpAI:cameraParametersAreSimulated": str(ai.camera_parameters_are_simulated),
+        "xmpAI:rawMode": ai.raw_mode,
     }
     if ai.iso is not None:
         attrs["xmpAI:simulatedISO"] = str(ai.iso)
     if ai.white_balance_kelvin is not None:
         attrs["xmpAI:simulatedWhiteBalanceKelvin"] = f"{ai.white_balance_kelvin:g}"
+    if ai.cfa_pattern is not None:
+        attrs["xmpAI:cfaPattern"] = ai.cfa_pattern
     if ai.prompt_plaintext is not None:
         attrs["xmpAI:promptPlaintext"] = ai.prompt_plaintext
 

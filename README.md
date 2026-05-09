@@ -39,6 +39,22 @@ Supported input spaces:
 - `acescg`: scene-linear ACEScg/AP1, converted through XYZ into the virtual camera space.
 - `xyz`: scene-linear CIE XYZ, converted into the virtual camera space.
 
+Supported output modes:
+
+- `linearraw`: default three-channel 16-bit LinearRaw DNG.
+- `cfa`: explicit simulated single-channel CFA mosaic DNG.
+
+Example CFA output:
+
+```powershell
+uv run image2dng input.tif output-cfa.dng `
+  --mode cfa `
+  --cfa-pattern rggb `
+  --input-space linear-rec709
+```
+
+CFA mode is a simplified simulation intended for compatibility and workflow research. It does not claim to be a real sensor capture and does not add sensor noise by default.
+
 ## Validate a DNG
 
 ```powershell
@@ -69,6 +85,7 @@ result = convert(
     output_path=Path("output.dng"),
     input_space="srgb",
     mode="linearraw",
+    cfa_pattern="rggb",
     iso=100,
     white_balance_kelvin=6500,
     prompt_hash="sha256:...",
@@ -99,13 +116,13 @@ uv run pytest
 Current MVP:
 
 - 16-bit uncompressed LinearRaw DNG.
+- Explicit simulated CFA mosaic mode.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.
 - Synthetic provenance always written.
 
 Known limitations:
 
-- No CFA Bayer mosaic yet.
 - No shot/read noise model yet.
 - No preview IFD, EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
 - Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.

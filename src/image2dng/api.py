@@ -7,10 +7,10 @@ from typing import Literal
 import numpy as np
 
 from image2dng.dng_writer import write_dng
-from image2dng.image_processing import InputSpace, build_linearraw_buffer
-from image2dng.models import AIMetadataModel, CameraProfileModel
+from image2dng.image_processing import InputSpace, build_cfa_buffer, build_linearraw_buffer
+from image2dng.models import AIMetadataModel, CameraProfileModel, CfaPattern
 
-OutputMode = Literal["linearraw"]
+OutputMode = Literal["linearraw", "cfa"]
 
 
 class Image2DNGError(Exception):
@@ -50,6 +50,7 @@ def convert(
     *,
     input_space: InputSpace = "srgb",
     mode: OutputMode = "linearraw",
+    cfa_pattern: CfaPattern = "rggb",
     iso: int = 100,
     white_balance_kelvin: float = 6500.0,
     prompt_hash: str | None = None,
@@ -64,7 +65,7 @@ def convert(
     target = Path(output_path)
     if target.exists() and not overwrite:
         raise OutputExistsError(f"output already exists: {target}")
-    if mode != "linearraw":
+    if mode not in {"linearraw", "cfa"}:
         raise InvalidMetadataError(f"unsupported output mode: {mode}")
     if iso <= 0:
         raise InvalidMetadataError("iso must be positive")
@@ -72,7 +73,14 @@ def convert(
         raise InvalidMetadataError("white_balance_kelvin must be positive")
 
     try:
-        raw_buffer, core = build_linearraw_buffer(input_path, input_space)
+        if mode == "cfa":
+            raw_buffer, core = build_cfa_buffer(
+                input_path,
+                input_space,
+                cfa_pattern=cfa_pattern,
+            )
+        else:
+            raw_buffer, core = build_linearraw_buffer(input_path, input_space)
     except ValueError as exc:
         raise UnsupportedInputError(str(exc)) from exc
 
@@ -88,6 +96,8 @@ def convert(
             iso=iso,
             white_balance_kelvin=white_balance_kelvin,
             prompt_plaintext=prompt_plaintext,
+            raw_mode=mode,
+            cfa_pattern=cfa_pattern if mode == "cfa" else None,
         )
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc
