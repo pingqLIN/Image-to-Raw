@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -58,6 +59,11 @@ def build_validate_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="skip optional external smoke tests",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="write a structured validation report as JSON",
+    )
     return parser
 
 
@@ -88,6 +94,10 @@ def _run_generate(args: argparse.Namespace) -> int:
 
 def _run_validate(args: argparse.Namespace) -> int:
     result = validate_dng(args.dng, run_smoke=not args.no_smoke)
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        return 0 if result.ok else 1
+
     for warning in result.warnings:
         print(f"warning: {warning}")
     for name, status in result.smoke_tests.items():

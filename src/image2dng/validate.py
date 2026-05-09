@@ -45,6 +45,15 @@ class ValidationResult:
     def ok(self) -> bool:
         return not self.errors
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "path": str(self.path),
+            "ok": self.ok,
+            "errors": self.errors,
+            "warnings": self.warnings,
+            "smoke_tests": self.smoke_tests,
+        }
+
 
 def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResult:
     target = Path(path)

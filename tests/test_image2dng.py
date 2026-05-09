@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -127,6 +128,35 @@ def test_makernote_is_not_written(tmp_path):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:no-makernote")
     with tifffile.TiffFile(output_path) as tif:
         assert TAG_MAKER_NOTE not in tif.pages[0].tags
+
+
+def test_validate_json_output(tmp_path, capsys):
+    output_path = _write_test_dng(tmp_path, prompt_hash="sha256:json")
+
+    exit_code = main(["validate", str(output_path), "--no-smoke", "--json"])
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["ok"] is True
+    assert report["path"] == str(output_path)
+    assert report["errors"] == []
+    assert report["warnings"] == []
+    assert report["smoke_tests"] == {}
+
+
+def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
+    output_path = _write_test_dng(tmp_path, prompt_hash="sha256:smoke-skipped")
+    monkeypatch.setattr("image2dng.validate.shutil.which", lambda _command: None)
+
+    result = validate_dng(output_path, run_smoke=True)
+
+    assert result.ok, result.errors
+    assert result.smoke_tests == {
+        "exiftool": "skipped: not found",
+        "dcraw": "skipped: not found",
+        "darktable-cli": "skipped: not found",
+        "rawtherapee-cli": "skipped: not found",
+    }
 
 
 def _write_test_dng(tmp_path, *, prompt_hash: str):
