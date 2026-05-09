@@ -41,3 +41,12 @@ jobs:
 
       - name: Build package
         run: uv build
+
+      - name: Wheel install smoke
+        run: |
+          python -m venv .venv-smoke
+          . .venv-smoke/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          image2dng --help
+          image2dng validate --help

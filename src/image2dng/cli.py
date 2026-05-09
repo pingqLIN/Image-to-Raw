@@ -6,9 +6,7 @@ import sys
 from pathlib import Path
 
 from image2dng import __version__
-from image2dng.dng_writer import write_dng
-from image2dng.image_processing import InputSpace, build_linearraw_buffer
-from image2dng.models import AIMetadataModel, CameraProfileModel
+from image2dng.api import Image2DNGError, convert
 from image2dng.validate import validate_dng
 
 
@@ -48,6 +46,11 @@ def build_generate_parser() -> argparse.ArgumentParser:
         default=None,
         help="opt-in only: embed plaintext prompt in XMP",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing output DNG",
+    )
     return parser
 
 
@@ -68,27 +71,27 @@ def build_validate_parser() -> argparse.ArgumentParser:
 
 
 def _run_generate(args: argparse.Namespace) -> int:
-    if args.iso <= 0:
-        raise SystemExit("--iso must be positive")
-    if args.white_balance <= 0:
-        raise SystemExit("--white-balance must be positive")
-
-    input_space: InputSpace = args.input_space
-    raw_buffer, core = build_linearraw_buffer(args.input, input_space)
-    camera = CameraProfileModel.from_white_balance(args.white_balance)
-    ai = AIMetadataModel(
-        model_name=args.model_name,
-        model_version=args.model_version,
-        prompt_hash=args.prompt_hash,
-        scene_description=args.scene_description,
-        lighting=args.lighting,
-        weather=args.weather,
-        iso=args.iso,
-        white_balance_kelvin=args.white_balance,
-        prompt_plaintext=args.prompt_plaintext,
-    )
-    write_dng(args.output, raw_buffer, core, camera, ai)
-    print(f"Wrote {args.output}")
+    try:
+        result = convert(
+            input_path=args.input,
+            output_path=args.output,
+            input_space=args.input_space,
+            mode=args.mode,
+            iso=args.iso,
+            white_balance_kelvin=args.white_balance,
+            prompt_hash=args.prompt_hash,
+            prompt_plaintext=args.prompt_plaintext,
+            scene_description=args.scene_description,
+            model_name=args.model_name,
+            model_version=args.model_version,
+            lighting=args.lighting,
+            weather=args.weather,
+            overwrite=args.overwrite,
+        )
+    except Image2DNGError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 3
+    print(f"Wrote {result.output_path}")
     return 0
 
 
@@ -96,7 +99,9 @@ def _run_validate(args: argparse.Namespace) -> int:
     result = validate_dng(args.dng, run_smoke=not args.no_smoke)
     if args.json:
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
-        return 0 if result.ok else 1
+        if result.ok:
+            return 0
+        return 2 if result.has_smoke_failure else 1
 
     for warning in result.warnings:
         print(f"warning: {warning}")
@@ -107,4 +112,4 @@ def _run_validate(args: argparse.Namespace) -> int:
         return 0
     for error in result.errors:
         print(f"error: {error}")
-    return 1
+    return 2 if result.has_smoke_failure else 1

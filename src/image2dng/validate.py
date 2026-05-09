@@ -6,6 +6,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import tifffile
 
@@ -33,22 +34,65 @@ TAG_PHOTOMETRIC = 262
 TAG_SAMPLES_PER_PIXEL = 277
 TAG_SOFTWARE = 305
 
+CheckStatus = Literal["passed", "failed", "skipped", "warning"]
+
+
+@dataclass(frozen=True)
+class ValidationCheck:
+    name: str
+    status: CheckStatus
+    message: str = ""
+    tool: str | None = None
+
+    def to_dict(self) -> dict[str, str]:
+        item = {
+            "name": self.name,
+            "status": self.status,
+            "message": self.message,
+        }
+        if self.tool is not None:
+            item["tool"] = self.tool
+        return item
+
 
 @dataclass
 class ValidationResult:
     path: Path
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    checks: list[ValidationCheck] = field(default_factory=list)
     smoke_tests: dict[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
         return not self.errors
 
+    @property
+    def has_smoke_failure(self) -> bool:
+        return any(
+            check.name.startswith("smoke:") and check.status == "failed"
+            for check in self.checks
+        )
+
+    def add_check(
+        self,
+        name: str,
+        status: CheckStatus,
+        message: str = "",
+        *,
+        tool: str | None = None,
+    ) -> None:
+        self.checks.append(ValidationCheck(name=name, status=status, message=message, tool=tool))
+        if status == "failed":
+            self.errors.append(message or f"{name} failed")
+        elif status == "warning":
+            self.warnings.append(message or f"{name} warning")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "path": str(self.path),
             "ok": self.ok,
+            "checks": [check.to_dict() for check in self.checks],
             "errors": self.errors,
             "warnings": self.warnings,
             "smoke_tests": self.smoke_tests,
@@ -221,18 +265,35 @@ def _run_external_smoke_tests(path: Path, result: ValidationResult) -> None:
 def _run_optional_command(name: str, command: list[str], result: ValidationResult) -> None:
     if shutil.which(command[0]) is None:
         result.smoke_tests[name] = "skipped: not found"
+        result.add_check(
+            f"smoke:{name}",
+            "skipped",
+            f"{command[0]} was not found on PATH",
+            tool=name,
+        )
         return
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
     except Exception as exc:  # noqa: BLE001
-        result.errors.append(f"{name} smoke test failed to run: {exc}")
+        result.add_check(
+            f"smoke:{name}",
+            "failed",
+            f"{name} smoke test failed to run: {exc}",
+            tool=name,
+        )
         return
     if completed.returncode != 0:
         stderr = completed.stderr.strip().splitlines()
         detail = stderr[-1] if stderr else f"exit code {completed.returncode}"
-        result.errors.append(f"{name} smoke test failed: {detail}")
+        result.add_check(
+            f"smoke:{name}",
+            "failed",
+            f"{name} smoke test failed: {detail}",
+            tool=name,
+        )
     else:
         result.smoke_tests[name] = "ok"
+        result.add_check(f"smoke:{name}", "passed", f"{name} parsed the DNG", tool=name)
 
 
 def _tag_value(page: tifffile.TiffPage, code: int):

@@ -4,6 +4,8 @@
 
 This project intentionally does **not** try to impersonate a real camera RAW file. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"` and XMP metadata marks camera parameters as simulated.
 
+This product includes DNG technology under license by Adobe.
+
 ## Development status
 
 This project is currently an active proof of concept. Behavior, metadata fields, DNG tag layout, and compatibility expectations may change while the design is being validated.
@@ -28,6 +30,8 @@ uv run image2dng input.tif output.dng `
   --model-version "1.0"
 ```
 
+By default, the CLI refuses to replace an existing output file. Pass `--overwrite` only when replacing the output is intentional.
+
 Supported input spaces:
 
 - `srgb`: display-referred sRGB; the CLI applies the inverse sRGB OETF.
@@ -39,9 +43,41 @@ Supported input spaces:
 
 ```powershell
 uv run image2dng validate output.dng
+uv run image2dng validate output.dng --json
 ```
 
 The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available on `PATH`, it also attempts smoke tests.
+
+Validation exit codes:
+
+- `0`: structural validation passed; optional smoke tools passed or were skipped.
+- `1`: structural DNG validation failed.
+- `2`: an optional smoke tool ran and reported an actual parse/open failure.
+- `3`: CLI usage or configuration error.
+
+See [docs/compatibility.md](docs/compatibility.md) for the compatibility evidence format.
+
+## Use as a Python library
+
+```python
+from pathlib import Path
+
+from image2dng import convert
+
+result = convert(
+    input_path=Path("input.tif"),
+    output_path=Path("output.dng"),
+    input_space="srgb",
+    mode="linearraw",
+    iso=100,
+    white_balance_kelvin=6500,
+    prompt_hash="sha256:...",
+    scene_description="synthetic test scene",
+    overwrite=False,
+)
+```
+
+The public API raises `Image2DNGError` subclasses instead of exiting the process. CLI and library outputs are expected to be semantically equivalent under `image2dng validate`.
 
 ## Tests
 

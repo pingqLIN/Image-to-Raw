@@ -7,6 +7,7 @@ import numpy as np
 import png
 import tifffile
 
+from image2dng import OutputExistsError, convert
 from image2dng.cli import main
 from image2dng.dng_writer import TAG_XMP
 from image2dng.image_processing import build_linearraw_buffer
@@ -93,6 +94,54 @@ def test_generate_16bit_png_dng(tmp_path):
     assert result.ok, result.errors
 
 
+def test_public_convert_api_returns_result(tmp_path):
+    input_path = tmp_path / "api-input.tif"
+    output_path = tmp_path / "api-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(24, 24), photometric="rgb")
+
+    result = convert(
+        input_path=input_path,
+        output_path=output_path,
+        input_space="srgb",
+        prompt_hash="sha256:api",
+        scene_description="api test scene",
+    )
+
+    assert result.output_path == output_path
+    assert result.mode == "linearraw"
+    assert result.width == 24
+    assert result.height == 24
+    assert result.prompt_hash == "sha256:api"
+    assert result.raw_data_unique_id is not None
+    validation = validate_dng(output_path, run_smoke=False)
+    assert validation.ok, validation.errors
+
+
+def test_public_convert_refuses_existing_output_without_overwrite(tmp_path):
+    input_path = tmp_path / "api-input.tif"
+    output_path = tmp_path / "api-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    output_path.write_bytes(b"existing")
+
+    try:
+        convert(input_path=input_path, output_path=output_path)
+    except OutputExistsError:
+        pass
+    else:
+        raise AssertionError("expected OutputExistsError")
+
+
+def test_cli_returns_usage_error_for_invalid_metadata(tmp_path, capsys):
+    input_path = tmp_path / "invalid-metadata.tif"
+    output_path = tmp_path / "invalid-metadata.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    exit_code = main([str(input_path), str(output_path), "--iso", "0"])
+
+    assert exit_code == 3
+    assert "iso must be positive" in capsys.readouterr().err
+
+
 def test_metadata_round_trip(tmp_path):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:roundtrip")
     with tifffile.TiffFile(output_path) as tif:
@@ -139,6 +188,7 @@ def test_validate_json_output(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["ok"] is True
     assert report["path"] == str(output_path)
+    assert report["checks"] == []
     assert report["errors"] == []
     assert report["warnings"] == []
     assert report["smoke_tests"] == {}
@@ -157,6 +207,7 @@ def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
         "darktable-cli": "skipped: not found",
         "rawtherapee-cli": "skipped: not found",
     }
+    assert {check.status for check in result.checks} == {"skipped"}
 
 
 def _write_test_dng(tmp_path, *, prompt_hash: str):
