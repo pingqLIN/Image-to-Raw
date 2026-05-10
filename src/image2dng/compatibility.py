@@ -138,7 +138,7 @@ def _run_exiftool(
     return _run_processor_command(
         tool="exiftool",
         source=source,
-        command=["exiftool", str(source)],
+        command=["exiftool", _processor_path(source)],
         output_artifacts=[],
         timeout_seconds=timeout_seconds,
     )
@@ -153,7 +153,7 @@ def _run_dcraw(
     return _run_processor_command(
         tool="dcraw",
         source=source,
-        command=["dcraw", "-T", "-w", "-O", str(output), str(source)],
+        command=["dcraw", "-T", "-w", "-O", _processor_path(output), _processor_path(source)],
         output_artifacts=[output],
         timeout_seconds=timeout_seconds,
     )
@@ -168,7 +168,7 @@ def _run_darktable(
     return _run_processor_command(
         tool="darktable-cli",
         source=source,
-        command=["darktable-cli", str(source), str(output)],
+        command=["darktable-cli", _processor_path(source), _processor_path(output)],
         output_artifacts=[output],
         timeout_seconds=timeout_seconds,
     )
@@ -183,7 +183,14 @@ def _run_rawtherapee(
     return _run_processor_command(
         tool="rawtherapee-cli",
         source=source,
-        command=["rawtherapee-cli", "-Y", "-o", str(output), "-c", str(source)],
+        command=[
+            "rawtherapee-cli",
+            "-Y",
+            "-o",
+            _processor_path(output),
+            "-c",
+            _processor_path(source),
+        ],
         output_artifacts=[output],
         timeout_seconds=timeout_seconds,
     )
@@ -318,6 +325,10 @@ def _tail(text: str, *, max_lines: int = 20) -> list[str]:
 
 def _last_line(lines: list[str]) -> str:
     return lines[-1] if lines else ""
+
+
+def _processor_path(path: Path) -> str:
+    return path.as_posix()
 
 
 def environment_label() -> str:
