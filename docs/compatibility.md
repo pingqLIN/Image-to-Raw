@@ -6,6 +6,21 @@ Missing optional tools are recorded as `skipped`, not as failures. CI must not r
 
 This product includes DNG technology under license by Adobe.
 
+Traditional Chinese source manuscript: [docs/i18n/zh-TW/compatibility-evidence.md](i18n/zh-TW/compatibility-evidence.md).
+
+## Generate Compatibility Evidence
+
+```powershell
+uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
+```
+
+The evidence generator emits deterministic local fixtures and two reports:
+
+- `compatibility-report.json`: machine-readable report using `image2dng.compatibility_evidence.v1`.
+- `compatibility-summary.md`: human-readable evidence matrix.
+
+The generated fixtures live under `demo-output/compatibility-evidence/` and should not be committed as binary artifacts.
+
 ## Validator Contract
 
 Default output is human-readable. `image2dng validate --json` emits a structured report with:
@@ -48,3 +63,14 @@ Each fixture should use a small deterministic RGB gradient with channel ramps, n
 CFA fixtures should additionally record the selected CFA pattern and confirm that the raw buffer is single-channel with `CFARepeatPatternDim = 2,2` and a four-entry `CFAPattern`.
 
 Sensor-effect fixtures should record the enabled effect parameters and deterministic seed so generated outputs can be reproduced.
+
+## Automated Evidence Report
+
+`compatibility-report.json` records:
+
+- environment: platform, Python version, and `image2dng` version;
+- tool inventory: availability, executable path, version command, version, and timeout policy;
+- fixtures: input path, DNG path, validation JSON path, structural validation status, and smoke-test status;
+- matrix: fixture, tool, command, result, evidence path, environment, and notes.
+
+Adobe DNG SDK remains `manual-only` until a reproducible local SDK validation path exists.

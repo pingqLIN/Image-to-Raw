@@ -1,0 +1,74 @@
+# RAW-native 節點式生成流程
+
+本文件是 `image2dng` 從「既有影像轉 synthetic DNG」走向「AI 生成流程原生產出 synthetic RAW/DNG」的設計備忘。
+
+## 核心判斷
+
+短期先自建 repo 內的最小節點式 pipeline，而不是直接把 ComfyUI 安裝成核心依賴。
+
+理由：
+
+- RAW/DNG 語意、XMP provenance、synthetic camera 標示、validation contract 是本專案的核心責任，應先在本 repo 內保持可測試、可版本化、可回歸。
+- 現有 `convert()`、DNG writer、validator、sensor effects 已經提供足夠基礎，可以快速拆成 graph artifacts。
+- ComfyUI 很適合視覺化節點編排與生成模型生態，但若一開始綁為核心依賴，會讓 RAW 格式語意、模型工作流、UI extension 生命週期耦合過早。
+- 第一批驗證目標是產生 DNG、JPEG preview、validation JSON 與 graph manifest，不需要先引入大型 diffusion runtime。
+
+ComfyUI 仍然是 Phase 2 整合目標。官方文件顯示 ComfyUI 具備 node/custom-node 與 CLI 管理路徑，適合之後包成 custom node 或由 API workflow 呼叫本 repo 的核心 pipeline：
+
+- <https://docs.comfy.org/development/core-concepts/custom-nodes>
+- <https://docs.comfy.org/comfy-cli/getting-started>
+- <https://github.com/Comfy-Org/ComfyUI>
+
+## 目標流程
+
+```mermaid
+flowchart LR
+  A["Prompt / Intent"] --> B["Scene Linear Node"]
+  B --> C["Virtual Camera Node"]
+  C --> D["Sensor Node"]
+  D --> E{"RAW Mode"}
+  E --> F["LinearRaw DNG"]
+  E --> G["Simulated CFA DNG"]
+  F --> H["JPEG Preview"]
+  G --> H
+  F --> I["Validation JSON"]
+  G --> I
+  I --> J["Graph Manifest"]
+```
+
+## Artifact contract
+
+每次 batch 至少輸出：
+
+- `inputs/*-scene-linear.tif`：scene-linear RGB 中間影像。
+- `raw/*-linearraw.dng`：三通道 synthetic LinearRaw DNG。
+- `raw/*-cfa-rggb.dng`：single-channel simulated RGGB CFA DNG。
+- `jpeg/*-linearraw.jpg`：由 LinearRaw DNG render 的 JPEG preview。
+- `jpeg/*-cfa-rggb.jpg`：由 CFA DNG false-color render 的 JPEG preview。
+- `validation/*.json`：validator 結果。
+- `manifests/raw-native-node-batch.json`：節點流程、輸入輸出、參數與驗證摘要。
+
+## 目前實作
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
+```
+
+目前節點：
+
+- `PromptIntentNode`
+- `SceneLinearGeneratorNode`
+- `VirtualCameraLinearRawNode`
+- `VirtualCameraCfaNode`
+- `JpegPreviewRenderNode`
+- `DngValidationNode`
+
+目前的 scene generator 是 deterministic procedural generator，不是最終 AI diffusion model。這是刻意設計：第一階段先驗證 RAW-native pipeline 的檔案語意、manifest、DNG 可解析性與 JPEG preview 交付流程。
+
+## 下一步
+
+1. 把 `raw-native-node-batch.json` schema 固化為可測試 contract。
+2. 讓 pipeline 支援外部 scene-linear image producer，作為 future AI model adapter。
+3. 增加 preview IFD 或 sidecar preview policy 的設計決策。
+4. 做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor，輸出 DNG path、JPEG path、manifest。
+5. 若 ComfyUI custom node 穩定，再加入 ComfyUI 安裝與 smoke workflow 文件。

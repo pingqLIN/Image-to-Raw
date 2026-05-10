@@ -30,6 +30,34 @@
 - CFA 必須是明確 opt-in 的 simulated mode；
 - noise、depth、semantic mask，以及更接近研究型 inverse-ISP / raw-generation 的方向，不屬於 LinearRaw MVP。
 
+## RAW-native node pipeline direction
+
+專案正在從單次 conversion 擴展成 RAW-native generation pipeline。在這個模型中，DNG 是主要生成 artifact，JPEG/PNG 則是從 generated RAW buffer render 出來的 preview 或交付副產品。
+
+目前實作選擇先把第一版 node graph 放在本 repo 內，而不是把 ComfyUI 作為第一個核心 runtime。這能讓 DNG semantics、XMP provenance、validation、synthetic camera rules 都留在已測試的核心程式碼旁邊。ComfyUI 仍然是很適合的 Phase 2 integration layer，因為它已經提供 node workflow 與 custom-node 路徑；但在 file-format contract 穩定前，它應該先包覆 `image2dng` 核心 pipeline，而不是取代核心。
+
+目前最小 graph：
+
+```mermaid
+flowchart LR
+  A["PromptIntentNode"] --> B["SceneLinearGeneratorNode"]
+  B --> C["VirtualCameraLinearRawNode"]
+  B --> D["VirtualCameraCfaNode"]
+  C --> E["JpegPreviewRenderNode"]
+  D --> E
+  C --> F["DngValidationNode"]
+  D --> F
+  F --> G["Graph manifest"]
+```
+
+第一個可執行 batch：
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
+```
+
+這會產生 scene-linear TIFF intermediates、LinearRaw DNG、simulated CFA DNG、JPEG previews、validation JSON 與 graph manifest。詳見 [docs/i18n/zh-TW/raw-native-node-pipeline.md](i18n/zh-TW/raw-native-node-pipeline.md) 與 [docs/i18n/en/raw-native-node-pipeline.md](i18n/en/raw-native-node-pipeline.md)。
+
 ## LinearRaw MVP scope
 
 MVP 目標是把 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成合法、可解析、誠實標示來源的 DNG。主影像 IFD 使用：

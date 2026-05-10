@@ -1,6 +1,8 @@
 # Image-to-DNG RAW Generator
 
-`image2dng` is a prototype CLI for turning 16-bit TIFF/PNG or scene-linear RGB images into truthful synthetic DNG files. The MVP writes uncompressed 16-bit `LinearRaw` DNG, embeds AI provenance in a custom XMP namespace, and avoids MakerNote spoofing.
+`image2dng` is a prototype CLI and Python library for turning 16-bit TIFF/PNG or scene-linear RGB images into truthful synthetic DNG files. The MVP writes uncompressed 16-bit `LinearRaw` DNG, embeds AI provenance in a custom XMP namespace, and avoids MakerNote spoofing.
+
+The project direction is expanding from one-shot image-to-raw conversion into **RAW-native AI image generation**: the primary generated artifact should be a synthetic RAW/DNG file, while JPEG/PNG outputs are previews or delivery renders derived from the RAW buffer. The repository now includes a minimal node-style pipeline for Prompt/Scene/Virtual Camera/Sensor/DNG/JPEG/Validation experiments.
 
 This project intentionally does **not** try to impersonate a real camera RAW file. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"` and XMP metadata marks camera parameters as simulated.
 
@@ -15,6 +17,40 @@ This project is currently an active proof of concept. Behavior, metadata fields,
 ```powershell
 uv sync --extra dev
 ```
+
+## Generate a RAW-native node batch
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
+```
+
+The batch emits:
+
+- scene-linear TIFF intermediates;
+- `LinearRaw` synthetic DNG files;
+- simulated RGGB CFA synthetic DNG files;
+- JPEG previews rendered from generated DNG buffers;
+- validation JSON for each DNG;
+- `manifests/raw-native-node-batch.json` as the node graph manifest;
+- `manifests/sample-index.json` as the sample index.
+
+The current decision is to build the minimal core pipeline inside this repository first. ComfyUI remains a strong candidate for a later visual orchestration layer, workflow UI, or custom-node integration, but it is not the first required dependency for the core RAW/DNG semantics.
+
+## Run the development baseline verification
+
+```powershell
+uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
+```
+
+This verification flow runs `pytest`, `ruff check`, RAW-native batch generation, and checks the manifest, sample index, DNG validation JSON, and JPEG previews. It writes `demo-output/development-baseline/verification-report.json`. `demo-output/` is local output and binary samples should not be committed.
+
+## Generate compatibility evidence
+
+```powershell
+uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
+```
+
+This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Missing optional RAW tools are recorded as `skipped` instead of failures; Adobe DNG SDK remains manual-only for now.
 
 ## Generate a DNG
 
@@ -105,6 +141,8 @@ The public API raises `Image2DNGError` subclasses instead of exiting the process
 
 ```powershell
 uv run python scripts/generate_demo_samples.py --output-dir demo-output
+uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
+uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
 ```
 
 See [docs/demo.md](docs/demo.md) for the architecture demo, sample set, and application scenarios.
@@ -130,6 +168,7 @@ Current MVP:
 
 - 16-bit uncompressed LinearRaw DNG.
 - Explicit simulated CFA mosaic mode.
+- Built-in minimal RAW-native node pipeline that emits DNG, JPEG preview, validation JSON, and graph manifest artifacts.
 - Optional deterministic synthetic sensor effects for demos and compatibility testing.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.
@@ -142,3 +181,4 @@ Known limitations:
 - Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
 
 See [docs/design.md](docs/design.md) for the design notes.
+See [docs/i18n/en/raw-native-node-pipeline.md](docs/i18n/en/raw-native-node-pipeline.md) for the RAW-native node pipeline direction.

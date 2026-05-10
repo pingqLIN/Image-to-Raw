@@ -8,6 +8,8 @@ This demo shows the intended application interface for current image2dng phases:
 4. XMP records synthetic provenance, selected raw mode, CFA pattern when present, and sensor-effect parameters when present.
 5. The validator checks DNG structure, mode-specific tags, XMP semantics, and optional local smoke tools.
 
+The newer RAW-native node batch treats DNG as the primary generation artifact and renders JPEG previews from generated RAW buffers. It is the recommended fast path for testing the node-style direction before integrating a larger generation runtime.
+
 ```mermaid
 flowchart LR
   A["16-bit TIFF/PNG input"] --> B["Input color transform"]
@@ -27,6 +29,10 @@ Generate deterministic sample outputs:
 
 ```powershell
 uv run python scripts/generate_demo_samples.py --output-dir demo-output
+uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
+uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
+uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
+uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 uv run image2dng validate demo-output/demo-linearraw.dng --no-smoke
 uv run image2dng validate demo-output/demo-cfa-rggb.dng --no-smoke
 uv run image2dng validate demo-output/demo-cfa-rggb-noisy.dng --no-smoke
@@ -41,10 +47,23 @@ The script creates:
 
 The samples are generated locally and should not be committed as binary fixtures.
 
+The RAW-native node batch creates:
+
+- `inputs/*-scene-linear.tif`
+- `raw/*-linearraw.dng`
+- `raw/*-cfa-rggb.dng`
+- `jpeg/*-linearraw.jpg`
+- `jpeg/*-cfa-rggb.jpg`
+- `validation/*.json`
+- `manifests/raw-native-node-batch.json`
+- `manifests/sample-index.json`
+
+The development baseline verifier writes `verification-report.json` with command results, artifact paths, JPEG dimensions, validation status, and sample index status.
+
 Generate staged visual demo outputs with PNG previews, validation JSON, and contact sheets:
 
 ```powershell
-uv run python scripts/generate_visual_demo.py --output-dir demo-output
+uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
 ```
 
 The visual generator currently creates synthetic, redistributable demo inputs for:
@@ -52,6 +71,12 @@ The visual generator currently creates synthetic, redistributable demo inputs fo
 - standard chart and tonal gradients;
 - skin-tone panels and simple portrait shapes;
 - everyday object and material samples.
+
+The visual demo manifest uses `image2dng.visual_demo_manifest.v1` and records every DNG, preview, validation JSON, and contact sheet. The required contact sheets are:
+
+- `contact-sheets/phase-overview.png`: source, LinearRaw, CFA, LinearRaw noisy, and CFA noisy columns.
+- `contact-sheets/cfa-pattern-comparison.png`: RGGB, BGGR, GRBG, and GBRG CFA pattern previews.
+- `contact-sheets/sensor-effects-comparison.png`: none, shot, read, row, and combined sensor-effect previews.
 
 JPEG printer evaluation charts can be used as local reference assets, but they require preprocessing into supported 16-bit TIFF/PNG inputs before conversion.
 

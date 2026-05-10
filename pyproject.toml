@@ -12,6 +12,7 @@ license = { text = "Proprietary prototype" }
 authors = [{ name = "image2dng contributors" }]
 dependencies = [
   "numpy>=2.0",
+  "pillow>=11.0",
   "pypng>=0.20220715.0",
   "tifffile>=2025.10.16",
 ]

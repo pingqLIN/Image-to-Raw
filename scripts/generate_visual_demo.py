@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import png
@@ -13,9 +15,16 @@ from image2dng import convert
 from image2dng.validate import validate_dng
 
 Asset = tuple[str, str, np.ndarray]
+CFA_PATTERNS = ("rggb", "bggr", "grbg", "gbrg")
 
 
-def main() -> int:
+@dataclass(frozen=True)
+class ManifestSheet:
+    image: np.ndarray
+    manifest: dict[str, Any]
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate staged visual demo samples.")
     parser.add_argument("--output-dir", type=Path, default=Path("demo-output"))
     parser.add_argument(
@@ -25,7 +34,7 @@ def main() -> int:
         default=[],
         help="external 16-bit ProPhoto RGB TIFF to include in the local demo run",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     root = args.output_dir
     inputs_dir = root / "inputs"
@@ -47,10 +56,13 @@ def main() -> int:
     ]
 
     manifest: dict[str, object] = {
+        "schema": "image2dng.visual_demo_manifest.v1",
         "description": "Staged image2dng visual demo outputs.",
         "external_assets": [],
         "assets": [],
         "contact_sheets": [],
+        "cfa_pattern_comparison": {},
+        "sensor_effects_comparison": {},
     }
     for path in args.prophoto_tiff:
         if not path.exists():
@@ -95,7 +107,7 @@ def main() -> int:
 
     sensor_sheet = make_sensor_effect_sheet(assets[0][2], root)
     sensor_sheet_path = contact_dir / "sensor-effects-comparison.png"
-    write_png_rgb8(sensor_sheet_path, sensor_sheet)
+    write_png_rgb8(sensor_sheet_path, sensor_sheet.image)
     manifest["contact_sheets"].append(
         {
             "path": str(sensor_sheet_path.relative_to(root)),
@@ -103,6 +115,23 @@ def main() -> int:
             "rows": ["chart-gradient"],
         }
     )
+    manifest["sensor_effects_comparison"] = sensor_sheet.manifest
+
+    cfa_sheet = make_cfa_pattern_sheet(
+        source=assets[0][2],
+        root=root,
+        phase2_dir=phase2_dir,
+    )
+    cfa_sheet_path = contact_dir / "cfa-pattern-comparison.png"
+    write_png_rgb8(cfa_sheet_path, cfa_sheet.image)
+    manifest["contact_sheets"].append(
+        {
+            "path": str(cfa_sheet_path.relative_to(root)),
+            "columns": list(CFA_PATTERNS),
+            "rows": ["chart-gradient"],
+        }
+    )
+    manifest["cfa_pattern_comparison"] = cfa_sheet.manifest
 
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(f"Wrote visual demo samples to {root}")
@@ -193,6 +222,7 @@ def generate_asset_outputs(
     write_png_rgb8(preview_paths["noise_diff"], diff_heatmap(linear_preview, linear_noisy_preview))
 
     validation_paths = {}
+    validation_ok = {}
     for name, path in {
         "linearraw": linear_path,
         "cfa": cfa_path,
@@ -200,11 +230,10 @@ def generate_asset_outputs(
         "cfa_noisy": cfa_noisy_path,
     }.items():
         validation_path = path.with_suffix(".validation.json")
-        validation_path.write_text(
-            json.dumps(validate_dng(path, run_smoke=False).to_dict(), indent=2),
-            encoding="utf-8",
-        )
+        validation = validate_dng(path, run_smoke=False).to_dict()
+        validation_path.write_text(json.dumps(validation, indent=2), encoding="utf-8")
         validation_paths[name] = validation_path
+        validation_ok[name] = validation["ok"]
 
     return {
         "manifest": {
@@ -220,6 +249,7 @@ def generate_asset_outputs(
             },
             "previews": {key: str(path) for key, path in preview_paths.items()},
             "validations": {key: str(path) for key, path in validation_paths.items()},
+            "validation_ok": validation_ok,
         },
         "contact_row": [
             source_preview,
@@ -412,7 +442,7 @@ def safe_slug(name: str) -> str:
     return slug or "external-prophoto"
 
 
-def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> np.ndarray:
+def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> ManifestSheet:
     temp_input = root / "inputs" / "sensor-effects-source.tif"
     tifffile.imwrite(temp_input, source, photometric="rgb")
     specs = [
@@ -423,8 +453,11 @@ def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> np.ndarray:
         ("combined", {"shot_noise": 0.01, "read_noise": 0.002, "row_noise": 0.001}),
     ]
     row = []
+    samples = []
     for name, effects in specs:
         output = root / "phase-3-sensor-effects" / f"chart-gradient-linearraw-{name}.dng"
+        preview_path = output.with_name(f"chart-gradient-linearraw-{name}-preview.png")
+        validation_path = output.with_suffix(".validation.json")
         convert(
             input_path=temp_input,
             output_path=output,
@@ -436,8 +469,78 @@ def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> np.ndarray:
             overwrite=True,
             **effects,
         )
-        row.append(dng_preview(output))
-    return make_contact_sheet([row])
+        preview = dng_preview(output)
+        validation = validate_dng(output, run_smoke=False).to_dict()
+        write_png_rgb8(preview_path, preview)
+        validation_path.write_text(json.dumps(validation, indent=2), encoding="utf-8")
+        row.append(preview)
+        samples.append(
+            {
+                "name": name,
+                "effects": effects,
+                "output": str(output),
+                "preview": str(preview_path),
+                "validation": str(validation_path),
+                "validation_ok": validation["ok"],
+            }
+        )
+    return ManifestSheet(
+        image=make_contact_sheet([row]),
+        manifest={
+            "source": str(temp_input),
+            "samples": samples,
+            "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+        },
+    )
+
+
+def make_cfa_pattern_sheet(
+    *,
+    source: np.ndarray,
+    root: Path,
+    phase2_dir: Path,
+) -> ManifestSheet:
+    temp_input = root / "inputs" / "cfa-pattern-source.tif"
+    tifffile.imwrite(temp_input, source, photometric="rgb")
+    row = []
+    samples = []
+    for pattern in CFA_PATTERNS:
+        output = phase2_dir / f"chart-gradient-cfa-{pattern}.dng"
+        preview_path = output.with_name(f"chart-gradient-cfa-{pattern}-mosaic-preview.png")
+        validation_path = output.with_suffix(".validation.json")
+        convert(
+            input_path=temp_input,
+            output_path=output,
+            input_space="linear-rec709",
+            mode="cfa",
+            cfa_pattern=pattern,
+            prompt_hash=f"sha256:demo-cfa-pattern-{pattern}",
+            scene_description=f"CFA pattern comparison: {pattern}",
+            overwrite=True,
+        )
+        preview = dng_preview(output, cfa_pattern=pattern)
+        validation = validate_dng(output, run_smoke=False).to_dict()
+        write_png_rgb8(preview_path, preview)
+        validation_path.write_text(json.dumps(validation, indent=2), encoding="utf-8")
+        row.append(preview)
+        samples.append(
+            {
+                "pattern": pattern,
+                "output": str(output),
+                "preview": str(preview_path),
+                "validation": str(validation_path),
+                "validation_ok": validation["ok"],
+            }
+        )
+    return ManifestSheet(
+        image=make_contact_sheet([row]),
+        manifest={
+            "source": str(temp_input),
+            "patterns": list(CFA_PATTERNS),
+            "samples": samples,
+            "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+        },
+    )
 
 
 def write_png_rgb8(path: Path, image: np.ndarray) -> None:

@@ -12,6 +12,7 @@ from image2dng.api import (
     convert,
 )
 from image2dng.models import AIMetadataModel, CameraProfileModel, CoreRawModel
+from image2dng.pipeline import GenerationScene, PipelineBatchResult, run_raw_native_batch
 from image2dng.sensor_effects import SensorEffectModel
 
 __all__ = [
@@ -19,11 +20,14 @@ __all__ = [
     "CameraProfileModel",
     "ConversionResult",
     "CoreRawModel",
+    "GenerationScene",
     "Image2DNGError",
     "InvalidMetadataError",
     "OutputExistsError",
+    "PipelineBatchResult",
     "SensorEffectModel",
     "UnsupportedInputError",
     "ValidationError",
     "convert",
+    "run_raw_native_batch",
 ]
