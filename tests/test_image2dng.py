@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -13,12 +14,17 @@ from PIL import Image
 
 from image2dng import OutputExistsError, convert
 from image2dng.cli import main
+from image2dng.compatibility import run_processor_compatibility
 from image2dng.dng_writer import TAG_CFA_PATTERN, TAG_CFA_REPEAT_PATTERN_DIM, TAG_XMP
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel
 from image2dng.pipeline import GenerationScene, run_raw_native_batch
 from image2dng.validate import TAG_MAKER_NOTE, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
+
+
+def _fake_processor_executable(command: str) -> str:
+    return f"C:/fake/{command}.exe"
 
 
 def test_generate_64x64_gradient_dng(tmp_path):
@@ -352,8 +358,7 @@ def test_visual_demo_generates_phase3_evidence(tmp_path):
 
 def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeypatch):
     module = _load_script_module("generate_compatibility_evidence")
-    monkeypatch.setattr(module.shutil, "which", lambda _command: None)
-    monkeypatch.setattr("image2dng.validate.shutil.which", lambda _command: None)
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", lambda _command: None)
 
     output_dir = tmp_path / "compatibility-evidence"
     assert module.main(["--output-dir", str(output_dir)]) == 0
@@ -362,36 +367,110 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     summary_path = output_dir / "compatibility-summary.md"
     report = json.loads(report_path.read_text(encoding="utf-8"))
 
-    assert report["schema"] == "image2dng.compatibility_evidence.v1"
+    assert report["schema"] == "image2dng.compatibility_evidence.v2"
     assert report["ok"] is True
     assert report["errors"] == []
+    assert report["install_policy"] == {
+        "auto_install": False,
+        "missing_tool_policy": "skipped",
+        "available_tool_failure_policy": "failed",
+        "notes": "Install hints are dry-run guidance only; this script never installs RAW tools.",
+    }
     assert len(report["fixtures"]) >= 11
     assert all(fixture["validation_ok"] is True for fixture in report["fixtures"])
     assert all(Path(fixture["dng"]).exists() for fixture in report["fixtures"])
     assert all(Path(fixture["validation_json"]).exists() for fixture in report["fixtures"])
+    assert all("processor_results" in fixture for fixture in report["fixtures"])
 
     optional_tools = {"exiftool", "dcraw", "darktable-cli", "rawtherapee-cli"}
     optional_entries = [entry for entry in report["matrix"] if entry["tool"] in optional_tools]
     assert optional_entries
     assert {entry["result"] for entry in optional_entries} == {"skipped"}
     assert all(entry["notes"] == "skipped: not found" for entry in optional_entries)
+    assert all(entry["exit_code"] is None for entry in optional_entries)
 
-    adobe_entries = [entry for entry in report["matrix"] if entry["tool"] == "Adobe DNG SDK"]
-    assert adobe_entries == [
-        {
-            "fixture": "all",
-            "tool": "Adobe DNG SDK",
-            "tool_version": "manual-only",
-            "command": "manual SDK validation",
-            "result": "manual-only",
-            "evidence": "pending",
-            "environment": "local workstation",
-            "notes": "Not a CI gate",
-        }
-    ]
+    adobe_entries = [entry for entry in report["matrix"] if entry["tool"] == "adobe-dng-sdk"]
+    assert adobe_entries
+    assert {entry["result"] for entry in adobe_entries} == {"manual-only"}
     summary = summary_path.read_text(encoding="utf-8")
     assert "| Fixture | Tool | Result | Evidence | Notes |" in summary
-    assert "Adobe DNG SDK" in summary
+    assert "adobe-dng-sdk" in summary
+    assert "Auto install: `False`" in summary
+
+
+def test_compatibility_evidence_fails_when_available_processor_fails(tmp_path, monkeypatch):
+    module = _load_script_module("generate_compatibility_evidence")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=False, return_code=7),
+    )
+
+    output_dir = tmp_path / "compatibility-evidence-failed"
+    assert module.main(["--output-dir", str(output_dir)]) == 1
+
+    report = json.loads((output_dir / "compatibility-report.json").read_text(encoding="utf-8"))
+    assert report["schema"] == "image2dng.compatibility_evidence.v2"
+    assert report["ok"] is False
+    assert report["errors"]
+    assert any("failed exiftool" in error for error in report["errors"])
+    failed_entries = [entry for entry in report["matrix"] if entry["result"] == "failed"]
+    assert failed_entries
+    assert {entry["exit_code"] for entry in failed_entries} == {7}
+
+
+def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
+    dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-success")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=True, return_code=0),
+    )
+
+    results = run_processor_compatibility(dng_path, tmp_path / "processors")
+    payload = {result.tool: result.to_dict() for result in results}
+
+    assert payload["exiftool"]["result"] == "passed"
+    assert payload["dcraw"]["result"] == "passed"
+    assert payload["darktable-cli"]["result"] == "passed"
+    assert payload["rawtherapee-cli"]["result"] == "passed"
+    assert payload["adobe-dng-sdk"]["result"] == "manual-only"
+    assert payload["dcraw"]["exit_code"] == 0
+    assert payload["dcraw"]["output_artifacts"]
+    assert Path(payload["dcraw"]["output_artifacts"][0]).exists()
+
+
+def test_processor_compatibility_records_command_failure(tmp_path, monkeypatch):
+    dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-failed")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=False, return_code=7),
+    )
+
+    results = run_processor_compatibility(dng_path, tmp_path / "processors")
+    payload = {result.tool: result.to_dict() for result in results}
+
+    assert payload["exiftool"]["result"] == "failed"
+    assert payload["dcraw"]["result"] == "failed"
+    assert payload["dcraw"]["exit_code"] == 7
+    assert "simulated failure" in payload["dcraw"]["notes"]
+
+
+def test_processor_compatibility_fails_when_export_output_is_missing(tmp_path, monkeypatch):
+    dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-missing-output")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=False, return_code=0),
+    )
+
+    results = run_processor_compatibility(dng_path, tmp_path / "processors")
+    payload = {result.tool: result.to_dict() for result in results}
+
+    assert payload["exiftool"]["result"] == "passed"
+    assert payload["dcraw"]["result"] == "failed"
+    assert "missing output artifact" in payload["dcraw"]["notes"]
 
 
 def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
@@ -662,6 +741,38 @@ def _write_png(path, image: np.ndarray) -> None:
     writer = png.Writer(width=width, height=height, bitdepth=16, greyscale=False)
     with path.open("wb") as handle:
         writer.write(handle, image.reshape(height, width * samples).tolist())
+
+
+def _fake_processor_run(*, create_outputs: bool, return_code: int):
+    def run(command, **_kwargs):
+        version_flags = {"-ver", "-h", "--version"}
+        if any(flag in command for flag in version_flags):
+            return subprocess.CompletedProcess(command, 0, stdout="fake-tool 1.0\n", stderr="")
+
+        if create_outputs and return_code == 0:
+            _create_fake_processor_output(command)
+        stderr = "" if return_code == 0 else "simulated failure\n"
+        return subprocess.CompletedProcess(
+            command,
+            return_code,
+            stdout="fake stdout\n",
+            stderr=stderr,
+        )
+
+    return run
+
+
+def _create_fake_processor_output(command: list[str]) -> None:
+    if command[0] == "dcraw":
+        output = Path(command[command.index("-O") + 1])
+    elif command[0] == "darktable-cli":
+        output = Path(command[2])
+    elif command[0] == "rawtherapee-cli":
+        output = Path(command[command.index("-o") + 1])
+    else:
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(b"fake processor output")
 
 
 def _resolve_manifest_path(value: str, root: Path) -> Path:

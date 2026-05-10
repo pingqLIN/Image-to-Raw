@@ -19,7 +19,10 @@ VISUAL_SCHEMA = "image2dng.visual_demo_manifest.v1"
 RAW_NATIVE_SCHEMA = "image2dng.raw_native_node_batch.v1"
 SAMPLE_INDEX_SCHEMA = "image2dng.raw_native_sample_index.v1"
 BASELINE_SCHEMA = "image2dng.development_baseline_report.v1"
-COMPATIBILITY_SCHEMA = "image2dng.compatibility_evidence.v1"
+COMPATIBILITY_SCHEMAS = {
+    "image2dng.compatibility_evidence.v1",
+    "image2dng.compatibility_evidence.v2",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -204,7 +207,7 @@ def _collect_bundle(*, paths: BundlePaths, repo_root: Path, report: dict[str, An
     raw_manifest = _read_json(raw_manifest_path, RAW_NATIVE_SCHEMA)
     _read_json(sample_index_path, SAMPLE_INDEX_SCHEMA)
     _read_json(baseline_report_path, BASELINE_SCHEMA)
-    compatibility_report = _read_json(compatibility_report_path, COMPATIBILITY_SCHEMA)
+    compatibility_report = _read_json_any(compatibility_report_path, COMPATIBILITY_SCHEMAS)
     _require(
         compatibility_summary_path.exists(),
         f"missing compatibility summary: {compatibility_summary_path}",
@@ -735,6 +738,17 @@ def _read_json(path: Path, schema: str) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     _require(
         payload.get("schema") == schema,
+        f"unexpected schema in {path}: {payload.get('schema')}",
+    )
+    return payload
+
+
+def _read_json_any(path: Path, schemas: set[str]) -> dict[str, Any]:
+    if not path.exists():
+        raise ValueError(f"missing JSON report: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    _require(
+        payload.get("schema") in schemas,
         f"unexpected schema in {path}: {payload.get('schema')}",
     )
     return payload

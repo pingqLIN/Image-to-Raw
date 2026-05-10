@@ -3,23 +3,24 @@ from __future__ import annotations
 import argparse
 import json
 import platform
-import shutil
-import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import tifffile
 
 from image2dng import __version__, convert
 from image2dng.api import OutputMode
+from image2dng.compatibility import (
+    environment_label,
+    processor_tool_inventory,
+    run_processor_compatibility,
+)
 from image2dng.image_processing import InputSpace
 from image2dng.models import CfaPattern
 from image2dng.validate import validate_dng
-
-ToolName = Literal["exiftool", "dcraw", "darktable-cli", "rawtherapee-cli"]
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path("demo-output/compatibility-evidence"),
     )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=60,
+        help="timeout for each optional RAW processor command",
+    )
     args = parser.parse_args(argv)
 
     root = args.output_dir
@@ -63,12 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     inputs_dir = root / "inputs"
     raw_dir = root / "raw"
     validation_dir = root / "validation"
-    for directory in (inputs_dir, raw_dir, validation_dir):
+    processor_dir = root / "processor-output"
+    for directory in (inputs_dir, raw_dir, validation_dir, processor_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
-    tools = _tool_inventory()
+    tools = processor_tool_inventory(args.timeout_seconds)
     report: dict[str, Any] = {
-        "schema": "image2dng.compatibility_evidence.v1",
+        "schema": "image2dng.compatibility_evidence.v2",
         "generated_at": datetime.now(UTC).isoformat(),
         "environment": {
             "platform": platform.platform(),
@@ -77,6 +85,15 @@ def main(argv: list[str] | None = None) -> int:
         },
         "output_dir": str(root),
         "tools": tools,
+        "install_policy": {
+            "auto_install": False,
+            "missing_tool_policy": "skipped",
+            "available_tool_failure_policy": "failed",
+            "notes": (
+                "Install hints are dry-run guidance only; "
+                "this script never installs RAW tools."
+            ),
+        },
         "fixtures": [],
         "matrix": [],
         "ok": False,
@@ -89,12 +106,13 @@ def main(argv: list[str] | None = None) -> int:
             inputs_dir=inputs_dir,
             raw_dir=raw_dir,
             validation_dir=validation_dir,
+            processor_dir=processor_dir,
+            timeout_seconds=args.timeout_seconds,
         )
         report["fixtures"].append(fixture)
         report["matrix"].append(_structural_matrix_entry(fixture))
-        report["matrix"].extend(_smoke_matrix_entries(fixture))
+        report["matrix"].extend(_processor_matrix_entries(fixture))
 
-    report["matrix"].append(_adobe_dng_sdk_matrix_entry())
     _append_failures(report)
     report["ok"] = not report["errors"]
 
@@ -146,10 +164,13 @@ def _generate_fixture(
     inputs_dir: Path,
     raw_dir: Path,
     validation_dir: Path,
+    processor_dir: Path,
+    timeout_seconds: int,
 ) -> dict[str, Any]:
     input_path = inputs_dir / f"{spec.slug}.tif"
     dng_path = raw_dir / f"{spec.slug}.dng"
     validation_path = validation_dir / f"{spec.slug}.json"
+    fixture_processor_dir = processor_dir / spec.slug
     tifffile.imwrite(input_path, _compatibility_chart(), photometric="rgb")
 
     convert(
@@ -169,7 +190,15 @@ def _generate_fixture(
         overwrite=True,
     )
 
-    validation = validate_dng(dng_path, run_smoke=True).to_dict()
+    validation = validate_dng(dng_path, run_smoke=False).to_dict()
+    processor_results = [
+        result.to_dict()
+        for result in run_processor_compatibility(
+            dng_path,
+            fixture_processor_dir,
+            timeout_seconds=timeout_seconds,
+        )
+    ]
     validation_path.write_text(json.dumps(validation, indent=2), encoding="utf-8")
     return {
         "slug": spec.slug,
@@ -181,7 +210,9 @@ def _generate_fixture(
         "dng": str(dng_path),
         "validation_json": str(validation_path),
         "validation_ok": validation["ok"],
-        "smoke_tests": validation["smoke_tests"],
+        "structural_validation": validation,
+        "processor_output_dir": str(fixture_processor_dir),
+        "processor_results": processor_results,
     }
 
 
@@ -219,39 +250,6 @@ def _compatibility_chart(size: int = 64) -> np.ndarray:
     return image
 
 
-def _tool_inventory() -> dict[str, dict[str, Any]]:
-    tools: dict[str, dict[str, Any]] = {}
-    version_commands: dict[ToolName, list[str]] = {
-        "exiftool": ["exiftool", "-ver"],
-        "dcraw": ["dcraw", "-h"],
-        "darktable-cli": ["darktable-cli", "--version"],
-        "rawtherapee-cli": ["rawtherapee-cli", "--version"],
-    }
-    for name, command in version_commands.items():
-        executable = shutil.which(command[0])
-        tools[name] = {
-            "available": executable is not None,
-            "executable": executable,
-            "version_command": command,
-            "version": _tool_version(command) if executable is not None else None,
-            "timeout_seconds": 30,
-        }
-    tools["adobe-dng-sdk"] = {
-        "available": False,
-        "manual_only": True,
-        "version": None,
-        "notes": "Manual validation only until a reproducible local SDK path exists.",
-    }
-    return tools
-
-
-def _tool_version(command: list[str]) -> str:
-    completed = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
-    text = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part.strip())
-    first_line = text.splitlines()[0] if text.splitlines() else f"exit code {completed.returncode}"
-    return first_line[:200]
-
-
 def _structural_matrix_entry(fixture: dict[str, Any]) -> dict[str, str]:
     result = "passed" if fixture["validation_ok"] else "failed"
     return {
@@ -261,49 +259,30 @@ def _structural_matrix_entry(fixture: dict[str, Any]) -> dict[str, str]:
         "command": f"image2dng validate {fixture['dng']} --json",
         "result": result,
         "evidence": fixture["validation_json"],
-        "environment": f"{platform.system()} Python {platform.python_version()}",
+        "environment": environment_label(),
         "notes": "Structural baseline",
     }
 
 
-def _smoke_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, str]]:
+def _processor_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, object]]:
     entries = []
-    for tool, status in sorted(fixture["smoke_tests"].items()):
-        result = _matrix_result(str(status))
+    for processor in fixture["processor_results"]:
         entries.append(
             {
                 "fixture": fixture["slug"],
-                "tool": tool,
-                "tool_version": "see tools inventory",
-                "command": "optional smoke via image2dng validate",
-                "result": result,
+                "tool": processor["tool"],
+                "tool_version": processor["version"] or "not available",
+                "command": " ".join(str(part) for part in processor["command"]),
+                "result": processor["result"],
                 "evidence": fixture["validation_json"],
-                "environment": f"{platform.system()} Python {platform.python_version()}",
-                "notes": str(status),
+                "environment": environment_label(),
+                "notes": processor["notes"],
+                "exit_code": processor["exit_code"],
+                "duration_seconds": processor["duration_seconds"],
+                "output_artifacts": processor["output_artifacts"],
             }
         )
     return entries
-
-
-def _matrix_result(status: str) -> str:
-    if status == "ok":
-        return "passed"
-    if status.startswith("skipped:"):
-        return "skipped"
-    return "failed"
-
-
-def _adobe_dng_sdk_matrix_entry() -> dict[str, str]:
-    return {
-        "fixture": "all",
-        "tool": "Adobe DNG SDK",
-        "tool_version": "manual-only",
-        "command": "manual SDK validation",
-        "result": "manual-only",
-        "evidence": "pending",
-        "environment": "local workstation",
-        "notes": "Not a CI gate",
-    }
 
 
 def _append_failures(report: dict[str, Any]) -> None:
@@ -349,6 +328,20 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             f"`{entry['fixture']}` | `{entry['tool']}` | `{entry['result']}` | "
             f"`{entry['evidence']}` | {entry['notes']} |"
         )
+    lines.extend(
+        [
+            "",
+            "## Install Policy",
+            "",
+            f"- Auto install: `{report['install_policy']['auto_install']}`",
+            f"- Missing tool policy: `{report['install_policy']['missing_tool_policy']}`",
+            (
+                "- Available tool failure policy: "
+                f"`{report['install_policy']['available_tool_failure_policy']}`"
+            ),
+            "- Install hints are dry-run guidance only.",
+        ]
+    )
     lines.append("")
     return "\n".join(lines)
 

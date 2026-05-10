@@ -1,8 +1,8 @@
 # Compatibility Evidence
 
-This project validates generated DNG files structurally and can run optional local smoke tools when they are available on `PATH`.
+This project validates generated DNG files structurally and records RAW processor compatibility evidence when optional local tools are available on `PATH`.
 
-Missing optional tools are recorded as `skipped`, not as failures. CI must not require locally installed RAW processors unless a reproducible install path is added later.
+Missing optional tools are recorded as `skipped`, not as failures. Available tools that fail to run or fail to emit their expected export artifact are recorded as `failed`. CI must not require locally installed RAW processors unless a reproducible install path is added later. The evidence generator reports install hints as dry-run guidance only and never installs tools.
 
 This product includes DNG technology under license by Adobe.
 
@@ -16,7 +16,7 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 
 The evidence generator emits deterministic local fixtures and two reports:
 
-- `compatibility-report.json`: machine-readable report using `image2dng.compatibility_evidence.v1`.
+- `compatibility-report.json`: machine-readable report using `image2dng.compatibility_evidence.v2`.
 - `compatibility-summary.md`: human-readable evidence matrix.
 
 The generated fixtures live under `demo-output/compatibility-evidence/` and should not be committed as binary artifacts.
@@ -29,7 +29,7 @@ Default output is human-readable. `image2dng validate --json` emits a structured
 - `checks`: individual checks with `passed`, `failed`, `skipped`, or `warning`.
 - `errors`: validation failures.
 - `warnings`: non-fatal validation concerns.
-- `smoke_tests`: compatibility smoke results by tool.
+- `smoke_tests`: compatibility smoke results by tool for the `image2dng validate` CLI.
 
 Exit codes:
 
@@ -45,8 +45,9 @@ Use this table shape for reproducible compatibility notes:
 | Fixture | Tool | Tool version | Command | Result | Evidence | Environment | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `srgb-gradient` | `image2dng validate` | `0.1.0` | `uv run image2dng validate fixture.dng --json` | `passed` | JSON report | Windows, Python 3.12 | Structural baseline |
-| `srgb-gradient` | `exiftool` | `not installed` | optional smoke | `skipped` | `skipped: not found` | Windows, Python 3.12 | Optional local tool |
-| `srgb-gradient` | Adobe DNG SDK | manual-only | manual SDK validation | `manual-only` | pending | local workstation | Not a CI gate |
+| `srgb-gradient` | `exiftool` | `13.57` | `exiftool fixture.dng` | `passed` | JSON report | Windows, Python 3.12 | Parsed metadata |
+| `srgb-gradient` | `darktable-cli` | `not available` | `darktable-cli fixture.dng out.tif` | `skipped` | JSON report | Windows, Python 3.12 | skipped: not found |
+| `srgb-gradient` | `adobe-dng-sdk` | manual-only | manual SDK validation | `manual-only` | JSON report | local workstation | Not a CI gate |
 
 Recommended fixtures:
 
@@ -69,8 +70,9 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 `compatibility-report.json` records:
 
 - environment: platform, Python version, and `image2dng` version;
-- tool inventory: availability, executable path, version command, version, and timeout policy;
-- fixtures: input path, DNG path, validation JSON path, structural validation status, and smoke-test status;
-- matrix: fixture, tool, command, result, evidence path, environment, and notes.
+- tool inventory: availability, executable path, version command, version, timeout policy, and dry-run install hint;
+- install policy: no automatic installation, missing tool policy, and available tool failure policy;
+- fixtures: input path, DNG path, validation JSON path, structural validation status, and processor result records;
+- matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, and output artifacts.
 
 Adobe DNG SDK remains `manual-only` until a reproducible local SDK validation path exists.
