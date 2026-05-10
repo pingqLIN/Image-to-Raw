@@ -35,6 +35,27 @@ TOOL_QUERIES = {
     },
 }
 
+EXPECTED_PACKAGE_IDS = {
+    "winget": {
+        "dcraw": ("dcraw",),
+        "libraw": ("libraw",),
+        "darktable": ("darktable.darktable",),
+        "rawtherapee": ("rawtherapee.rawtherapee",),
+    },
+    "scoop": {
+        "dcraw": ("dcraw",),
+        "libraw": ("libraw",),
+        "darktable": ("darktable",),
+        "rawtherapee": ("rawtherapee",),
+    },
+    "choco": {
+        "dcraw": ("dcraw",),
+        "libraw": ("libraw",),
+        "darktable": ("darktable",),
+        "rawtherapee": ("rawtherapee",),
+    },
+}
+
 RECOMMENDED_PRIORITY = {
     "darktable-cli": "recommended-first",
     "rawtherapee-cli": "recommended-second",
@@ -141,6 +162,10 @@ def _build_report(
             "Should Adobe DNG SDK remain manual-only until a reproducible local SDK path exists?",
         ],
         "rerun_commands": [
+            (
+                "uv run python scripts/audit_raw_processor_setup.py "
+                "--output-dir demo-output/raw-processor-setup-audit"
+            ),
             (
                 "uv run python scripts/generate_compatibility_evidence.py "
                 "--output-dir demo-output/compatibility-evidence"
@@ -254,7 +279,11 @@ def _run_search(
         "duration_seconds": round(time.perf_counter() - started, 3),
         "stdout_tail": stdout_tail,
         "stderr_tail": stderr_tail,
-        "version_hint": _version_hint("\n".join(stdout_tail + stderr_tail)),
+        "version_hint": _version_hint(
+            manager=manager,
+            query=query,
+            lines=stdout_tail + stderr_tail,
+        ),
         "notes": "search-only; no install attempted",
     }
 
@@ -341,7 +370,7 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
             "1. Confirm the selected package and install command with the user.",
             "2. Install exactly one approved RAW processor first.",
             "3. Run the tool's version command.",
-            "4. Regenerate compatibility evidence and review bundle:",
+            "4. Regenerate the setup audit, compatibility evidence, and review bundle:",
             "",
             "```powershell",
         ]
@@ -372,6 +401,7 @@ def _external_review_prompt(report: dict[str, Any]) -> str:
             "- Whether dcraw should remain legacy-optional.",
             "- Whether Adobe DNG SDK should remain manual-only.",
             "- Whether the post-install rerun commands are sufficient evidence.",
+            "- Whether package search version hints are based on exact package matches.",
             "",
             "Important constraints:",
             "",
@@ -383,8 +413,41 @@ def _external_review_prompt(report: dict[str, Any]) -> str:
     ) + "\n"
 
 
-def _version_hint(text: str) -> str | None:
-    match = re.search(r"\b\d+(?:\.\d+){1,3}\b", text)
+def _version_hint(*, manager: str, query: str, lines: list[str]) -> str | None:
+    expected_ids = EXPECTED_PACKAGE_IDS.get(manager, {}).get(query, (query,))
+    for line in lines:
+        hint = _version_hint_from_exact_line(manager, expected_ids, line)
+        if hint:
+            return hint
+    return None
+
+
+def _version_hint_from_exact_line(
+    manager: str, expected_ids: tuple[str, ...], line: str
+) -> str | None:
+    if manager == "choco" and "|" in line:
+        package_id, _, rest = line.partition("|")
+        if _matches_expected_package(package_id, expected_ids):
+            return _first_version(rest)
+        return None
+
+    for package_id in expected_ids:
+        pattern = re.compile(
+            rf"(?i)(?:^|\s){re.escape(package_id)}(?:\s+|\|)(?P<rest>.*)$"
+        )
+        match = pattern.search(line)
+        if match:
+            return _first_version(match.group("rest"))
+    return None
+
+
+def _matches_expected_package(package_id: str, expected_ids: tuple[str, ...]) -> bool:
+    normalized = package_id.strip().lower()
+    return normalized in {expected.lower() for expected in expected_ids}
+
+
+def _first_version(text: str) -> str | None:
+    match = re.search(r"\b\d+(?:\.\d+){1,3}(?:[-+~][0-9A-Za-z.\-]+)?\b", text)
     return match.group(0) if match else None
 
 

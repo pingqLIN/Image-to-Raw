@@ -33,7 +33,7 @@ The setup audit is a dry-run package for humans or external reviewers. It detect
 - `setup-runbook.md`: human-readable post-approval install and rerun guide.
 - `external-review-prompt.md`: prompt for external review of recommended smoke targets.
 
-The setup audit never installs or upgrades RAW processor tools. If a tool is approved and installed later, rerun the compatibility evidence and review bundle generators.
+The setup audit never installs or upgrades RAW processor tools. Package search version hints are recorded only when the local package-manager output contains an exact package identity match. If a tool is approved and installed later, rerun the setup audit, compatibility evidence, and review bundle generators so the pre-install decision and post-install evidence are clearly separated.
 
 ## Validator Contract
 

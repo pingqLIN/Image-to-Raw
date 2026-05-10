@@ -62,7 +62,7 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
 ```
 
-這個 dry-run audit 會偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 的目前可用狀態與 package-manager search evidence，產出 `setup-audit-report.json`、`setup-runbook.md` 與 `external-review-prompt.md`。它不會安裝或更新任何工具；安裝其中一個 RAW processor 必須等使用者明確批准。
+這個 dry-run audit 會偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 的目前可用狀態與 package-manager search evidence，產出 `setup-audit-report.json`、`setup-runbook.md` 與 `external-review-prompt.md`。version hint 只會在 package-manager output 精確命中 package identity 時記錄。它不會安裝或更新任何工具；安裝其中一個 RAW processor 必須等使用者明確批准，安裝後需重跑 setup audit、compatibility evidence 與 review bundle。
 
 ## 產生 DNG
 

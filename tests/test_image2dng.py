@@ -591,6 +591,40 @@ def test_raw_processor_setup_audit_records_search_version_hints(tmp_path, monkey
     assert report["errors"] == []
 
 
+def test_raw_processor_setup_audit_ignores_non_exact_version_hints(tmp_path, monkeypatch):
+    module = _load_script_module("audit_raw_processor_setup")
+    monkeypatch.setattr(module.shutil, "which", lambda command: f"C:/fake/{command}.exe")
+
+    def fake_run(command, **_kwargs):
+        executable = Path(command[0]).name.lower()
+        query = command[2] if executable.startswith(("winget", "choco")) else command[-1]
+        stdout = {
+            "dcraw": "rawtherapee|5.8.0\nufraw|0.19.2\n",
+            "rawtherapee": "art|1.26.4\nrawtherapee|5.8.0\n",
+        }.get(query, f"{query}|4.8.1\n")
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    output_dir = tmp_path / "setup-audit-exact-search"
+    assert module.main(["--output-dir", str(output_dir), "--search-timeout-seconds", "1"]) == 0
+
+    report = json.loads((output_dir / "setup-audit-report.json").read_text(encoding="utf-8"))
+    dcraw_choco = next(
+        search
+        for search in report["tools"]["dcraw"]["package_searches"]
+        if search["manager"] == "choco" and search["query"] == "dcraw"
+    )
+    rawtherapee_choco = next(
+        search
+        for search in report["tools"]["rawtherapee-cli"]["package_searches"]
+        if search["manager"] == "choco" and search["query"] == "rawtherapee"
+    )
+
+    assert dcraw_choco["version_hint"] is None
+    assert rawtherapee_choco["version_hint"] == "5.8.0"
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"
@@ -826,11 +860,23 @@ def _fake_processor_run(*, create_outputs: bool, return_code: int):
 
 def _fake_setup_audit_search_run(command, **_kwargs):
     executable = Path(command[0]).name.lower()
-    query = command[2] if executable.startswith(("winget", "choco")) else command[-1]
+    if executable.startswith("winget"):
+        query = command[2]
+        package_id = {
+            "darktable": "darktable.darktable",
+            "rawtherapee": "RawTherapee.RawTherapee",
+        }.get(query, query)
+        stdout = f"{query} {package_id} 4.8.1\n"
+    elif executable.startswith("choco"):
+        query = command[2]
+        stdout = f"{query}|4.8.1\n"
+    else:
+        query = command[-1]
+        stdout = f"{query} 4.8.1\n"
     return subprocess.CompletedProcess(
         command,
         0,
-        stdout=f"{query} fake-package 4.8.1\n",
+        stdout=stdout,
         stderr="",
     )
 
