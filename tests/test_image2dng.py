@@ -394,6 +394,62 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     assert "Adobe DNG SDK" in summary
 
 
+def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
+    module = _load_script_module("generate_demo_review_bundle")
+    monkeypatch.setattr("shutil.which", lambda _command: None)
+    monkeypatch.setattr("image2dng.validate.shutil.which", lambda _command: None)
+
+    output_dir = tmp_path / "review-bundle"
+    assert module.main(
+        ["--output-dir", str(output_dir), "--skip-baseline-quality-gates"]
+    ) == 0
+
+    report_path = output_dir / "review-bundle-report.json"
+    index_path = output_dir / "index.md"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["schema"] == "image2dng.demo_review_bundle.v1"
+    assert report["ok"] is True
+    assert report["errors"] == []
+    assert index_path.exists()
+    assert {command["name"] for command in report["commands"]} == {
+        "visual-demo",
+        "raw-native-node-batch",
+        "development-baseline",
+        "compatibility-evidence",
+    }
+    assert all(command["exit_code"] == 0 for command in report["commands"])
+
+    artifact_paths = [artifact["bundle_path"] for artifact in report["artifacts"]]
+    assert all(not Path(path).is_absolute() for path in artifact_paths)
+    assert all((output_dir / path).exists() for path in artifact_paths)
+    assert all(artifact["sha256"] for artifact in report["artifacts"])
+
+    kinds = {}
+    for artifact in report["artifacts"]:
+        kinds[artifact["kind"]] = kinds.get(artifact["kind"], 0) + 1
+    assert kinds["contact-sheet"] >= 3
+    assert kinds["representative-dng"] >= 14
+    assert kinds["validation-json"] >= 14
+    assert kinds["report"] >= 3
+    assert kinds["manifest"] >= 3
+
+    dng_names = [
+        artifact["bundle_path"]
+        for artifact in report["artifacts"]
+        if artifact["kind"] == "representative-dng"
+    ]
+    assert any("linearraw" in name for name in dng_names)
+    assert any("cfa" in name for name in dng_names)
+    assert any("noisy" in name for name in dng_names)
+    assert any("compatibility/" in name for name in dng_names)
+
+    index = index_path.read_text(encoding="utf-8")
+    assert "Review Entry Points" in index
+    assert "review-bundle-report.json" in index
+    assert "uv run python scripts/generate_demo_review_bundle.py" in index
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"

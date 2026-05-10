@@ -52,6 +52,14 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 
 This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Missing optional RAW tools are recorded as `skipped` instead of failures; Adobe DNG SDK remains manual-only for now.
 
+## Generate a demo review bundle
+
+```powershell
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+```
+
+This flow reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence, then collects the externally reviewable contact sheets, representative DNG files, validation JSON, reports, and manifests under `demo-output/review-bundle/`. The human entry point is `index.md`; the machine-readable manifest is `review-bundle-report.json`. `demo-output/` remains local output and binary samples should not be committed.
+
 ## Generate a DNG
 
 ```powershell
@@ -143,6 +151,7 @@ The public API raises `Image2DNGError` subclasses instead of exiting the process
 uv run python scripts/generate_demo_samples.py --output-dir demo-output
 uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
 uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
 See [docs/demo.md](docs/demo.md) for the architecture demo, sample set, and application scenarios.

@@ -48,6 +48,14 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 
 這個流程會產生 deterministic DNG fixtures、validation JSON、`compatibility-report.json` 與 `compatibility-summary.md`。optional RAW tools 不存在時會記錄 `skipped`，不會造成失敗；Adobe DNG SDK 目前維持 manual-only。
 
+## 產生 demo review bundle
+
+```powershell
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+```
+
+這個流程會重跑 visual demo、RAW-native node batch、development baseline 與 compatibility evidence，並把外部審查需要的 contact sheets、代表性 DNG、validation JSON、reports 與 manifests 收斂到 `demo-output/review-bundle/`。人讀入口是 `index.md`，機器可讀 manifest 是 `review-bundle-report.json`。`demo-output/` 仍是本機輸出資料夾，不應提交 binary 樣片。
+
 ## 產生 DNG
 
 ```powershell
@@ -137,6 +145,7 @@ public API 會丟出 `Image2DNGError` 子類別，而不是結束整個 process�
 uv run python scripts/generate_demo_samples.py --output-dir demo-output
 uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
 uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
 架構 demo、sample set 與應用情境見 [docs/demo.md](docs/demo.md)。

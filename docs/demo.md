@@ -33,6 +33,7 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
 uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 uv run image2dng validate demo-output/demo-linearraw.dng --no-smoke
 uv run image2dng validate demo-output/demo-cfa-rggb.dng --no-smoke
 uv run image2dng validate demo-output/demo-cfa-rggb-noisy.dng --no-smoke
@@ -59,6 +60,8 @@ The RAW-native node batch creates:
 - `manifests/sample-index.json`
 
 The development baseline verifier writes `verification-report.json` with command results, artifact paths, JPEG dimensions, validation status, and sample index status.
+
+The demo review bundle generator reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence into a work directory, then writes a portable review package at `demo-output/review-bundle/`. Use `index.md` as the human review entry point and `review-bundle-report.json` as the machine-readable artifact manifest with bundle-relative paths, byte counts, and SHA-256 checksums.
 
 Generate staged visual demo outputs with PNG previews, validation JSON, and contact sheets:
 
