@@ -529,6 +529,68 @@ def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     assert "uv run python scripts/generate_demo_review_bundle.py" in index
 
 
+def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch):
+    module = _load_script_module("audit_raw_processor_setup")
+
+    def which(command):
+        if command in {"winget", "scoop", "choco"}:
+            return f"C:/fake/{command}.exe"
+        if command == "exiftool":
+            return "C:/fake/exiftool.exe"
+        return None
+
+    monkeypatch.setattr(module.shutil, "which", which)
+    output_dir = tmp_path / "setup-audit"
+
+    assert module.main(["--output-dir", str(output_dir), "--skip-package-search"]) == 0
+
+    report = json.loads((output_dir / "setup-audit-report.json").read_text(encoding="utf-8"))
+    runbook = (output_dir / "setup-runbook.md").read_text(encoding="utf-8")
+    prompt = (output_dir / "external-review-prompt.md").read_text(encoding="utf-8")
+
+    assert report["schema"] == "image2dng.raw_processor_setup_audit.v1"
+    assert report["policy"] == {
+        "auto_install": False,
+        "search_only": True,
+        "install_requires_user_approval": True,
+        "notes": "This audit never installs or upgrades RAW processor tools.",
+    }
+    assert set(report["tools"]) == {"dcraw", "darktable-cli", "rawtherapee-cli"}
+    assert report["tools"]["darktable-cli"]["recommendation"]["priority"] == "recommended-first"
+    assert report["tools"]["dcraw"]["recommendation"]["priority"] == "legacy-optional"
+    assert all(
+        search["status"] == "not-run"
+        for tool in report["tools"].values()
+        for search in tool["package_searches"]
+    )
+    assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
+    assert "Auto install is `False`" in prompt
+
+
+def test_raw_processor_setup_audit_records_search_version_hints(tmp_path, monkeypatch):
+    module = _load_script_module("audit_raw_processor_setup")
+    monkeypatch.setattr(module.shutil, "which", lambda command: f"C:/fake/{command}.exe")
+    monkeypatch.setattr(module.subprocess, "run", _fake_setup_audit_search_run)
+
+    output_dir = tmp_path / "setup-audit-search"
+    assert module.main(["--output-dir", str(output_dir), "--search-timeout-seconds", "1"]) == 0
+
+    report = json.loads((output_dir / "setup-audit-report.json").read_text(encoding="utf-8"))
+    searches = [
+        search
+        for tool in report["tools"].values()
+        for search in tool["package_searches"]
+        if search["query"] == "darktable"
+    ]
+
+    assert searches
+    assert {search["status"] for search in searches} == {"completed"}
+    assert {search["version_hint"] for search in searches} == {"4.8.1"}
+    assert all("search-only" in search["notes"] for search in searches)
+    assert report["ok"] is True
+    assert report["errors"] == []
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"
@@ -760,6 +822,17 @@ def _fake_processor_run(*, create_outputs: bool, return_code: int):
         )
 
     return run
+
+
+def _fake_setup_audit_search_run(command, **_kwargs):
+    executable = Path(command[0]).name.lower()
+    query = command[2] if executable.startswith(("winget", "choco")) else command[-1]
+    return subprocess.CompletedProcess(
+        command,
+        0,
+        stdout=f"{query} fake-package 4.8.1\n",
+        stderr="",
+    )
 
 
 def _create_fake_processor_output(command: list[str]) -> None:

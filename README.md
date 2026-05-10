@@ -60,6 +60,14 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 
 This flow reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence, then collects the externally reviewable contact sheets, representative DNG files, validation JSON, reports, and manifests under `demo-output/review-bundle/`. The human entry point is `index.md`; the machine-readable manifest is `review-bundle-report.json`. `demo-output/` remains local output and binary samples should not be committed.
 
+## Generate a RAW processor setup audit
+
+```powershell
+uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
+```
+
+This dry-run audit detects current availability and package-manager search evidence for `dcraw`, `darktable-cli`, and `rawtherapee-cli`, then writes `setup-audit-report.json`, `setup-runbook.md`, and `external-review-prompt.md`. It does not install or update any tool; installing one RAW processor requires explicit user approval.
+
 ## Generate a DNG
 
 ```powershell
@@ -152,6 +160,7 @@ uv run python scripts/generate_demo_samples.py --output-dir demo-output
 uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
 uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
 ```
 
 See [docs/demo.md](docs/demo.md) for the architecture demo, sample set, and application scenarios.

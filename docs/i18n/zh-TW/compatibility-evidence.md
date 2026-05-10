@@ -28,6 +28,21 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 
 `demo-output/` 是本機輸出，不應提交 binary fixtures。
 
+## RAW processor setup audit
+
+```powershell
+uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
+```
+
+這個流程是 dry-run setup audit，供人或外部代理審查：
+
+- 偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 目前是否可用。
+- 在本機有 winget、Scoop、Chocolatey 時，記錄 package-manager search evidence。
+- 產出 `setup-audit-report.json`、`setup-runbook.md`、`external-review-prompt.md`。
+- 不會安裝、不會升級任何 RAW processor。
+
+若使用者後續批准安裝其中一個工具，再重跑 compatibility evidence 與 review bundle。
+
 ## Fixture Set
 
 第一版固定產生：

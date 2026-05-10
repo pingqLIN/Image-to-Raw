@@ -56,6 +56,14 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 
 這個流程會重跑 visual demo、RAW-native node batch、development baseline 與 compatibility evidence，並把外部審查需要的 contact sheets、代表性 DNG、validation JSON、reports 與 manifests 收斂到 `demo-output/review-bundle/`。人讀入口是 `index.md`，機器可讀 manifest 是 `review-bundle-report.json`。`demo-output/` 仍是本機輸出資料夾，不應提交 binary 樣片。
 
+## 產生 RAW processor setup audit
+
+```powershell
+uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
+```
+
+這個 dry-run audit 會偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 的目前可用狀態與 package-manager search evidence，產出 `setup-audit-report.json`、`setup-runbook.md` 與 `external-review-prompt.md`。它不會安裝或更新任何工具；安裝其中一個 RAW processor 必須等使用者明確批准。
+
 ## 產生 DNG
 
 ```powershell
@@ -146,6 +154,7 @@ uv run python scripts/generate_demo_samples.py --output-dir demo-output
 uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
 uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
 ```
 
 架構 demo、sample set 與應用情境見 [docs/demo.md](docs/demo.md)。

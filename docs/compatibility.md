@@ -21,6 +21,20 @@ The evidence generator emits deterministic local fixtures and two reports:
 
 The generated fixtures live under `demo-output/compatibility-evidence/` and should not be committed as binary artifacts.
 
+## Audit RAW Processor Setup
+
+```powershell
+uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
+```
+
+The setup audit is a dry-run package for humans or external reviewers. It detects whether `dcraw`, `darktable-cli`, and `rawtherapee-cli` are currently available, records package-manager search evidence from local managers such as winget, Scoop, and Chocolatey when available, and writes:
+
+- `setup-audit-report.json`: machine-readable tool state, package search evidence, install policy, and expected matrix changes.
+- `setup-runbook.md`: human-readable post-approval install and rerun guide.
+- `external-review-prompt.md`: prompt for external review of recommended smoke targets.
+
+The setup audit never installs or upgrades RAW processor tools. If a tool is approved and installed later, rerun the compatibility evidence and review bundle generators.
+
 ## Validator Contract
 
 Default output is human-readable. `image2dng validate --json` emits a structured report with:
