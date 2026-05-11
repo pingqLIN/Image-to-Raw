@@ -62,7 +62,7 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
 ```
 
-這個 dry-run audit 會偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 的目前可用狀態與 package-manager search evidence，產出 `setup-audit-report.json`、`setup-runbook.md` 與 `external-review-prompt.md`。version hint 只會在 package-manager output 精確命中 package identity 時記錄。它不會安裝或更新任何工具；安裝其中一個 RAW processor 必須等使用者明確批准，安裝後需重跑 setup audit、compatibility evidence 與 review bundle。
+這個 dry-run audit 會偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 的目前可用狀態與 package-manager search evidence，產出 `setup-audit-report.json`、`setup-runbook.md` 與 `external-review-prompt.md`。Windows 上的 Darktable 會先查 PATH，再查標準安裝位置 `C:\Program Files\darktable\bin\darktable-cli.exe`。version hint 只會在 package-manager output 精確命中 package identity 時記錄。它不會安裝或更新任何工具；安裝其中一個 RAW processor 必須等使用者明確批准，安裝後需重跑 setup audit、compatibility evidence 與 review bundle。
 
 ## 產生 DNG
 
@@ -111,7 +111,7 @@ uv run image2dng validate output.dng
 uv run image2dng validate output.dng --json
 ```
 
-validator 會檢查必要 DNG tags、XMP 可解析性、black/white level、影像幾何、synthetic provenance，以及 MakerNote absence。若 `exiftool`、`dcraw`、`darktable-cli` 或 `rawtherapee-cli` 存在於 `PATH`，也會執行 optional smoke tests。
+validator 會檢查必要 DNG tags、XMP 可解析性、black/white level、影像幾何、synthetic provenance，以及 MakerNote absence。若 `exiftool`、`dcraw`、`darktable-cli` 或 `rawtherapee-cli` 可由 PATH 或 adapter 支援的 common install path 找到，也會執行 optional smoke tests。
 
 驗證 exit codes：
 

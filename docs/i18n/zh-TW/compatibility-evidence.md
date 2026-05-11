@@ -37,6 +37,7 @@ uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-
 這個流程是 dry-run setup audit，供人或外部代理審查：
 
 - 偵測 `dcraw`、`darktable-cli`、`rawtherapee-cli` 目前是否可用。
+- Windows 上的 Darktable 會先查 PATH，再查標準安裝位置 `C:\Program Files\darktable\bin\darktable-cli.exe`，report 會記錄 discovery source。
 - 在本機有 winget、Scoop、Chocolatey 時，記錄 package-manager search evidence。
 - 只有 package-manager output 含有精確 package identity match 時，才記錄 version hint。
 - 產出 `setup-audit-report.json`、`setup-runbook.md`、`external-review-prompt.md`。

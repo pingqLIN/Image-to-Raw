@@ -66,7 +66,7 @@ This flow reruns the visual demo, RAW-native node batch, development baseline, a
 uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
 ```
 
-This dry-run audit detects current availability and package-manager search evidence for `dcraw`, `darktable-cli`, and `rawtherapee-cli`, then writes `setup-audit-report.json`, `setup-runbook.md`, and `external-review-prompt.md`. Version hints are recorded only when the package-manager output exactly matches the package identity. It does not install or update any tool; installing one RAW processor requires explicit user approval, and post-install evidence should rerun the setup audit, compatibility evidence, and review bundle.
+This dry-run audit detects current availability and package-manager search evidence for `dcraw`, `darktable-cli`, and `rawtherapee-cli`, then writes `setup-audit-report.json`, `setup-runbook.md`, and `external-review-prompt.md`. On Windows, Darktable is discovered from `PATH` first and then from the standard install path `C:\Program Files\darktable\bin\darktable-cli.exe`. Version hints are recorded only when the package-manager output exactly matches the package identity. It does not install or update any tool; installing one RAW processor requires explicit user approval, and post-install evidence should rerun the setup audit, compatibility evidence, and review bundle.
 
 ## Generate a DNG
 
@@ -115,7 +115,7 @@ uv run image2dng validate output.dng
 uv run image2dng validate output.dng --json
 ```
 
-The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available on `PATH`, it also attempts smoke tests.
+The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available through `PATH` or an adapter-supported common install path, it also attempts smoke tests.
 
 Validation exit codes:
 

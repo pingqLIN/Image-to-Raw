@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -10,6 +9,7 @@ from typing import Literal
 
 import tifffile
 
+from image2dng.compatibility import resolve_processor_executable
 from image2dng.dng_writer import (
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
@@ -282,8 +282,8 @@ def _check_makernote(page: tifffile.TiffPage, result: ValidationResult) -> None:
 
 def _run_external_smoke_tests(path: Path, result: ValidationResult) -> None:
     smoke_specs = [
-        ("exiftool", ["exiftool", str(path)]),
-        ("dcraw", ["dcraw", "-i", "-v", str(path)]),
+        ("exiftool", ["exiftool", path.as_posix()]),
+        ("dcraw", ["dcraw", "-i", "-v", path.as_posix()]),
     ]
     for name, command in smoke_specs:
         _run_optional_command(name, command, result)
@@ -292,26 +292,35 @@ def _run_external_smoke_tests(path: Path, result: ValidationResult) -> None:
         temp = Path(temp_dir)
         _run_optional_command(
             "darktable-cli",
-            ["darktable-cli", str(path), str(temp / "darktable.tif")],
+            ["darktable-cli", path.as_posix(), (temp / "darktable.tif").as_posix()],
             result,
         )
         _run_optional_command(
             "rawtherapee-cli",
-            ["rawtherapee-cli", "-Y", "-o", str(temp / "rawtherapee.tif"), "-c", str(path)],
+            [
+                "rawtherapee-cli",
+                "-Y",
+                "-o",
+                (temp / "rawtherapee.tif").as_posix(),
+                "-c",
+                path.as_posix(),
+            ],
             result,
         )
 
 
 def _run_optional_command(name: str, command: list[str], result: ValidationResult) -> None:
-    if shutil.which(command[0]) is None:
+    executable, _discovery = resolve_processor_executable(name)
+    if executable is None:
         result.smoke_tests[name] = "skipped: not found"
         result.add_check(
             f"smoke:{name}",
             "skipped",
-            f"{command[0]} was not found on PATH",
+            f"{command[0]} was not found",
             tool=name,
         )
         return
+    command = [executable, *command[1:]]
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
     except Exception as exc:  # noqa: BLE001

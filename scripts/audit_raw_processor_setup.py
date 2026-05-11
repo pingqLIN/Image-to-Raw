@@ -338,13 +338,14 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
         "",
         "## Current Tool State",
         "",
-        "| Tool | Available | Executable | Recommendation |",
-        "| --- | --- | --- | --- |",
+        "| Tool | Available | Executable | Discovery | Recommendation |",
+        "| --- | --- | --- | --- | --- |",
     ]
     for tool, info in report["tools"].items():
         current = info["current"]
         lines.append(
             f"| `{tool}` | `{current['available']}` | `{current['executable']}` | "
+            f"`{current.get('discovery')}` | "
             f"{info['recommendation']['priority']} |"
         )
 

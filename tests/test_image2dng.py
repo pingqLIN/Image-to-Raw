@@ -14,7 +14,12 @@ from PIL import Image
 
 from image2dng import OutputExistsError, convert
 from image2dng.cli import main
-from image2dng.compatibility import run_processor_compatibility
+from image2dng.compatibility import (
+    PROCESSOR_TOOL_SPECS,
+    ProcessorToolSpec,
+    processor_tool_inventory,
+    run_processor_compatibility,
+)
 from image2dng.dng_writer import TAG_CFA_PATTERN, TAG_CFA_REPEAT_PATTERN_DIM, TAG_XMP
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel
@@ -359,6 +364,10 @@ def test_visual_demo_generates_phase3_evidence(tmp_path):
 def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeypatch):
     module = _load_script_module("generate_compatibility_evidence")
     monkeypatch.setattr("image2dng.compatibility.shutil.which", lambda _command: None)
+    monkeypatch.setattr(
+        "image2dng.compatibility.resolve_processor_executable",
+        lambda _command: (None, None),
+    )
 
     output_dir = tmp_path / "compatibility-evidence"
     assert module.main(["--output-dir", str(output_dir)]) == 0
@@ -442,6 +451,64 @@ def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeyp
     assert "\\" not in " ".join(payload["rawtherapee-cli"]["command"][1:])
 
 
+def test_processor_inventory_discovers_darktable_common_install_path(tmp_path, monkeypatch):
+    common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
+    common_executable.parent.mkdir(parents=True)
+    common_executable.write_text("fake exe", encoding="utf-8")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", lambda _command: None)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=False, return_code=0),
+    )
+    monkeypatch.setitem(
+        PROCESSOR_TOOL_SPECS,
+        "darktable-cli",
+        ProcessorToolSpec(
+            name="darktable-cli",
+            version_command=["darktable-cli", "--version"],
+            install_hint="fake darktable hint",
+            common_install_paths=(common_executable,),
+        ),
+    )
+
+    inventory = processor_tool_inventory(timeout_seconds=1)
+
+    assert inventory["darktable-cli"]["available"] is True
+    assert inventory["darktable-cli"]["executable"] == str(common_executable)
+    assert inventory["darktable-cli"]["discovery"] == "common-install-path"
+    assert inventory["darktable-cli"]["version"] == "fake-tool 1.0"
+
+
+def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
+    dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:darktable-common-path")
+    common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
+    common_executable.parent.mkdir(parents=True)
+    common_executable.write_text("fake exe", encoding="utf-8")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", lambda _command: None)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=True, return_code=0),
+    )
+    monkeypatch.setitem(
+        PROCESSOR_TOOL_SPECS,
+        "darktable-cli",
+        ProcessorToolSpec(
+            name="darktable-cli",
+            version_command=["darktable-cli", "--version"],
+            install_hint="fake darktable hint",
+            common_install_paths=(common_executable,),
+        ),
+    )
+
+    results = run_processor_compatibility(dng_path, tmp_path / "processors")
+    payload = {result.tool: result.to_dict() for result in results}
+
+    assert payload["darktable-cli"]["available"] is True
+    assert payload["darktable-cli"]["command"][0] == str(common_executable)
+    assert payload["darktable-cli"]["result"] == "passed"
+    assert payload["darktable-cli"]["output_artifacts"]
+
+
 def test_processor_compatibility_records_command_failure(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-failed")
     monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
@@ -478,7 +545,14 @@ def test_processor_compatibility_fails_when_export_output_is_missing(tmp_path, m
 def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     module = _load_script_module("generate_demo_review_bundle")
     monkeypatch.setattr("shutil.which", lambda _command: None)
-    monkeypatch.setattr("image2dng.validate.shutil.which", lambda _command: None)
+    monkeypatch.setattr(
+        "image2dng.validate.resolve_processor_executable",
+        lambda _command: (None, None),
+    )
+    monkeypatch.setattr(
+        "image2dng.compatibility.resolve_processor_executable",
+        lambda _command: (None, None),
+    )
 
     output_dir = tmp_path / "review-bundle"
     assert module.main(
@@ -542,6 +616,10 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
         return None
 
     monkeypatch.setattr(module.shutil, "which", which)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=False, return_code=0),
+    )
     output_dir = tmp_path / "setup-audit"
 
     assert module.main(["--output-dir", str(output_dir), "--skip-package-search"]) == 0
@@ -565,6 +643,7 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
         for tool in report["tools"].values()
         for search in tool["package_searches"]
     )
+    assert "Discovery" in runbook
     assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
     assert "Auto install is `False`" in prompt
 
@@ -787,7 +866,10 @@ def test_validate_json_output(tmp_path, capsys):
 
 def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:smoke-skipped")
-    monkeypatch.setattr("image2dng.validate.shutil.which", lambda _command: None)
+    monkeypatch.setattr(
+        "image2dng.validate.resolve_processor_executable",
+        lambda _command: (None, None),
+    )
 
     result = validate_dng(output_path, run_smoke=True)
 
@@ -884,11 +966,12 @@ def _fake_setup_audit_search_run(command, **_kwargs):
 
 
 def _create_fake_processor_output(command: list[str]) -> None:
-    if command[0] == "dcraw":
+    tool = Path(command[0]).stem.lower()
+    if tool == "dcraw":
         output = Path(command[command.index("-O") + 1])
-    elif command[0] == "darktable-cli":
+    elif tool == "darktable-cli":
         output = Path(command[2])
-    elif command[0] == "rawtherapee-cli":
+    elif tool == "rawtherapee-cli":
         output = Path(command[command.index("-o") + 1])
     else:
         return

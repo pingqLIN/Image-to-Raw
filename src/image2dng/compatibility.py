@@ -17,6 +17,7 @@ class ProcessorToolSpec:
     version_command: list[str] | None
     install_hint: str
     manual_only: bool = False
+    common_install_paths: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,14 @@ PROCESSOR_TOOL_SPECS = {
     "darktable-cli": ProcessorToolSpec(
         name="darktable-cli",
         version_command=["darktable-cli", "--version"],
-        install_hint="Install Darktable manually and ensure darktable-cli is on PATH, then rerun.",
+        install_hint=(
+            "Install Darktable manually. The evidence adapter checks PATH and the "
+            "standard Windows install path."
+        ),
+        common_install_paths=(
+            Path("C:/Program Files/darktable/bin/darktable-cli.exe"),
+            Path("C:/Program Files (x86)/darktable/bin/darktable-cli.exe"),
+        ),
     ),
     "rawtherapee-cli": ProcessorToolSpec(
         name="rawtherapee-cli",
@@ -96,19 +104,37 @@ def processor_tool_inventory(timeout_seconds: int = 60) -> dict[str, dict[str, o
             }
             continue
 
-        executable = shutil.which(name)
+        executable, discovery = resolve_processor_executable(name)
+        version_command = _resolved_version_command(spec, executable)
         inventory[name] = {
             "available": executable is not None,
             "manual_only": False,
             "executable": executable,
+            "discovery": discovery,
             "version_command": spec.version_command,
-            "version": _tool_version(spec.version_command, timeout_seconds)
-            if executable is not None and spec.version_command is not None
+            "resolved_version_command": version_command,
+            "version": _tool_version(version_command, timeout_seconds)
+            if version_command is not None
             else None,
             "timeout_seconds": timeout_seconds,
             "install_hint": spec.install_hint,
         }
     return inventory
+
+
+def resolve_processor_executable(tool: str) -> tuple[str | None, str | None]:
+    executable = shutil.which(tool)
+    if executable is not None:
+        return executable, "PATH"
+
+    spec = PROCESSOR_TOOL_SPECS.get(tool)
+    if spec is None:
+        return None, None
+
+    for candidate in spec.common_install_paths:
+        if candidate.exists():
+            return str(candidate), "common-install-path"
+    return None, None
 
 
 def run_processor_compatibility(
@@ -204,11 +230,11 @@ def _run_processor_command(
     output_artifacts: list[Path],
     timeout_seconds: int,
 ) -> ProcessorCompatibilityResult:
-    executable = shutil.which(command[0])
-    version_command = PROCESSOR_TOOL_SPECS[tool].version_command
+    executable, _discovery = resolve_processor_executable(tool)
+    resolved_version_command = _resolved_version_command(PROCESSOR_TOOL_SPECS[tool], executable)
     version = (
-        _tool_version(version_command, timeout_seconds)
-        if executable is not None and version_command is not None
+        _tool_version(resolved_version_command, timeout_seconds)
+        if resolved_version_command is not None
         else None
     )
     if executable is None:
@@ -226,6 +252,7 @@ def _run_processor_command(
             notes="skipped: not found",
         )
 
+    command = [executable, *command[1:]]
     started = time.perf_counter()
     try:
         completed = subprocess.run(
@@ -301,6 +328,14 @@ def _manual_only_result(tool: str, timeout_seconds: int) -> ProcessorCompatibili
         output_artifacts=[],
         notes=f"{spec.install_hint} Timeout policy: {timeout_seconds}s for automated tools.",
     )
+
+
+def _resolved_version_command(
+    spec: ProcessorToolSpec, executable: str | None
+) -> list[str] | None:
+    if spec.version_command is None or executable is None:
+        return None
+    return [executable, *spec.version_command[1:]]
 
 
 def _tool_version(command: list[str] | None, timeout_seconds: int) -> str | None:
