@@ -1,5 +1,15 @@
 # Image-to-DNG RAW Generator
 
+[English](README.md)
+
+![Status](https://img.shields.io/badge/status-prototype-orange)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-proprietary%20prototype-lightgrey)
+
+[功能](#功能摘要) · [安裝](#開發安裝) · [相容性證據](#產生相容性證據矩陣) · [驗證](#驗證-dng) · [測試](#測試) · [License](#prototype-license-status)
+
+> 將 scene-linear 或 16-bit RGB 影像轉成誠實標示來源的 synthetic DNG/RAW research artifact。
+
 `image2dng` 是一個原型 CLI 與 Python library，可將 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成誠實標示來源的 synthetic DNG。現階段 MVP 會寫出未壓縮 16-bit `LinearRaw` DNG，在自訂 XMP namespace 中嵌入 AI provenance，並避免 MakerNote spoofing。
 
 專案方向正在從單次「image-to-raw 轉換」擴展成 **RAW-native AI image generation**：生成流程的主要輸出應該是 synthetic RAW/DNG，JPEG/PNG 則是由 RAW buffer render 出來的預覽或交付副產品。repo 內已提供最小節點式 pipeline，用來驗證 Prompt/Scene/Virtual Camera/Sensor/DNG/JPEG/Validation 這條流程。
@@ -7,6 +17,20 @@
 本專案不嘗試偽裝成真實相機 RAW 檔。產生的 DNG 使用 `UniqueCameraModel = "Synthetic Camera v1"`，且 XMP metadata 會標示相機參數為 simulated。
 
 This product includes DNG technology under license by Adobe.
+
+---
+
+## 功能摘要
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Synthetic LinearRaw DNG | MVP | 16-bit uncompressed DNG with explicit synthetic provenance |
+| Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
+| RAW-native node batch | Available | Generates DNG, JPEG preview, validation JSON, and graph manifests |
+| Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
+| Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
+
+---
 
 ## 開發安裝
 
@@ -165,6 +189,20 @@ uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-
 uv run pytest
 uv run ruff check
 ```
+
+## 🤖 AI-Assisted Development
+
+本專案部分開發流程使用 AI 協助。
+
+| Model | Role |
+| --- | --- |
+| OpenAI Codex CLI | Primary implementation, compatibility evidence workflow, documentation review |
+
+> ⚠️ **Disclaimer:** AI 輔助產出的程式碼與文件已經過作者與本機測試流程檢查，但仍不保證其正確性、安全性或適用於特定用途。請自行評估後使用。
+
+## Prototype License Status
+
+目前授權狀態維持 `Proprietary prototype`，與 `pyproject.toml` 一致。本 repository 的公開文件僅描述目前 proof-of-concept 能力與驗證方式；除非另有明確授權文件，不應假設本專案以 MIT 或其他開源授權釋出。
 
 ## 範圍
 

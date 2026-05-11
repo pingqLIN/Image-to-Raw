@@ -1,16 +1,40 @@
 # Image-to-DNG RAW Generator
 
+[繁體中文](README.zh-tw.md)
+
+![Status](https://img.shields.io/badge/status-prototype-orange)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-proprietary%20prototype-lightgrey)
+
+[Features](#features) · [Installation](#install-for-development) · [Compatibility](#generate-compatibility-evidence) · [Validation](#validate-a-dng) · [Testing](#tests) · [License](#prototype-license-status)
+
+> Convert scene-linear or 16-bit RGB images into truthful synthetic DNG/RAW research artifacts.
+
 `image2dng` is a prototype CLI and Python library for turning 16-bit TIFF/PNG or scene-linear RGB images into truthful synthetic DNG files. The MVP writes uncompressed 16-bit `LinearRaw` DNG, embeds AI provenance in a custom XMP namespace, and avoids MakerNote spoofing.
 
 The project direction is expanding from one-shot image-to-raw conversion into **RAW-native AI image generation**: the primary generated artifact should be a synthetic RAW/DNG file, while JPEG/PNG outputs are previews or delivery renders derived from the RAW buffer. The repository now includes a minimal node-style pipeline for Prompt/Scene/Virtual Camera/Sensor/DNG/JPEG/Validation experiments.
 
-This project intentionally does **not** try to impersonate a real camera RAW file. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"` and XMP metadata marks camera parameters as simulated.
+The project intentionally does **not** try to impersonate a real camera RAW file. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"` and XMP metadata marks camera parameters as simulated.
 
 This product includes DNG technology under license by Adobe.
 
+---
+
+## Features
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Synthetic LinearRaw DNG | MVP | 16-bit uncompressed DNG with explicit synthetic provenance |
+| Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
+| RAW-native node batch | Available | Generates DNG, JPEG preview, validation JSON, and graph manifests |
+| Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
+| Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
+
+---
+
 ## Development status
 
-This project is currently an active proof of concept. Behavior, metadata fields, DNG tag layout, and compatibility expectations may change while the design is being validated.
+Current status: active proof of concept. Behavior, metadata fields, DNG tag layout, and compatibility expectations may change while the design is being validated.
 
 ## Install for development
 
@@ -169,7 +193,24 @@ See [docs/demo.md](docs/demo.md) for the architecture demo, sample set, and appl
 
 ```powershell
 uv run pytest
+uv run ruff check
 ```
+
+## 🤖 AI-Assisted Development
+
+This project was developed with AI assistance.
+
+| Model | Role |
+| --- | --- |
+| OpenAI Codex CLI | Primary implementation, compatibility evidence workflow, documentation review |
+
+> ⚠️ **Disclaimer:** While the author has made every effort to review and validate
+> the AI-generated code, no guarantee can be made regarding its correctness, security,
+> or fitness for any particular purpose. Use at your own risk.
+
+## Prototype License Status
+
+The current license status remains `Proprietary prototype`, matching `pyproject.toml`. The public documentation describes the current proof-of-concept capabilities and validation workflow; unless a separate license file is added, do not assume this repository is released under MIT or another open-source license.
 
 ## Project structure
 
