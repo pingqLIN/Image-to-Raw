@@ -190,6 +190,12 @@ def test_dng_single_raw_ifd_layout_remains_available(tmp_path):
 
     result = validate_dng(output_path, run_smoke=False)
     assert result.ok, result.errors
+    report = result.to_dict()
+    assert report["dng_layout"] == "single-raw-ifd"
+    assert report["ifd0_preview"] is False
+    assert report["raw_ifd_location"] == "IFD0"
+    assert report["embedded_preview_compression"] is None
+    assert report["raw_photometric"] == "LinearRaw"
     assert not any(check.name == "embedded-preview" for check in result.checks)
 
 
@@ -989,6 +995,11 @@ def test_validate_json_output(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["ok"] is True
     assert report["path"] == str(output_path)
+    assert report["dng_layout"] == "preview-subifd"
+    assert report["ifd0_preview"] is True
+    assert report["raw_ifd_location"] == "IFD0/SubIFD0"
+    assert report["embedded_preview_compression"] == "JPEG"
+    assert report["raw_photometric"] == "LinearRaw"
     assert report["checks"] == [
         {
             "message": "IFD0 JPEG preview references the main raw SubIFD",

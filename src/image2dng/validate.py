@@ -69,6 +69,11 @@ class ValidationCheck:
 @dataclass
 class ValidationResult:
     path: Path
+    dng_layout: str | None = None
+    ifd0_preview: bool | None = None
+    raw_ifd_location: str | None = None
+    embedded_preview_compression: str | None = None
+    raw_photometric: str | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     checks: list[ValidationCheck] = field(default_factory=list)
@@ -103,6 +108,11 @@ class ValidationResult:
         return {
             "path": str(self.path),
             "ok": self.ok,
+            "dng_layout": self.dng_layout,
+            "ifd0_preview": self.ifd0_preview,
+            "raw_ifd_location": self.raw_ifd_location,
+            "embedded_preview_compression": self.embedded_preview_compression,
+            "raw_photometric": self.raw_photometric,
             "checks": [check.to_dict() for check in self.checks],
             "errors": self.errors,
             "warnings": self.warnings,
@@ -122,10 +132,11 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             if not tif.pages:
                 result.errors.append("no TIFF/DNG pages found")
                 return result
-            page = find_raw_image_page(tif)
+            page, raw_location = _find_raw_image_page_with_location(tif)
             if page is None:
                 result.errors.append("no main raw image IFD found")
                 return result
+            _record_layout_summary(tif, page, raw_location, result)
             _check_embedded_preview_layout(tif, page, result)
             _check_required_tags(page, result)
             _check_geometry(page, result)
@@ -146,17 +157,49 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
 
 
 def find_raw_image_page(tif: tifffile.TiffFile) -> tifffile.TiffPage | None:
+    page, _location = _find_raw_image_page_with_location(tif)
+    return page
+
+
+def _find_raw_image_page_with_location(
+    tif: tifffile.TiffFile,
+) -> tuple[tifffile.TiffPage | None, str | None]:
     for page in _iter_pages(tif):
         new_subfile_type = _tag_value(page, TAG_NEW_SUBFILE_TYPE)
         if new_subfile_type is not None and int(new_subfile_type) == 0:
-            return page
-    return None
+            return page, _page_location(tif, page)
+    return None, None
 
 
 def _iter_pages(tif: tifffile.TiffFile):
     for page in tif.pages:
         yield page
         yield from page.pages or ()
+
+
+def _record_layout_summary(
+    tif: tifffile.TiffFile,
+    raw_page: tifffile.TiffPage,
+    raw_location: str | None,
+    result: ValidationResult,
+) -> None:
+    root_page = tif.pages[0]
+    root_type = _tag_value(root_page, TAG_NEW_SUBFILE_TYPE)
+    raw_photometric = _tag_value(raw_page, TAG_PHOTOMETRIC)
+    result.raw_ifd_location = raw_location
+    result.raw_photometric = _photometric_name(raw_photometric)
+    if root_type is not None and int(root_type) == 0 and raw_page is root_page:
+        result.dng_layout = "single-raw-ifd"
+        result.ifd0_preview = False
+        result.embedded_preview_compression = None
+        return
+
+    result.ifd0_preview = root_type is not None and int(root_type) == 1
+    result.embedded_preview_compression = _compression_name(_tag_value(root_page, TAG_COMPRESSION))
+    if result.ifd0_preview and raw_page in tuple(root_page.pages or ()):
+        result.dng_layout = "preview-subifd"
+    else:
+        result.dng_layout = "unknown"
 
 
 def _check_embedded_preview_layout(
@@ -429,6 +472,40 @@ def _run_optional_command(name: str, command: list[str], result: ValidationResul
 def _tag_value(page: tifffile.TiffPage, code: int):
     tag = page.tags.get(code)
     return None if tag is None else tag.value
+
+
+def _page_location(tif: tifffile.TiffFile, target: tifffile.TiffPage) -> str:
+    for page_index, page in enumerate(tif.pages):
+        if page is target:
+            return f"IFD{page_index}"
+        for subifd_index, child in enumerate(page.pages or ()):
+            if child is target:
+                return f"IFD{page_index}/SubIFD{subifd_index}"
+    return "unknown"
+
+
+def _compression_name(value) -> str | None:
+    if value is None:
+        return None
+    code = int(value)
+    if code == 1:
+        return "Uncompressed"
+    if code == COMPRESSION_JPEG:
+        return "JPEG"
+    return str(code)
+
+
+def _photometric_name(value) -> str | None:
+    if value is None:
+        return None
+    code = int(value)
+    if code == PHOTOMETRIC_LINEAR_RAW:
+        return "LinearRaw"
+    if code == PHOTOMETRIC_CFA:
+        return "ColorFilterArray"
+    if code == 2:
+        return "RGB"
+    return str(code)
 
 
 def _as_tuple(value) -> tuple:
