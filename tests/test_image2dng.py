@@ -41,7 +41,13 @@ from image2dng.pipeline import (
     run_external_scene_linear_batch,
     run_raw_native_batch,
 )
-from image2dng.semantic_reaction import apply_region_exposure_reaction, load_semantic_payload
+from image2dng.semantic_reaction import (
+    HIGHLIGHT_CLIPPING_REACTION_MODEL,
+    REGION_EXPOSURE_REACTION_MODEL,
+    apply_region_exposure_reaction,
+    load_semantic_payload,
+    semantic_reaction_model_registry,
+)
 from image2dng.semantic_scene import SEMANTIC_SCENE_SCHEMA, validate_semantic_scene
 from image2dng.validate import TAG_MAKER_NOTE, find_raw_image_page, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
@@ -530,6 +536,20 @@ def test_semantic_scene_validator_rejects_non_finite_numeric_values(tmp_path):
     assert not result.ok
     assert any("exposure_bias_ev must be numeric" in error for error in result.errors)
     assert "sensor_response_hints.target_middle_gray must be between 0 and 1" in result.errors
+
+
+def test_semantic_reaction_model_registry_separates_implemented_and_candidate_models():
+    registry = semantic_reaction_model_registry()
+
+    assert registry[REGION_EXPOSURE_REACTION_MODEL]["status"] == "implemented"
+    assert registry[REGION_EXPOSURE_REACTION_MODEL]["current_raw_value_effect"] is True
+    assert registry[REGION_EXPOSURE_REACTION_MODEL]["intended_raw_value_effect"] is True
+    assert "linear-light only" in registry[REGION_EXPOSURE_REACTION_MODEL]["boundary"]
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["status"] == "candidate"
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["intended_raw_value_effect"] is True
+    assert "not implemented" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
+    assert "camera tone-curve" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
 
 
 def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):

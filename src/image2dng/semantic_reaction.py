@@ -11,7 +11,58 @@ import tifffile
 from PIL import Image
 
 REGION_EXPOSURE_REACTION_MODEL = "region-exposure-mask-v1"
+HIGHLIGHT_CLIPPING_REACTION_MODEL = "highlight-clipping-policy-v1"
 SUPPORTED_REACTION_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
+
+
+@dataclass(frozen=True)
+class SemanticReactionModelInfo:
+    model_id: str
+    status: str
+    current_raw_value_effect: bool
+    intended_raw_value_effect: bool
+    scope: str
+    boundary: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model_id": self.model_id,
+            "status": self.status,
+            "current_raw_value_effect": self.current_raw_value_effect,
+            "intended_raw_value_effect": self.intended_raw_value_effect,
+            "scope": self.scope,
+            "boundary": self.boundary,
+        }
+
+
+SEMANTIC_REACTION_MODEL_REGISTRY = {
+    REGION_EXPOSURE_REACTION_MODEL: SemanticReactionModelInfo(
+        model_id=REGION_EXPOSURE_REACTION_MODEL,
+        status="implemented",
+        current_raw_value_effect=True,
+        intended_raw_value_effect=True,
+        scope="mask-bound finite EV modulation for 16-bit scene-linear RGB inputs",
+        boundary="deterministic prototype; linear-light only; not a physical sensor model",
+    ),
+    HIGHLIGHT_CLIPPING_REACTION_MODEL: SemanticReactionModelInfo(
+        model_id=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+        status="candidate",
+        current_raw_value_effect=False,
+        intended_raw_value_effect=True,
+        scope="deterministic highlight value mapping for explicit clipping policies",
+        boundary=(
+            "not implemented; must not claim camera tone-curve, ISO response, "
+            "or preserved sensor detail"
+        ),
+    ),
+}
+
+
+def semantic_reaction_model_registry() -> dict[str, dict[str, Any]]:
+    return {
+        model_id: model_info.to_dict()
+        for model_id, model_info in SEMANTIC_REACTION_MODEL_REGISTRY.items()
+    }
 
 
 @dataclass(frozen=True)

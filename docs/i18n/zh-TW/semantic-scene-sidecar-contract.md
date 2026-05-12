@@ -71,6 +71,16 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 
 對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。
 
+目前 reaction model matrix：
+
+| Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
+| --- | --- | --- | --- | --- |
+| `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Yes | finite EV、mask-bound、linear-light only。 |
+| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` candidate | No | Yes | 未來只能是 deterministic value mapping；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
+| `regions[].response_hints.noise_priority` | metadata / research | No | Deferred | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
+| `sensor_response_hints.target_middle_gray` | research | No | Deferred | 需要 calibration policy 才能影響 values。 |
+| `sensor_response_hints.target_white_balance_kelvin` | metadata / research | No | Deferred | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
+
 目前 `semantic_to_raw_status` 有三種狀態：
 
 | Status | Manifest shape | 意義 |

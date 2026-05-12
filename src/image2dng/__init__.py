@@ -21,10 +21,14 @@ from image2dng.pipeline import (
     run_raw_native_batch,
 )
 from image2dng.semantic_reaction import (
+    HIGHLIGHT_CLIPPING_REACTION_MODEL,
     REGION_EXPOSURE_REACTION_MODEL,
+    SEMANTIC_REACTION_MODEL_REGISTRY,
     SUPPORTED_REACTION_INPUT_SPACES,
+    SemanticReactionModelInfo,
     SemanticReactionResult,
     apply_region_exposure_reaction,
+    semantic_reaction_model_registry,
 )
 from image2dng.semantic_scene import (
     SEMANTIC_SCENE_SCHEMA,
@@ -40,14 +44,17 @@ __all__ = [
     "CoreRawModel",
     "ExternalSceneLinearInput",
     "GenerationScene",
+    "HIGHLIGHT_CLIPPING_REACTION_MODEL",
     "Image2DNGError",
     "InvalidMetadataError",
     "OutputExistsError",
     "PipelineBatchResult",
     "REGION_EXPOSURE_REACTION_MODEL",
     "SEMANTIC_SCENE_SCHEMA",
+    "SEMANTIC_REACTION_MODEL_REGISTRY",
     "SUPPORTED_REACTION_INPUT_SPACES",
     "SensorEffectModel",
+    "SemanticReactionModelInfo",
     "SemanticReactionResult",
     "SemanticSceneValidationResult",
     "UnsupportedInputError",
@@ -57,5 +64,6 @@ __all__ = [
     "load_external_scene_manifest",
     "run_external_scene_linear_batch",
     "run_raw_native_batch",
+    "semantic_reaction_model_registry",
     "validate_semantic_scene",
 ]
