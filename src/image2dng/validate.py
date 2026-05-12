@@ -18,8 +18,13 @@ from image2dng.dng_writer import (
     TAG_CFA_PLANE_COLOR,
     TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_COLOR_MATRIX_1,
+    TAG_DEFAULT_SCALE,
     TAG_DNG_BACKWARD_VERSION,
     TAG_DNG_VERSION,
+    TAG_MAKE,
+    TAG_MODEL,
+    TAG_NEW_SUBFILE_TYPE,
+    TAG_RAW_DATA_UNIQUE_ID,
     TAG_UNIQUE_CAMERA_MODEL,
     TAG_WHITE_LEVEL,
     TAG_XMP,
@@ -34,6 +39,7 @@ TAG_IMAGE_WIDTH = 256
 TAG_MAKER_NOTE = 37500
 TAG_ORIENTATION = 274
 TAG_PHOTOMETRIC = 262
+TAG_SAMPLE_FORMAT = 339
 TAG_SAMPLES_PER_PIXEL = 277
 TAG_SOFTWARE = 305
 
@@ -135,8 +141,11 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
 
 def _check_required_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
     required = {
+        TAG_NEW_SUBFILE_TYPE: "NewSubFileType",
         TAG_DNG_VERSION: "DNGVersion",
         TAG_DNG_BACKWARD_VERSION: "DNGBackwardVersion",
+        TAG_MAKE: "Make",
+        TAG_MODEL: "Model",
         TAG_UNIQUE_CAMERA_MODEL: "UniqueCameraModel",
         TAG_ORIENTATION: "Orientation",
         TAG_IMAGE_WIDTH: "ImageWidth",
@@ -147,9 +156,11 @@ def _check_required_tags(page: tifffile.TiffPage, result: ValidationResult) -> N
         TAG_PHOTOMETRIC: "PhotometricInterpretation",
         TAG_BLACK_LEVEL: "BlackLevel",
         TAG_WHITE_LEVEL: "WhiteLevel",
+        TAG_DEFAULT_SCALE: "DefaultScale",
         TAG_COLOR_MATRIX_1: "ColorMatrix1",
         TAG_CALIBRATION_ILLUMINANT_1: "CalibrationIlluminant1",
         TAG_AS_SHOT_NEUTRAL: "AsShotNeutral",
+        TAG_RAW_DATA_UNIQUE_ID: "RawDataUniqueID",
         TAG_SOFTWARE: "Software",
         TAG_XMP: "XMP",
     }
@@ -167,17 +178,32 @@ def _check_required_tags(page: tifffile.TiffPage, result: ValidationResult) -> N
             f"({PHOTOMETRIC_LINEAR_RAW}) or CFA ({PHOTOMETRIC_CFA}), got {photometric}"
         )
 
+    new_subfile_type = _tag_value(page, TAG_NEW_SUBFILE_TYPE)
+    if new_subfile_type is not None and int(new_subfile_type) != 0:
+        result.errors.append(
+            f"NewSubFileType must identify the main raw image, got {new_subfile_type}"
+        )
+
+    raw_data_unique_id = _as_tuple(_tag_value(page, TAG_RAW_DATA_UNIQUE_ID))
+    if raw_data_unique_id and len(raw_data_unique_id) != 16:
+        result.errors.append(
+            f"RawDataUniqueID must contain 16 bytes, got {len(raw_data_unique_id)}"
+        )
+
 
 def _check_geometry(page: tifffile.TiffPage, result: ValidationResult) -> None:
     width = _tag_value(page, TAG_IMAGE_WIDTH)
     height = _tag_value(page, TAG_IMAGE_LENGTH)
     bits = _as_tuple(_tag_value(page, TAG_BITS_PER_SAMPLE))
+    sample_format = _as_tuple(_tag_value(page, TAG_SAMPLE_FORMAT))
     samples = _tag_value(page, TAG_SAMPLES_PER_PIXEL)
     photometric = _tag_value(page, TAG_PHOTOMETRIC)
     if width is None or height is None or not bits or samples is None:
         return
     if any(int(bit) != 16 for bit in bits):
         result.errors.append(f"BitsPerSample must be 16 for MVP output, got {bits}")
+    if sample_format and any(int(value) != 1 for value in sample_format):
+        result.errors.append(f"SampleFormat must be unsigned integer (1), got {sample_format}")
     expected_samples = 1 if int(photometric or 0) == PHOTOMETRIC_CFA else 3
     if int(samples) != expected_samples:
         result.errors.append(

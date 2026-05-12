@@ -128,8 +128,11 @@ These effects are applied in virtual camera RGB before quantization or CFA mosai
 
 | Tag | Value |
 | --- | --- |
+| `NewSubFileType` | `0` |
 | `DNGVersion` | `1.4.0.0` |
 | `DNGBackwardVersion` | `1.1.0.0` |
+| `Make` | `image2dng` |
+| `Model` | `Synthetic Camera v1` |
 | `UniqueCameraModel` | `Synthetic Camera v1` |
 | `Orientation` | `1` |
 | `ImageWidth` / `ImageLength` | 由輸入影像決定 |
@@ -140,12 +143,14 @@ These effects are applied in virtual camera RGB before quantization or CFA mosai
 | `BlackLevelRepeatDim` | `1,1` |
 | `BlackLevel` | `512,512,512` |
 | `WhiteLevel` | `65535,65535,65535` |
+| `DefaultScale` | `1/1, 1/1` |
 | `ActiveArea` | `0,0,height,width` |
 | `DefaultCropOrigin` | `0,0` |
 | `DefaultCropSize` | `width,height` |
 | `ColorMatrix1` | virtual camera XYZ-to-native matrix |
 | `CalibrationIlluminant1` | `21` (`D65`) |
 | `AsShotNeutral` | CCT-derived neutral, normalized to green |
+| `RawDataUniqueID` | 16-byte deterministic identifier derived from raw image data |
 | `Software` | `image2dng 0.1.0` |
 | `XMP` | custom AI provenance packet |
 

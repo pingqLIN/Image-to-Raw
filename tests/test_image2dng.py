@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -20,7 +21,17 @@ from image2dng.compatibility import (
     processor_tool_inventory,
     run_processor_compatibility,
 )
-from image2dng.dng_writer import TAG_CFA_PATTERN, TAG_CFA_REPEAT_PATTERN_DIM, TAG_XMP
+from image2dng.dng_writer import (
+    TAG_CFA_PATTERN,
+    TAG_CFA_REPEAT_PATTERN_DIM,
+    TAG_DEFAULT_SCALE,
+    TAG_MAKE,
+    TAG_MODEL,
+    TAG_NEW_SUBFILE_TYPE,
+    TAG_RAW_DATA_UNIQUE_ID,
+    TAG_UNIQUE_CAMERA_MODEL,
+    TAG_XMP,
+)
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel
 from image2dng.pipeline import GenerationScene, run_raw_native_batch
@@ -108,6 +119,74 @@ def test_generate_16bit_png_dng(tmp_path):
     assert exit_code == 0
     result = validate_dng(output_path, run_smoke=False)
     assert result.ok, result.errors
+
+
+def test_dng_writes_explicit_photoshop_baseline_metadata(tmp_path):
+    output_path = _write_test_dng(tmp_path, prompt_hash="sha256:photoshop-baseline")
+
+    with tifffile.TiffFile(output_path) as tif:
+        tags = tif.pages[0].tags
+        baseline_values = {
+            "new_subfile_type": tags[TAG_NEW_SUBFILE_TYPE].value,
+            "make": tags[TAG_MAKE].value,
+            "model": tags[TAG_MODEL].value,
+            "unique_camera_model": tags[TAG_UNIQUE_CAMERA_MODEL].value,
+            "default_scale": tags[TAG_DEFAULT_SCALE].value,
+            "raw_data_unique_id": tags[TAG_RAW_DATA_UNIQUE_ID].value,
+        }
+
+    assert baseline_values["new_subfile_type"] == 0
+    assert baseline_values["make"] == "image2dng"
+    assert baseline_values["model"] == "Synthetic Camera v1"
+    assert baseline_values["unique_camera_model"] == "Synthetic Camera v1"
+    assert baseline_values["default_scale"] == (1, 1, 1, 1)
+    assert len(baseline_values["raw_data_unique_id"]) == 16
+
+
+def test_raw_data_unique_id_tracks_raw_buffer_only(tmp_path):
+    input_path = tmp_path / "identity-input.tif"
+    tifffile.imwrite(input_path, _gradient_image(16, 16), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "srgb")
+
+    original_path = tmp_path / "identity-original.dng"
+    metadata_changed_path = tmp_path / "identity-metadata-changed.dng"
+    raw_changed_path = tmp_path / "identity-raw-changed.dng"
+
+    from image2dng.dng_writer import write_dng
+
+    camera = CameraProfileModel.from_white_balance(6500)
+    write_dng(
+        original_path,
+        raw,
+        core,
+        camera,
+        AIMetadataModel(prompt_hash="sha256:original", scene_description="original"),
+    )
+    write_dng(
+        metadata_changed_path,
+        raw,
+        core,
+        camera,
+        AIMetadataModel(prompt_hash="sha256:metadata", scene_description="metadata changed"),
+    )
+
+    raw_changed = raw.copy()
+    raw_changed[0, 0, 0] = np.uint16(int(raw_changed[0, 0, 0]) ^ 1)
+    write_dng(
+        raw_changed_path,
+        raw_changed,
+        core,
+        camera,
+        AIMetadataModel(prompt_hash="sha256:raw-changed", scene_description="raw changed"),
+    )
+
+    original_id = _raw_data_unique_id(original_path)
+    metadata_changed_id = _raw_data_unique_id(metadata_changed_path)
+    raw_changed_id = _raw_data_unique_id(raw_changed_path)
+
+    assert original_id == metadata_changed_id
+    assert raw_changed_id != original_id
+    assert raw_changed_id == tuple(hashlib.md5(raw_changed.tobytes()).digest())
 
 
 def test_generate_16bit_prophoto_rgba_tiff_dng(tmp_path):
@@ -904,6 +983,11 @@ def _write_test_dng(tmp_path, *, prompt_hash: str):
         ),
     )
     return output_path
+
+
+def _raw_data_unique_id(path: Path) -> tuple[int, ...]:
+    with tifffile.TiffFile(path) as tif:
+        return tuple(tif.pages[0].tags[TAG_RAW_DATA_UNIQUE_ID].value)
 
 
 def _gradient_image(width: int, height: int) -> np.ndarray:

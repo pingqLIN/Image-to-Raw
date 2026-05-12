@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from fractions import Fraction
 from pathlib import Path
 
@@ -18,6 +19,9 @@ from image2dng.models import (
 from image2dng.xmp import build_xmp_packet
 
 TAG_XMP = 700
+TAG_NEW_SUBFILE_TYPE = 254
+TAG_MAKE = 271
+TAG_MODEL = 272
 TAG_ORIENTATION = 274
 TAG_CFA_REPEAT_PATTERN_DIM = 33421
 TAG_CFA_PATTERN = 33422
@@ -29,12 +33,14 @@ TAG_CFA_LAYOUT = 50711
 TAG_BLACK_LEVEL_REPEAT_DIM = 50713
 TAG_BLACK_LEVEL = 50714
 TAG_WHITE_LEVEL = 50717
+TAG_DEFAULT_SCALE = 50718
 TAG_DEFAULT_CROP_ORIGIN = 50719
 TAG_DEFAULT_CROP_SIZE = 50720
 TAG_COLOR_MATRIX_1 = 50721
 TAG_AS_SHOT_NEUTRAL = 50728
 TAG_CALIBRATION_ILLUMINANT_1 = 50778
 TAG_ACTIVE_AREA = 50829
+TAG_RAW_DATA_UNIQUE_ID = 50781
 
 
 def write_dng(
@@ -58,13 +64,17 @@ def write_dng(
         )
 
     extratags = [
+        (TAG_NEW_SUBFILE_TYPE, "I", 1, 0, False),
         (TAG_DNG_VERSION, "B", 4, (1, 4, 0, 0), False),
         (TAG_DNG_BACKWARD_VERSION, "B", 4, (1, 1, 0, 0), False),
+        (TAG_MAKE, "s", 0, camera_profile.make, False),
+        (TAG_MODEL, "s", 0, camera_profile.model, False),
         (TAG_UNIQUE_CAMERA_MODEL, "s", 0, camera_profile.unique_camera_model, False),
         (TAG_ORIENTATION, "H", 1, 1, False),
         (TAG_BLACK_LEVEL_REPEAT_DIM, "H", 2, _black_level_repeat_dim(core), False),
         (TAG_BLACK_LEVEL, "I", len(core.black_level), core.black_level, False),
         (TAG_WHITE_LEVEL, "I", len(core.white_level), core.white_level, False),
+        (TAG_DEFAULT_SCALE, "2I", 2, (_rational(1.0), _rational(1.0)), False),
         (TAG_ACTIVE_AREA, "I", 4, core.resolved_active_area, False),
         (TAG_DEFAULT_CROP_ORIGIN, "I", 2, core.default_crop_origin, False),
         (TAG_DEFAULT_CROP_SIZE, "I", 2, core.resolved_default_crop_size, False),
@@ -84,6 +94,7 @@ def write_dng(
         ),
         (TAG_CALIBRATION_ILLUMINANT_1, "H", 1, camera_profile.calibration_illuminant_1, False),
         (TAG_XMP, "B", len(build_xmp_packet(ai_metadata)), build_xmp_packet(ai_metadata), False),
+        (TAG_RAW_DATA_UNIQUE_ID, "B", 16, _raw_data_unique_id(raw_buffer), False),
     ]
     if core.photometric == "ColorFilterArray":
         extratags.extend(_cfa_extratags(core.cfa_pattern))
@@ -111,6 +122,11 @@ def _black_level_repeat_dim(core: CoreRawModel) -> tuple[int, int]:
     if core.photometric == "ColorFilterArray":
         return (2, 2)
     return (1, 1)
+
+
+def _raw_data_unique_id(raw_buffer: np.ndarray) -> tuple[int, ...]:
+    # DNG RawDataUniqueID is a fixed 16-byte identifier for the raw image data.
+    return tuple(hashlib.md5(raw_buffer.tobytes()).digest())
 
 
 def _cfa_extratags(cfa_pattern: CfaPattern | None) -> list[tuple[int, str, int, object, bool]]:

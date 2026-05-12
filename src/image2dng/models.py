@@ -6,6 +6,7 @@ from typing import Literal
 
 PHOTOMETRIC_LINEAR_RAW = 34892
 PHOTOMETRIC_CFA = 32803
+SYNTHETIC_CAMERA_MAKE = "image2dng"
 SYNTHETIC_CAMERA_MODEL = "Synthetic Camera v1"
 
 CfaPattern = Literal["rggb", "bggr", "grbg", "gbrg"]
@@ -113,6 +114,8 @@ class CoreRawModel:
 
 @dataclass(frozen=True)
 class CameraProfileModel:
+    make: str = SYNTHETIC_CAMERA_MAKE
+    model: str = SYNTHETIC_CAMERA_MODEL
     unique_camera_model: str = SYNTHETIC_CAMERA_MODEL
     calibration_illuminant_1: int = 21
     color_matrix_1: tuple[float, ...] = (

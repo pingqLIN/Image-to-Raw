@@ -139,7 +139,7 @@ uv run image2dng validate output.dng
 uv run image2dng validate output.dng --json
 ```
 
-The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available through `PATH` or an adapter-supported common install path, it also attempts smoke tests.
+The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. The current tag contract is documented in [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md). If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available through `PATH` or an adapter-supported common install path, it also attempts smoke tests.
 
 Validation exit codes:
 
@@ -240,4 +240,5 @@ Known limitations:
 - Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
 
 See [docs/design.md](docs/design.md) for the design notes.
+See [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md) for the current DNG tag contract.
 See [docs/i18n/en/raw-native-node-pipeline.md](docs/i18n/en/raw-native-node-pipeline.md) for the RAW-native node pipeline direction.

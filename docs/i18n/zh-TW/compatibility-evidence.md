@@ -11,6 +11,8 @@
 - Adobe DNG SDK manual-only validation；
 - 工具不存在時的 `skipped` 狀態。
 
+目前 required DNG tags 與 mode-specific contract 見 [DNG tag contract](dng-tag-contract.md)。Compatibility evidence 應依照這份 contract 解讀：缺少 optional tool 是環境狀態；缺少必要 tag 則是 structural failure。
+
 ## 產生命令
 
 ```powershell
@@ -44,6 +46,29 @@ uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-
 - 不會安裝、不會升級任何 RAW processor。
 
 若使用者後續批准安裝其中一個工具，再重跑 setup audit、compatibility evidence 與 review bundle，讓安裝前決策與安裝後 evidence 清楚分開。
+
+## Adobe DNG SDK manual validation
+
+Adobe DNG SDK 目前維持 `manual-only`，不作為 CI gate，也不由本專案腳本自動下載、安裝或更新。
+
+建議人工驗證流程：
+
+1. 從 Adobe DNG 官方頁面確認目前 SDK 與 specification 版本。
+2. 由使用者明確批准後，在本機隔離位置準備 SDK 或 validator build。
+3. 對 `demo-output/review-bundle-*/artifacts/representative-dng/` 中的代表性 DNG 執行 SDK validation。
+4. 將命令、SDK 版本、fixture、exit code、stdout/stderr 摘要與環境寫入 local-only notes。
+5. 驗證後重跑：
+
+```powershell
+uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+```
+
+限制：
+
+- SDK validation path 必須 local-configurable，不應 hard-code 私人機器路徑。
+- 沒有可重現 SDK 路徑前，`compatibility-report.json` 中的 Adobe DNG SDK entry 應維持 `manual-only`。
+- 若 SDK 或 Adobe tool 回報 DNG 結構問題，該結果應升級成下一輪 Phase 6 blocking compatibility finding。
 
 ## Fixture Set
 

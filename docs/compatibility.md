@@ -2,6 +2,8 @@
 
 This project validates generated DNG files structurally and records RAW processor compatibility evidence when optional local tools are available on `PATH`.
 
+The current DNG tag contract is documented in [docs/i18n/en/dng-tag-contract.md](i18n/en/dng-tag-contract.md). Compatibility evidence should be interpreted against that contract: missing optional tools are environment state, while missing required tags are structural failures.
+
 Missing optional tools are recorded as `skipped`, not as failures. Available tools that fail to run or fail to emit their expected export artifact are recorded as `failed`. CI must not require locally installed RAW processors unless a reproducible install path is added later. The evidence generator reports install hints as dry-run guidance only and never installs tools.
 
 This product includes DNG technology under license by Adobe.
@@ -34,6 +36,29 @@ The setup audit is a dry-run package for humans or external reviewers. It detect
 - `external-review-prompt.md`: prompt for external review of recommended smoke targets.
 
 The setup audit never installs or upgrades RAW processor tools. Package search version hints are recorded only when the local package-manager output contains an exact package identity match. On Windows, Darktable is resolved from `PATH` first and then from the standard install path `C:\Program Files\darktable\bin\darktable-cli.exe`; the audit report records the discovery source so reviewers can tell whether a temporary `PATH` override was needed. If a tool is approved and installed later, rerun the setup audit, compatibility evidence, and review bundle generators so the pre-install decision and post-install evidence are clearly separated.
+
+## Adobe DNG SDK Manual Validation
+
+Adobe DNG SDK remains `manual-only`. It is not a CI gate, and project scripts must not download, install, or update it automatically.
+
+Recommended manual workflow:
+
+1. Confirm the current SDK and specification versions from Adobe's DNG page.
+2. After explicit user approval, prepare the SDK or validator build in an isolated local location.
+3. Run SDK validation against representative DNG files under `demo-output/review-bundle-*/artifacts/representative-dng/`.
+4. Record the command, SDK version, fixture, exit code, stdout/stderr summary, and environment in local-only notes.
+5. Rerun:
+
+```powershell
+uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+```
+
+Constraints:
+
+- The SDK validation path must be locally configurable and must not hard-code a private machine path.
+- Until a reproducible SDK path exists, Adobe DNG SDK entries in `compatibility-report.json` should remain `manual-only`.
+- Any SDK or Adobe-tool structural failure should become a blocking compatibility finding for the next Phase 6 pass.
 
 ## Validator Contract
 
