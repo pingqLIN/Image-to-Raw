@@ -10,7 +10,7 @@
 
 > 將 scene-linear 或 16-bit RGB 影像轉成誠實標示來源的 synthetic DNG/RAW research artifact。
 
-`image2dng` 是一個原型 CLI 與 Python library，可將 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成誠實標示來源的 synthetic DNG。現階段 MVP 會寫出未壓縮 16-bit `LinearRaw` DNG，在自訂 XMP namespace 中嵌入 AI provenance，並避免 MakerNote spoofing。
+`image2dng` 是一個原型 CLI 與 Python library，可將 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成誠實標示來源的 synthetic DNG。現階段 MVP 會寫出未壓縮 16-bit `LinearRaw` raw image data，預設 DNG layout 會加入 IFD0 JPEG preview，在自訂 XMP namespace 中嵌入 AI provenance，並避免 MakerNote spoofing。
 
 專案方向正在從單次「image-to-raw 轉換」擴展成 **RAW-native AI image generation**：生成流程的主要輸出應該是 synthetic RAW/DNG，JPEG/PNG 則是由 RAW buffer render 出來的預覽或交付副產品。repo 內已提供最小節點式 pipeline，用來驗證 Prompt/Scene/Virtual Camera/Sensor/DNG/JPEG/Validation 這條流程。
 
@@ -26,7 +26,8 @@ This product includes DNG technology under license by Adobe.
 | --- | --- | --- |
 | Synthetic LinearRaw DNG | MVP | 16-bit uncompressed DNG with explicit synthetic provenance |
 | Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
-| RAW-native node batch | Available | Generates DNG, JPEG preview, validation JSON, and graph manifests |
+| Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
+| RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
 | Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
 | Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
 
@@ -49,7 +50,8 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 - scene-linear TIFF 中間檔；
 - `LinearRaw` synthetic DNG；
 - simulated RGGB CFA synthetic DNG；
-- 由 DNG buffer tone-map 出來的 JPEG 預覽；
+- DNG 內嵌 IFD0 JPEG preview，並保留 raw data 於 Raw SubIFD；
+- 由 DNG raw buffer tone-map 出來的 sidecar JPEG 預覽；
 - 每個 DNG 的 validation JSON；
 - `manifests/raw-native-node-batch.json` 節點流程 manifest；
 - `manifests/sample-index.json` 樣片索引。
@@ -103,6 +105,12 @@ uv run image2dng input.tif output.dng `
 ```
 
 CLI 預設不會覆寫既有輸出檔。只有在確定要替換輸出時才傳入 `--overwrite`。
+
+預設 DNG layout 為 `preview-subifd`：IFD0 是 JPEG-compressed RGB preview，raw image data 寫在 Raw SubIFD。需要回到舊版單一 raw IFD layout 時，可傳入：
+
+```powershell
+uv run image2dng input.tif output.dng --dng-layout single-raw-ifd
+```
 
 支援的輸入色彩空間：
 
@@ -165,6 +173,7 @@ result = convert(
     sensor_effect_seed=None,
     prompt_hash="sha256:...",
     scene_description="synthetic test scene",
+    dng_layout="preview-subifd",
     overwrite=False,
 )
 ```
@@ -210,7 +219,8 @@ uv run ruff check
 
 - 16-bit uncompressed LinearRaw DNG。
 - 明確 opt-in 的 simulated CFA mosaic mode。
-- 內建最小 RAW-native node pipeline，可產生 DNG、JPEG preview、validation JSON 與 graph manifest。
+- 預設 `preview-subifd` DNG layout：IFD0 JPEG preview 加上 Raw SubIFD。
+- 內建最小 RAW-native node pipeline，可產生 DNG、sidecar JPEG preview、validation JSON 與 graph manifest。
 - 可選 deterministic synthetic sensor effects，供 demo 與 compatibility testing 使用。
 - RGB input normalization 與 simple virtual camera transform。
 - XMP custom namespace：`https://example.org/ns/xmp/ai/1.0/`。
@@ -219,7 +229,8 @@ uv run ruff check
 已知限制：
 
 - Sensor effects 是簡化 synthetic controls，不是物理相機模型。
-- 尚未支援 preview IFD、EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
+- Embedded preview 目前是 IFD layout experiment，不代表完整 Adobe 相容承諾。
+- 尚未支援 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
 - 相容性目前以結構驗證與 optional local smoke tools 為主，尚未納入 Adobe DNG SDK 自動驗證。
 
 設計說明見 [docs/design.md](docs/design.md)。

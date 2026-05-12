@@ -4,7 +4,17 @@
 
 本專案產生 truthful synthetic DNG，不偽裝成真實相機 RAW。所有輸出都應保留 synthetic provenance，且不得寫入 MakerNote。
 
-## 共同必要 tags
+## DNG layout
+
+預設 layout 是 `preview-subifd`：
+
+- IFD0 是 JPEG-compressed RGB preview，`NewSubFileType = 1`。
+- IFD0 透過 `SubIFDs` 指向主 raw image IFD。
+- Raw SubIFD 保留主要 raw data 與完整 raw tag contract，`NewSubFileType = 0`。
+
+相容性或回歸測試需要時，仍可用 `single-raw-ifd` layout 寫出舊版單一 raw IFD。validator 會尋找 `NewSubFileType = 0` 的 raw page，而不是假設 `pages[0]` 一定是 raw image。
+
+## 共同必要 raw tags
 
 LinearRaw 與 simulated CFA 輸出都必須包含：
 
@@ -33,6 +43,8 @@ LinearRaw 與 simulated CFA 輸出都必須包含：
 | `RawDataUniqueID` | 16-byte deterministic ID derived from the raw image buffer |
 | `Software` | `image2dng <version>` |
 | `XMP` | synthetic AI provenance packet |
+
+IFD0 preview 也會寫入基本 identity/provenance tags：`DNGVersion`、`DNGBackwardVersion`、`Make`、`Model`、`UniqueCameraModel`、`Orientation`、`Software` 與 `XMP`。preview 本身是 8-bit RGB JPEG-compressed image，不是 raw data。
 
 ## LinearRaw mode
 
@@ -77,7 +89,7 @@ Supported Bayer patterns:
 
 ## Validation status
 
-`image2dng validate` checks required tags, geometry, black/white levels, mode-specific CFA tags, XMP provenance, and MakerNote absence.
+`image2dng validate` checks embedded preview layout when present, required raw tags, geometry, black/white levels, mode-specific CFA tags, XMP provenance, and MakerNote absence.
 
 Optional smoke tools are compatibility evidence, not mandatory gates:
 

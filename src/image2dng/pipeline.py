@@ -11,7 +11,7 @@ import tifffile
 from PIL import Image
 
 from image2dng.api import ConversionResult, convert
-from image2dng.validate import validate_dng
+from image2dng.validate import find_raw_image_page, validate_dng
 
 SceneStyle = Literal["chart-ramp", "portrait-light-study", "material-still-life"]
 
@@ -311,7 +311,11 @@ def generate_scene_linear(scene: GenerationScene) -> np.ndarray:
 
 
 def dng_preview(path: str | Path, *, cfa_pattern: str | None = None) -> np.ndarray:
-    data = tifffile.imread(path)
+    with tifffile.TiffFile(path) as tif:
+        page = find_raw_image_page(tif)
+        if page is None:
+            raise ValueError(f"no main raw image IFD found: {path}")
+        data = page.asarray()
     if data.ndim == 2:
         return _cfa_false_color(data, cfa_pattern or "rggb")
     return _preview_rgb(data)
@@ -341,7 +345,10 @@ def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, 
                 "DngValidationNode",
             ],
             "primary_artifact": "synthetic DNG",
-            "preview_artifact": "JPEG rendered from generated RAW buffers",
+            "preview_artifact": "sidecar JPEG rendered from generated RAW buffers",
+            "dng_layout": "preview-subifd",
+            "embedded_preview": "IFD0 JPEG preview",
+            "raw_ifd_location": "Raw SubIFD referenced from IFD0",
         },
         "scenes": [_scene_result_to_dict(scene) for scene in scenes],
     }

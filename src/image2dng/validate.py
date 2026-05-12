@@ -42,6 +42,8 @@ TAG_PHOTOMETRIC = 262
 TAG_SAMPLE_FORMAT = 339
 TAG_SAMPLES_PER_PIXEL = 277
 TAG_SOFTWARE = 305
+TAG_SUB_IFDS = 330
+COMPRESSION_JPEG = 7
 
 CheckStatus = Literal["passed", "failed", "skipped", "warning"]
 
@@ -120,7 +122,11 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             if not tif.pages:
                 result.errors.append("no TIFF/DNG pages found")
                 return result
-            page = tif.pages[0]
+            page = find_raw_image_page(tif)
+            if page is None:
+                result.errors.append("no main raw image IFD found")
+                return result
+            _check_embedded_preview_layout(tif, page, result)
             _check_required_tags(page, result)
             _check_geometry(page, result)
             _check_levels(page, result)
@@ -137,6 +143,55 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
     if run_smoke:
         _run_external_smoke_tests(target, result)
     return result
+
+
+def find_raw_image_page(tif: tifffile.TiffFile) -> tifffile.TiffPage | None:
+    for page in _iter_pages(tif):
+        new_subfile_type = _tag_value(page, TAG_NEW_SUBFILE_TYPE)
+        if new_subfile_type is not None and int(new_subfile_type) == 0:
+            return page
+    return None
+
+
+def _iter_pages(tif: tifffile.TiffFile):
+    for page in tif.pages:
+        yield page
+        yield from page.pages or ()
+
+
+def _check_embedded_preview_layout(
+    tif: tifffile.TiffFile,
+    raw_page: tifffile.TiffPage,
+    result: ValidationResult,
+) -> None:
+    root_page = tif.pages[0]
+    root_type = _tag_value(root_page, TAG_NEW_SUBFILE_TYPE)
+    if root_type is None or int(root_type) == 0:
+        return
+    if int(root_type) != 1:
+        result.errors.append(f"IFD0 preview NewSubFileType must be 1, got {root_type}")
+        return
+    if TAG_SUB_IFDS not in root_page.tags:
+        result.errors.append("IFD0 preview must reference the raw SubIFD")
+        return
+    if raw_page not in tuple(root_page.pages):
+        result.errors.append("main raw image must be stored as an IFD0 SubIFD")
+        return
+    compression = _tag_value(root_page, TAG_COMPRESSION)
+    photometric = _tag_value(root_page, TAG_PHOTOMETRIC)
+    samples = _tag_value(root_page, TAG_SAMPLES_PER_PIXEL)
+    if compression is not None and int(compression) != COMPRESSION_JPEG:
+        result.errors.append(f"embedded preview must use JPEG compression, got {compression}")
+    if photometric is not None and int(photometric) != 2:
+        result.errors.append(f"embedded preview must be RGB, got photometric {photometric}")
+    if samples is not None and int(samples) != 3:
+        result.errors.append(f"embedded preview SamplesPerPixel must be 3, got {samples}")
+    if not result.errors:
+        result.add_check(
+            "embedded-preview",
+            "passed",
+            "IFD0 JPEG preview references the main raw SubIFD",
+        )
 
 
 def _check_required_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:

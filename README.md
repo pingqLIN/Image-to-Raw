@@ -10,7 +10,7 @@
 
 > Convert scene-linear or 16-bit RGB images into truthful synthetic DNG/RAW research artifacts.
 
-`image2dng` is a prototype CLI and Python library for turning 16-bit TIFF/PNG or scene-linear RGB images into truthful synthetic DNG files. The MVP writes uncompressed 16-bit `LinearRaw` DNG, embeds AI provenance in a custom XMP namespace, and avoids MakerNote spoofing.
+`image2dng` is a prototype CLI and Python library for turning 16-bit TIFF/PNG or scene-linear RGB images into truthful synthetic DNG files. The MVP writes uncompressed 16-bit `LinearRaw` raw image data, uses a default DNG layout with an IFD0 JPEG preview, embeds AI provenance in a custom XMP namespace, and avoids MakerNote spoofing.
 
 The project direction is expanding from one-shot image-to-raw conversion into **RAW-native AI image generation**: the primary generated artifact should be a synthetic RAW/DNG file, while JPEG/PNG outputs are previews or delivery renders derived from the RAW buffer. The repository now includes a minimal node-style pipeline for Prompt/Scene/Virtual Camera/Sensor/DNG/JPEG/Validation experiments.
 
@@ -26,7 +26,8 @@ This product includes DNG technology under license by Adobe.
 | --- | --- | --- |
 | Synthetic LinearRaw DNG | MVP | 16-bit uncompressed DNG with explicit synthetic provenance |
 | Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
-| RAW-native node batch | Available | Generates DNG, JPEG preview, validation JSON, and graph manifests |
+| Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
+| RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
 | Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
 | Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
 
@@ -53,7 +54,8 @@ The batch emits:
 - scene-linear TIFF intermediates;
 - `LinearRaw` synthetic DNG files;
 - simulated RGGB CFA synthetic DNG files;
-- JPEG previews rendered from generated DNG buffers;
+- DNG files with an embedded IFD0 JPEG preview and raw data in a Raw SubIFD;
+- sidecar JPEG previews rendered from generated DNG raw buffers;
 - validation JSON for each DNG;
 - `manifests/raw-native-node-batch.json` as the node graph manifest;
 - `manifests/sample-index.json` as the sample index.
@@ -107,6 +109,12 @@ uv run image2dng input.tif output.dng `
 ```
 
 By default, the CLI refuses to replace an existing output file. Pass `--overwrite` only when replacing the output is intentional.
+
+The default DNG layout is `preview-subifd`: IFD0 is a JPEG-compressed RGB preview, and the raw image data is stored in a Raw SubIFD. To write the older single raw IFD layout, pass:
+
+```powershell
+uv run image2dng input.tif output.dng --dng-layout single-raw-ifd
+```
 
 Supported input spaces:
 
@@ -171,6 +179,7 @@ result = convert(
     sensor_effect_seed=None,
     prompt_hash="sha256:...",
     scene_description="synthetic test scene",
+    dng_layout="preview-subifd",
     overwrite=False,
 )
 ```
@@ -227,7 +236,8 @@ Current MVP:
 
 - 16-bit uncompressed LinearRaw DNG.
 - Explicit simulated CFA mosaic mode.
-- Built-in minimal RAW-native node pipeline that emits DNG, JPEG preview, validation JSON, and graph manifest artifacts.
+- Default `preview-subifd` DNG layout with an IFD0 JPEG preview and Raw SubIFD.
+- Built-in minimal RAW-native node pipeline that emits DNG, sidecar JPEG preview, validation JSON, and graph manifest artifacts.
 - Optional deterministic synthetic sensor effects for demos and compatibility testing.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.
@@ -236,7 +246,8 @@ Current MVP:
 Known limitations:
 
 - Sensor effects are simple synthetic controls, not a physical camera model.
-- No preview IFD, EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
+- Embedded preview is currently an IFD layout experiment, not a full Adobe compatibility claim.
+- No EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
 - Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
 
 See [docs/design.md](docs/design.md) for the design notes.

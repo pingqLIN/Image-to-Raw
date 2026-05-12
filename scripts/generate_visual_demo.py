@@ -12,7 +12,7 @@ import png
 import tifffile
 
 from image2dng import convert
-from image2dng.validate import validate_dng
+from image2dng.validate import find_raw_image_page, validate_dng
 
 Asset = tuple[str, str, np.ndarray]
 CFA_PATTERNS = ("rggb", "bggr", "grbg", "gbrg")
@@ -368,7 +368,11 @@ def daily_objects(size: int = 256) -> np.ndarray:
 
 
 def dng_preview(path: Path, *, cfa_pattern: str | None = None) -> np.ndarray:
-    data = tifffile.imread(path)
+    with tifffile.TiffFile(path) as tif:
+        page = find_raw_image_page(tif)
+        if page is None:
+            raise ValueError(f"no main raw image IFD found: {path}")
+        data = page.asarray()
     if data.ndim == 2:
         return fit_preview(cfa_false_color(data, cfa_pattern or "rggb"))
     return fit_preview(preview_rgb(data))

@@ -47,6 +47,12 @@ def build_generate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lighting", default="")
     parser.add_argument("--weather", default="")
     parser.add_argument(
+        "--dng-layout",
+        choices=["preview-subifd", "single-raw-ifd"],
+        default="preview-subifd",
+        help="DNG IFD layout to write",
+    )
+    parser.add_argument(
         "--prompt-plaintext",
         default=None,
         help="opt-in only: embed plaintext prompt in XMP",
@@ -96,6 +102,7 @@ def _run_generate(args: argparse.Namespace) -> int:
             model_version=args.model_version,
             lighting=args.lighting,
             weather=args.weather,
+            dng_layout=args.dng_layout,
             overwrite=args.overwrite,
         )
     except Image2DNGError as exc:

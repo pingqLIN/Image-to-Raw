@@ -6,7 +6,7 @@ from typing import Literal
 
 import numpy as np
 
-from image2dng.dng_writer import write_dng
+from image2dng.dng_writer import DngLayout, write_dng
 from image2dng.image_processing import InputSpace, build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel, CfaPattern
 from image2dng.sensor_effects import SensorEffectModel
@@ -66,12 +66,15 @@ def convert(
     lighting: str = "",
     weather: str = "",
     overwrite: bool = False,
+    dng_layout: DngLayout = "preview-subifd",
 ) -> ConversionResult:
     target = Path(output_path)
     if target.exists() and not overwrite:
         raise OutputExistsError(f"output already exists: {target}")
     if mode not in {"linearraw", "cfa"}:
         raise InvalidMetadataError(f"unsupported output mode: {mode}")
+    if dng_layout not in {"single-raw-ifd", "preview-subifd"}:
+        raise InvalidMetadataError(f"unsupported DNG layout: {dng_layout}")
     if iso <= 0:
         raise InvalidMetadataError("iso must be positive")
     if white_balance_kelvin <= 0:
@@ -126,7 +129,7 @@ def convert(
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc
 
-    write_dng(target, raw_buffer, core, camera, ai)
+    write_dng(target, raw_buffer, core, camera, ai, dng_layout=dng_layout)
     return ConversionResult(
         output_path=target,
         input_space=input_space,

@@ -11,7 +11,7 @@ Rationale:
 - RAW/DNG semantics, XMP provenance, synthetic camera labeling, and validation contracts are the core responsibility of this project. They should stay testable, versioned, and regression-safe inside this repository.
 - The existing `convert()`, DNG writer, validator, and sensor-effect code already provide enough foundation to split the flow into graph artifacts.
 - ComfyUI is a strong visual orchestration and model ecosystem, but making it the first core dependency would couple RAW semantics, model workflow, and UI extension lifecycle too early.
-- The first validation target is to emit DNG, JPEG previews, validation JSON, and a graph manifest. That does not require a full diffusion runtime yet.
+- The first validation target is to emit DNG files with IFD0 JPEG previews, sidecar JPEG previews, validation JSON, and a graph manifest. That does not require a full diffusion runtime yet.
 
 ComfyUI remains the Phase 2 integration target. Its official documentation describes custom-node and CLI management paths, which fit a later wrapper around this repository's core pipeline:
 
@@ -41,10 +41,10 @@ flowchart LR
 Each batch emits at least:
 
 - `inputs/*-scene-linear.tif`: scene-linear RGB intermediate image.
-- `raw/*-linearraw.dng`: three-channel synthetic LinearRaw DNG.
-- `raw/*-cfa-rggb.dng`: single-channel simulated RGGB CFA DNG.
-- `jpeg/*-linearraw.jpg`: JPEG preview rendered from the LinearRaw DNG.
-- `jpeg/*-cfa-rggb.jpg`: false-color JPEG preview rendered from the CFA DNG.
+- `raw/*-linearraw.dng`: three-channel synthetic LinearRaw DNG, by default with an IFD0 JPEG preview and Raw SubIFD.
+- `raw/*-cfa-rggb.dng`: single-channel simulated RGGB CFA DNG, by default with an IFD0 false-color JPEG preview and Raw SubIFD.
+- `jpeg/*-linearraw.jpg`: sidecar JPEG preview rendered from the LinearRaw DNG raw page.
+- `jpeg/*-cfa-rggb.jpg`: sidecar false-color JPEG preview rendered from the CFA DNG raw page.
 - `validation/*.json`: validator results.
 - `manifests/raw-native-node-batch.json`: node flow, inputs, outputs, parameters, and validation summary.
 
@@ -63,7 +63,7 @@ Current nodes:
 - `JpegPreviewRenderNode`
 - `DngValidationNode`
 
-The current scene generator is deterministic and procedural, not the final AI diffusion model. This is intentional: Phase 1 validates the RAW-native pipeline semantics, manifest, DNG parseability, and JPEG preview delivery path before integrating a heavier image generation runtime.
+The current scene generator is deterministic and procedural, not the final AI diffusion model. This is intentional: Phase 1 validates the RAW-native pipeline semantics, manifest, DNG parseability, embedded preview layout, and sidecar JPEG preview delivery path before integrating a heavier image generation runtime.
 
 `raw-native-node-batch.json` and `sample-index.json` are now stabilized as focused test contracts. The demo review bundle also collects RAW-native DNG files, JPEG previews, validation JSON, manifests, and compatibility evidence for external review:
 
@@ -73,7 +73,7 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 
 ## Next Gate
 
-1. Decide the boundary between preview IFDs and sidecar JPEG previews. The current preview is a sidecar artifact and is not written into a DNG preview IFD.
+1. Continue validating the `preview-subifd` layout with representative samples in RAW tools; this is a format experiment, not a full Adobe compatibility claim.
 2. Support an external scene-linear image producer as the future AI model adapter boundary.
-3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt or scene-linear tensor input and returns DNG path, JPEG path, and manifest.
+3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt or scene-linear tensor input and returns DNG path, sidecar JPEG path, and manifest.
 4. Add ComfyUI installation and smoke workflow docs after the custom node is stable.

@@ -4,7 +4,17 @@ This document describes the DNG tag contract currently emitted by `image2dng`. I
 
 The project generates truthful synthetic DNG files and does not impersonate a real camera RAW file. All outputs must preserve synthetic provenance and must not write MakerNote metadata.
 
-## Shared Required Tags
+## DNG Layout
+
+The default layout is `preview-subifd`:
+
+- IFD0 is a JPEG-compressed RGB preview with `NewSubFileType = 1`.
+- IFD0 references the main raw image IFD through `SubIFDs`.
+- The Raw SubIFD keeps the primary raw data and full raw tag contract with `NewSubFileType = 0`.
+
+For compatibility or regression testing, `single-raw-ifd` remains available and writes the older single raw IFD layout. The validator locates the raw page by `NewSubFileType = 0` instead of assuming `pages[0]` is always the raw image.
+
+## Shared Required Raw Tags
 
 Both LinearRaw and simulated CFA outputs must include:
 
@@ -33,6 +43,8 @@ Both LinearRaw and simulated CFA outputs must include:
 | `RawDataUniqueID` | 16-byte deterministic ID derived from the raw image buffer |
 | `Software` | `image2dng <version>` |
 | `XMP` | Synthetic AI provenance packet |
+
+IFD0 preview pages also write the basic identity/provenance tags: `DNGVersion`, `DNGBackwardVersion`, `Make`, `Model`, `UniqueCameraModel`, `Orientation`, `Software`, and `XMP`. The preview is an 8-bit RGB JPEG-compressed image, not raw data.
 
 ## LinearRaw Mode
 
@@ -77,7 +89,7 @@ Supported Bayer patterns:
 
 ## Validation Status
 
-`image2dng validate` checks required tags, geometry, black/white levels, mode-specific CFA tags, XMP provenance, and MakerNote absence.
+`image2dng validate` checks embedded preview layout when present, required raw tags, geometry, black/white levels, mode-specific CFA tags, XMP provenance, and MakerNote absence.
 
 Optional smoke tools are compatibility evidence, not mandatory gates:
 

@@ -35,7 +35,7 @@ from image2dng.dng_writer import (
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel
 from image2dng.pipeline import GenerationScene, run_raw_native_batch
-from image2dng.validate import TAG_MAKER_NOTE, validate_dng
+from image2dng.validate import TAG_MAKER_NOTE, find_raw_image_page, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
 
 
@@ -125,7 +125,9 @@ def test_dng_writes_explicit_photoshop_baseline_metadata(tmp_path):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:photoshop-baseline")
 
     with tifffile.TiffFile(output_path) as tif:
-        tags = tif.pages[0].tags
+        assert tif.pages[0].tags[TAG_NEW_SUBFILE_TYPE].value == 1
+        assert len(tif.pages[0].pages) == 1
+        tags = _raw_page(tif).tags
         baseline_values = {
             "new_subfile_type": tags[TAG_NEW_SUBFILE_TYPE].value,
             "make": tags[TAG_MAKE].value,
@@ -141,6 +143,54 @@ def test_dng_writes_explicit_photoshop_baseline_metadata(tmp_path):
     assert baseline_values["unique_camera_model"] == "Synthetic Camera v1"
     assert baseline_values["default_scale"] == (1, 1, 1, 1)
     assert len(baseline_values["raw_data_unique_id"]) == 16
+
+
+def test_dng_writes_embedded_jpeg_preview_with_raw_subifd(tmp_path):
+    output_path = _write_test_dng(tmp_path, prompt_hash="sha256:embedded-preview")
+
+    with tifffile.TiffFile(output_path) as tif:
+        preview = tif.pages[0]
+        raw = _raw_page(tif)
+
+        assert preview.tags[TAG_NEW_SUBFILE_TYPE].value == 1
+        assert preview.tags["Compression"].value == 7
+        assert preview.tags["PhotometricInterpretation"].value == 2
+        assert preview.asarray().shape == (16, 16, 3)
+        assert raw in tuple(preview.pages)
+        assert raw.tags[TAG_NEW_SUBFILE_TYPE].value == 0
+        assert raw.asarray().shape == (16, 16, 3)
+
+    result = validate_dng(output_path, run_smoke=False)
+    assert result.ok, result.errors
+    assert any(check.name == "embedded-preview" for check in result.checks)
+
+
+def test_dng_single_raw_ifd_layout_remains_available(tmp_path):
+    input_path = tmp_path / "single-layout-input.tif"
+    output_path = tmp_path / "single-layout-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(16, 16), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "srgb")
+
+    from image2dng.dng_writer import write_dng
+
+    write_dng(
+        output_path,
+        raw,
+        core,
+        CameraProfileModel.from_white_balance(6500),
+        AIMetadataModel(prompt_hash="sha256:single-raw-ifd"),
+        dng_layout="single-raw-ifd",
+    )
+
+    with tifffile.TiffFile(output_path) as tif:
+        assert len(tif.pages) == 1
+        assert not tif.pages[0].pages
+        assert tif.pages[0].tags[TAG_NEW_SUBFILE_TYPE].value == 0
+        assert _raw_page(tif).asarray().shape == (16, 16, 3)
+
+    result = validate_dng(output_path, run_smoke=False)
+    assert result.ok, result.errors
+    assert not any(check.name == "embedded-preview" for check in result.checks)
 
 
 def test_raw_data_unique_id_tracks_raw_buffer_only(tmp_path):
@@ -253,7 +303,7 @@ def test_public_convert_api_generates_cfa_dng(tmp_path):
     validation = validate_dng(output_path, run_smoke=False)
     assert validation.ok, validation.errors
     with tifffile.TiffFile(output_path) as tif:
-        page = tif.pages[0]
+        page = _raw_page(tif)
         assert page.asarray().shape == (24, 24)
         assert page.tags[TAG_CFA_REPEAT_PATTERN_DIM].value == (2, 2)
         assert tuple(page.tags[TAG_CFA_PATTERN].value) == (0, 1, 1, 2)
@@ -326,7 +376,10 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
             "DngValidationNode",
         ],
         "primary_artifact": "synthetic DNG",
-        "preview_artifact": "JPEG rendered from generated RAW buffers",
+        "preview_artifact": "sidecar JPEG rendered from generated RAW buffers",
+        "dng_layout": "preview-subifd",
+        "embedded_preview": "IFD0 JPEG preview",
+        "raw_ifd_location": "Raw SubIFD referenced from IFD0",
     }
     assert scene_manifest.keys() >= {
         "slug",
@@ -820,7 +873,7 @@ def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     validation = validate_dng(output_a, run_smoke=False)
     assert validation.ok, validation.errors
     with tifffile.TiffFile(output_a) as tif:
-        xmp = tif.pages[0].tags[TAG_XMP].value.decode("utf-8")
+        xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
     assert 'xmpAI:sensorNoiseModel="synthetic-simple-v1"' in xmp
     assert 'xmpAI:shotNoise="0.01"' in xmp
     assert 'xmpAI:readNoise="0.002"' in xmp
@@ -892,7 +945,7 @@ def test_cli_returns_usage_error_for_invalid_metadata(tmp_path, capsys):
 def test_metadata_round_trip(tmp_path):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:roundtrip")
     with tifffile.TiffFile(output_path) as tif:
-        xmp = tif.pages[0].tags[TAG_XMP].value.decode("utf-8")
+        xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
     root = ET.fromstring(xmp)
     description = root.find(".//{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description")
     assert description is not None
@@ -907,14 +960,14 @@ def test_synthetic_provenance_is_required(tmp_path):
     assert result.ok, result.errors
 
     with tifffile.TiffFile(output_path) as tif:
-        xmp = tif.pages[0].tags[TAG_XMP].value.decode("utf-8")
+        xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
     assert 'xmpAI:provenanceType="synthetic"' in xmp
 
 
 def test_plaintext_prompt_is_not_written_by_default(tmp_path):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:privacy")
     with tifffile.TiffFile(output_path) as tif:
-        xmp = tif.pages[0].tags[TAG_XMP].value.decode("utf-8")
+        xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
 
     assert "xmpAI:promptHash" in xmp
     assert "xmpAI:promptPlaintext" not in xmp
@@ -924,6 +977,7 @@ def test_makernote_is_not_written(tmp_path):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:no-makernote")
     with tifffile.TiffFile(output_path) as tif:
         assert TAG_MAKER_NOTE not in tif.pages[0].tags
+        assert TAG_MAKER_NOTE not in _raw_page(tif).tags
 
 
 def test_validate_json_output(tmp_path, capsys):
@@ -936,6 +990,11 @@ def test_validate_json_output(tmp_path, capsys):
     assert report["ok"] is True
     assert report["path"] == str(output_path)
     assert report["checks"] == [
+        {
+            "message": "IFD0 JPEG preview references the main raw SubIFD",
+            "name": "embedded-preview",
+            "status": "passed",
+        },
         {
             "message": "DNG structural checks passed",
             "name": "structure",
@@ -991,11 +1050,17 @@ def _write_test_dng(tmp_path, *, prompt_hash: str):
 
 def _raw_data_unique_id(path: Path) -> tuple[int, ...]:
     with tifffile.TiffFile(path) as tif:
-        return tuple(tif.pages[0].tags[TAG_RAW_DATA_UNIQUE_ID].value)
+        return tuple(_raw_page(tif).tags[TAG_RAW_DATA_UNIQUE_ID].value)
 
 
 def _raw_data_unique_id_hex(path: Path) -> str:
     return "".join(f"{value:02X}" for value in _raw_data_unique_id(path))
+
+
+def _raw_page(tif: tifffile.TiffFile) -> tifffile.TiffPage:
+    page = find_raw_image_page(tif)
+    assert page is not None
+    return page
 
 
 def _gradient_image(width: int, height: int) -> np.ndarray:

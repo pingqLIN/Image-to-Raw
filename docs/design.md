@@ -124,7 +124,22 @@ These effects are applied in virtual camera RGB before quantization or CFA mosai
 
 ## DNG tag layout
 
-目前 MVP 寫入單一主 IFD。另一種可行 layout 是 IFD0 + Raw SubIFD，但現階段主 IFD 已包含可獨立讀取的 Raw image data 與 DNG metadata。
+目前預設 layout 是 `preview-subifd`：IFD0 寫入 JPEG-compressed RGB preview，`SubIFDs` 指向主 raw image IFD。Raw SubIFD 保留可獨立讀取的 raw image data 與完整 DNG metadata。需要相容性回歸時，仍可用 `single-raw-ifd` 寫出舊版單一主 raw IFD。
+
+IFD0 preview：
+
+| Tag | Value |
+| --- | --- |
+| `NewSubFileType` | `1` |
+| `Compression` | `7` (`JPEG`) |
+| `PhotometricInterpretation` | `2` (`RGB`) |
+| `BitsPerSample` | `8,8,8` |
+| `SamplesPerPixel` | `3` |
+| `SubIFDs` | points to the raw image IFD |
+| `Make` / `Model` | `image2dng` / `Synthetic Camera v1` |
+| `XMP` | custom AI provenance packet |
+
+Raw SubIFD：
 
 | Tag | Value |
 | --- | --- |
