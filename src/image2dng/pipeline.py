@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -11,6 +12,7 @@ import tifffile
 from PIL import Image
 
 from image2dng.api import ConversionResult, convert
+from image2dng.image_processing import InputSpace
 from image2dng.validate import find_raw_image_page, validate_dng
 
 SceneStyle = Literal["chart-ramp", "portrait-light-study", "material-still-life"]
@@ -30,6 +32,19 @@ class GenerationScene:
 
 
 @dataclass(frozen=True)
+class ExternalSceneLinearInput:
+    slug: str
+    path: Path
+    input_space: InputSpace = "linear-rec709"
+    prompt: str = ""
+    description: str = ""
+    lighting: str = ""
+    weather: str = ""
+    producer: str = "external-scene-linear"
+    semantic_manifest: Path | None = None
+
+
+@dataclass(frozen=True)
 class PipelineNodeRecord:
     node_id: str
     node_type: str
@@ -42,10 +57,14 @@ class PipelineNodeRecord:
 class PipelineSceneResult:
     slug: str
     prompt_hash: str
+    source_type: str
     nodes: list[PipelineNodeRecord]
     outputs: dict[str, str]
     validations: dict[str, dict[str, Any]]
     raw_data_unique_ids: dict[str, str | None]
+    producer: str = ""
+    input_space: str = "linear-rec709"
+    semantic_artifacts: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +146,63 @@ def run_raw_native_batch(
     )
 
 
+def run_external_scene_linear_batch(
+    output_dir: str | Path,
+    *,
+    scenes: list[ExternalSceneLinearInput],
+    overwrite: bool = True,
+) -> PipelineBatchResult:
+    if not scenes:
+        raise ValueError("at least one external scene-linear input is required")
+
+    root = Path(output_dir)
+    inputs_dir = root / "inputs"
+    raw_dir = root / "raw"
+    jpeg_dir = root / "jpeg"
+    validation_dir = root / "validation"
+    manifest_dir = root / "manifests"
+    for directory in (inputs_dir, raw_dir, jpeg_dir, validation_dir, manifest_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    scene_results = [
+        _run_external_scene_graph(
+            scene=scene,
+            inputs_dir=inputs_dir,
+            raw_dir=raw_dir,
+            jpeg_dir=jpeg_dir,
+            validation_dir=validation_dir,
+            overwrite=overwrite,
+        )
+        for scene in scenes
+    ]
+
+    manifest_path = manifest_dir / "raw-native-node-batch.json"
+    manifest = _batch_manifest(root, scene_results)
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    sample_index_path = manifest_dir / "sample-index.json"
+    sample_index = _sample_index(root, scene_results)
+    sample_index_path.write_text(json.dumps(sample_index, indent=2), encoding="utf-8")
+    return PipelineBatchResult(
+        output_dir=root,
+        manifest_path=manifest_path,
+        sample_index_path=sample_index_path,
+        scenes=scene_results,
+    )
+
+
+def load_external_scene_manifest(path: str | Path) -> list[ExternalSceneLinearInput]:
+    source = Path(path)
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    if payload.get("schema") != "image2dng.external_scene_linear_sources.v1":
+        raise ValueError("unexpected external scene manifest schema")
+    scenes = payload.get("scenes")
+    if not isinstance(scenes, list) or not scenes:
+        raise ValueError("external scene manifest must contain at least one scene")
+    base = source.parent
+    return [_external_scene_from_manifest_item(item, base) for item in scenes]
+
+
 def _run_scene_graph(
     *,
     scene: GenerationScene,
@@ -173,51 +249,156 @@ def _run_scene_graph(
         )
     )
 
-    linear_dng = raw_dir / f"{scene.slug}-linearraw.dng"
+    return _run_capture_graph(
+        slug=scene.slug,
+        prompt_hash=prompt_hash,
+        scene_linear_path=tiff_path,
+        input_space="linear-rec709",
+        description=scene.description,
+        lighting=scene.lighting,
+        weather=scene.weather,
+        producer="image2dng procedural scene generator",
+        source_type="procedural",
+        seed=scene.seed,
+        raw_dir=raw_dir,
+        jpeg_dir=jpeg_dir,
+        validation_dir=validation_dir,
+        overwrite=overwrite,
+        nodes=nodes,
+        semantic_artifacts=None,
+    )
+
+
+def _run_external_scene_graph(
+    *,
+    scene: ExternalSceneLinearInput,
+    inputs_dir: Path,
+    raw_dir: Path,
+    jpeg_dir: Path,
+    validation_dir: Path,
+    overwrite: bool,
+) -> PipelineSceneResult:
+    nodes: list[PipelineNodeRecord] = []
+    source_path = scene.path
+    if not source_path.exists():
+        raise FileNotFoundError(source_path)
+
+    prompt_hash = _external_prompt_hash(scene)
+    target_input = inputs_dir / f"{scene.slug}-scene-linear{source_path.suffix.lower()}"
+    shutil.copy2(source_path, target_input)
+    semantic_artifacts = _copy_semantic_manifest(scene, inputs_dir)
+    nodes.append(
+        PipelineNodeRecord(
+            node_id=f"{scene.slug}:external-scene-linear",
+            node_type="ExternalSceneLinearInputNode",
+            inputs={"source": str(source_path)},
+            outputs={"scene_linear_input": str(target_input), **semantic_artifacts},
+            parameters={
+                "input_space": scene.input_space,
+                "producer": scene.producer,
+                "prompt": scene.prompt,
+                "scene_description": scene.description,
+                "lighting": scene.lighting,
+                "weather": scene.weather,
+                "semantic_boundary": "optional sidecar metadata; not converted to raw values yet",
+            },
+        )
+    )
+
+    return _run_capture_graph(
+        slug=scene.slug,
+        prompt_hash=prompt_hash,
+        scene_linear_path=target_input,
+        input_space=scene.input_space,
+        description=scene.description,
+        lighting=scene.lighting,
+        weather=scene.weather,
+        producer=scene.producer,
+        source_type="external-scene-linear",
+        seed=None,
+        raw_dir=raw_dir,
+        jpeg_dir=jpeg_dir,
+        validation_dir=validation_dir,
+        overwrite=overwrite,
+        nodes=nodes,
+        semantic_artifacts=semantic_artifacts or None,
+    )
+
+
+def _run_capture_graph(
+    *,
+    slug: str,
+    prompt_hash: str,
+    scene_linear_path: Path,
+    input_space: InputSpace,
+    description: str,
+    lighting: str,
+    weather: str,
+    producer: str,
+    source_type: str,
+    seed: int | None,
+    raw_dir: Path,
+    jpeg_dir: Path,
+    validation_dir: Path,
+    overwrite: bool,
+    nodes: list[PipelineNodeRecord],
+    semantic_artifacts: dict[str, str] | None,
+) -> PipelineSceneResult:
+    linear_dng = raw_dir / f"{slug}-linearraw.dng"
     linear_result = _convert_node(
-        input_path=tiff_path,
+        input_path=scene_linear_path,
         output_path=linear_dng,
         mode="linearraw",
         prompt_hash=prompt_hash,
-        scene=scene,
+        input_space=input_space,
+        description=description,
+        lighting=lighting,
+        weather=weather,
+        producer=producer,
+        seed=seed,
         overwrite=overwrite,
     )
     nodes.append(
         PipelineNodeRecord(
-            node_id=f"{scene.slug}:linearraw-capture",
+            node_id=f"{slug}:linearraw-capture",
             node_type="VirtualCameraLinearRawNode",
-            inputs={"scene_linear_tiff": str(tiff_path)},
+            inputs={"scene_linear_input": str(scene_linear_path)},
             outputs={"linearraw_dng": str(linear_dng)},
-            parameters={"mode": "linearraw", "input_space": "linear-rec709"},
+            parameters={"mode": "linearraw", "input_space": input_space},
         )
     )
 
-    cfa_dng = raw_dir / f"{scene.slug}-cfa-rggb.dng"
+    cfa_dng = raw_dir / f"{slug}-cfa-rggb.dng"
     cfa_result = _convert_node(
-        input_path=tiff_path,
+        input_path=scene_linear_path,
         output_path=cfa_dng,
         mode="cfa",
         prompt_hash=prompt_hash,
-        scene=scene,
+        input_space=input_space,
+        description=description,
+        lighting=lighting,
+        weather=weather,
+        producer=producer,
+        seed=seed,
         overwrite=overwrite,
     )
     nodes.append(
         PipelineNodeRecord(
-            node_id=f"{scene.slug}:cfa-capture",
+            node_id=f"{slug}:cfa-capture",
             node_type="VirtualCameraCfaNode",
-            inputs={"scene_linear_tiff": str(tiff_path)},
+            inputs={"scene_linear_input": str(scene_linear_path)},
             outputs={"cfa_dng": str(cfa_dng)},
-            parameters={"mode": "cfa", "cfa_pattern": "rggb", "input_space": "linear-rec709"},
+            parameters={"mode": "cfa", "cfa_pattern": "rggb", "input_space": input_space},
         )
     )
 
-    linear_jpeg = jpeg_dir / f"{scene.slug}-linearraw.jpg"
-    cfa_jpeg = jpeg_dir / f"{scene.slug}-cfa-rggb.jpg"
+    linear_jpeg = jpeg_dir / f"{slug}-linearraw.jpg"
+    cfa_jpeg = jpeg_dir / f"{slug}-cfa-rggb.jpg"
     write_jpeg_preview(linear_jpeg, dng_preview(linear_dng))
     write_jpeg_preview(cfa_jpeg, dng_preview(cfa_dng, cfa_pattern="rggb"))
     nodes.append(
         PipelineNodeRecord(
-            node_id=f"{scene.slug}:jpeg-preview",
+            node_id=f"{slug}:jpeg-preview",
             node_type="JpegPreviewRenderNode",
             inputs={"linearraw_dng": str(linear_dng), "cfa_dng": str(cfa_dng)},
             outputs={"linearraw_jpeg": str(linear_jpeg), "cfa_jpeg": str(cfa_jpeg)},
@@ -230,27 +411,29 @@ def _run_scene_graph(
         "cfa": validate_dng(cfa_dng, run_smoke=False).to_dict(),
     }
     for name, report in validations.items():
-        report_path = validation_dir / f"{scene.slug}-{name}.json"
+        report_path = validation_dir / f"{slug}-{name}.json"
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     nodes.append(
         PipelineNodeRecord(
-            node_id=f"{scene.slug}:validation",
+            node_id=f"{slug}:validation",
             node_type="DngValidationNode",
             inputs={"linearraw_dng": str(linear_dng), "cfa_dng": str(cfa_dng)},
             outputs={
-                "linearraw_validation": str(validation_dir / f"{scene.slug}-linearraw.json"),
-                "cfa_validation": str(validation_dir / f"{scene.slug}-cfa.json"),
+                "linearraw_validation": str(validation_dir / f"{slug}-linearraw.json"),
+                "cfa_validation": str(validation_dir / f"{slug}-cfa.json"),
             },
             parameters={"smoke_tests": False},
         )
     )
 
     return PipelineSceneResult(
-        slug=scene.slug,
+        slug=slug,
         prompt_hash=prompt_hash,
+        source_type=source_type,
         nodes=nodes,
         outputs={
-            "scene_linear_tiff": str(tiff_path),
+            "scene_linear_tiff": str(scene_linear_path),
+            "scene_linear_input": str(scene_linear_path),
             "linearraw_dng": str(linear_dng),
             "cfa_dng": str(cfa_dng),
             "linearraw_jpeg": str(linear_jpeg),
@@ -261,6 +444,9 @@ def _run_scene_graph(
             "linearraw": linear_result.raw_data_unique_id,
             "cfa": cfa_result.raw_data_unique_id,
         },
+        producer=producer,
+        input_space=input_space,
+        semantic_artifacts=semantic_artifacts,
     )
 
 
@@ -270,13 +456,18 @@ def _convert_node(
     output_path: Path,
     mode: Literal["linearraw", "cfa"],
     prompt_hash: str,
-    scene: GenerationScene,
+    input_space: InputSpace,
+    description: str,
+    lighting: str,
+    weather: str,
+    producer: str,
+    seed: int | None,
     overwrite: bool,
 ) -> ConversionResult:
     return convert(
         input_path=input_path,
         output_path=output_path,
-        input_space="linear-rec709",
+        input_space=input_space,
         mode=mode,
         cfa_pattern="rggb",
         iso=100,
@@ -284,13 +475,13 @@ def _convert_node(
         shot_noise=0.004 if mode == "cfa" else 0.0,
         read_noise=0.001 if mode == "cfa" else 0.0,
         row_noise=0.0005 if mode == "cfa" else 0.0,
-        sensor_effect_seed=scene.seed if mode == "cfa" else None,
+        sensor_effect_seed=seed if mode == "cfa" else None,
         prompt_hash=prompt_hash,
-        scene_description=scene.description,
-        model_name="image2dng raw-native procedural pipeline",
+        scene_description=description,
+        model_name=producer,
         model_version="0.1.0",
-        lighting=scene.lighting,
-        weather=scene.weather,
+        lighting=lighting,
+        weather=weather,
         overwrite=overwrite,
     )
 
@@ -328,6 +519,7 @@ def write_jpeg_preview(path: str | Path, image: np.ndarray) -> None:
 
 
 def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, Any]:
+    graph_nodes = [node.node_type for node in scenes[0].nodes] if scenes else []
     return {
         "schema": "image2dng.raw_native_node_batch.v1",
         "decision": {
@@ -336,19 +528,16 @@ def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, 
         },
         "output_dir": str(root),
         "graph": {
-            "nodes": [
-                "PromptIntentNode",
-                "SceneLinearGeneratorNode",
-                "VirtualCameraLinearRawNode",
-                "VirtualCameraCfaNode",
-                "JpegPreviewRenderNode",
-                "DngValidationNode",
-            ],
+            "nodes": graph_nodes,
             "primary_artifact": "synthetic DNG",
             "preview_artifact": "sidecar JPEG rendered from generated RAW buffers",
             "dng_layout": "preview-subifd",
             "embedded_preview": "IFD0 JPEG preview",
             "raw_ifd_location": "Raw SubIFD referenced from IFD0",
+            "external_scene_linear_boundary": "available",
+            "semantic_boundary": (
+                "metadata sidecar is preserved but not converted to raw values yet"
+            ),
         },
         "scenes": [_scene_result_to_dict(scene) for scene in scenes],
     }
@@ -365,6 +554,9 @@ def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, An
         "samples": [
             {
                 "slug": scene.slug,
+                "source_type": scene.source_type,
+                "producer": scene.producer,
+                "input_space": scene.input_space,
                 "prompt_hash": scene.prompt_hash,
                 "artifacts": scene.outputs,
                 "validation_ok": {
@@ -380,8 +572,12 @@ def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, An
 def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
     return {
         "slug": scene.slug,
+        "source_type": scene.source_type,
+        "producer": scene.producer,
+        "input_space": scene.input_space,
         "prompt_hash": scene.prompt_hash,
         "outputs": scene.outputs,
+        "semantic_artifacts": scene.semantic_artifacts or {},
         "raw_data_unique_ids": scene.raw_data_unique_ids,
         "validations": {
             key: {
@@ -402,6 +598,81 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
             for node in scene.nodes
         ],
     }
+
+
+def _external_scene_from_manifest_item(
+    item: object,
+    base: Path,
+) -> ExternalSceneLinearInput:
+    if not isinstance(item, dict):
+        raise ValueError("external scene manifest entries must be objects")
+    slug = _manifest_string(item, "slug")
+    source_path = _manifest_path(item, "path", base)
+    semantic_manifest = (
+        _manifest_path(item, "semantic_manifest", base) if item.get("semantic_manifest") else None
+    )
+    input_space = item.get("input_space", "linear-rec709")
+    if input_space not in {"srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"}:
+        raise ValueError(f"{slug}: unsupported input_space: {input_space}")
+    return ExternalSceneLinearInput(
+        slug=slug,
+        path=source_path,
+        input_space=input_space,
+        prompt=str(item.get("prompt", "")),
+        description=str(item.get("description", "")),
+        lighting=str(item.get("lighting", "")),
+        weather=str(item.get("weather", "")),
+        producer=str(item.get("producer", "external-scene-linear")),
+        semantic_manifest=semantic_manifest,
+    )
+
+
+def _copy_semantic_manifest(
+    scene: ExternalSceneLinearInput,
+    inputs_dir: Path,
+) -> dict[str, str]:
+    if scene.semantic_manifest is None:
+        return {}
+    if not scene.semantic_manifest.exists():
+        raise FileNotFoundError(scene.semantic_manifest)
+    target = inputs_dir / f"{scene.slug}-semantic{scene.semantic_manifest.suffix.lower()}"
+    shutil.copy2(scene.semantic_manifest, target)
+    return {"semantic_manifest": str(target)}
+
+
+def _manifest_string(item: dict[str, object], key: str) -> str:
+    value = item.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"external scene manifest entry missing string field: {key}")
+    return value
+
+
+def _manifest_path(item: dict[str, object], key: str, base: Path) -> Path:
+    path = Path(_manifest_string(item, key))
+    return path if path.is_absolute() else base / path
+
+
+def _external_prompt_hash(scene: ExternalSceneLinearInput) -> str:
+    source_hash = hashlib.sha256(scene.path.read_bytes()).hexdigest()
+    semantic_hash = (
+        hashlib.sha256(scene.semantic_manifest.read_bytes()).hexdigest()
+        if scene.semantic_manifest is not None
+        else ""
+    )
+    payload = json.dumps(
+        {
+            "source_sha256": source_hash,
+            "semantic_sha256": semantic_hash,
+            "prompt": scene.prompt,
+            "description": scene.description,
+            "lighting": scene.lighting,
+            "weather": scene.weather,
+            "producer": scene.producer,
+            "input_space": scene.input_space,
+        },
+        sort_keys=True,
+    ).encode("utf-8")
+    return f"sha256:{hashlib.sha256(payload).hexdigest()}"
 
 
 def _prompt_hash(scene: GenerationScene) -> str:

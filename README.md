@@ -62,6 +62,36 @@ The batch emits:
 
 The current decision is to build the minimal core pipeline inside this repository first. ComfyUI remains a strong candidate for a later visual orchestration layer, workflow UI, or custom-node integration, but it is not the first required dependency for the core RAW/DNG semantics.
 
+External renderers, AI generators, and simulators can now enter through the scene-linear producer boundary:
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py `
+  --output-dir demo-output/external-scene-linear-batch `
+  --scene-linear path\to\scene-linear.tif
+```
+
+Use a manifest when each image needs producer, prompt, lighting, or semantic sidecar metadata:
+
+```json
+{
+  "schema": "image2dng.external_scene_linear_sources.v1",
+  "scenes": [
+    {
+      "slug": "renderer-frame-001",
+      "path": "renderer-frame-001.tif",
+      "input_space": "linear-rec709",
+      "producer": "external renderer",
+      "prompt": "studio material test",
+      "description": "scene-linear output from an upstream generator",
+      "lighting": "virtual D65 studio",
+      "semantic_manifest": "renderer-frame-001.semantic.json"
+    }
+  ]
+}
+```
+
+`semantic_manifest` is copied and recorded in the batch manifest as the future boundary for mapping semantic scene information into photon/sensor-response raw values. The current implementation preserves the sidecar but does not convert semantic metadata into raw sample values yet.
+
 ## Run the development baseline verification
 
 ```powershell

@@ -36,6 +36,40 @@ flowchart LR
   I --> J["Graph Manifest"]
 ```
 
+## External scene-linear producer boundary
+
+外部 renderer、AI generator、simulation engine 或未來 ComfyUI node 不需要直接理解 DNG writer。它們可以先交出 scene-linear TIFF/PNG，讓本 repo 負責 virtual camera、sensor effect、DNG layout、sidecar preview、validation 與 manifest。
+
+最小 CLI：
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py `
+  --output-dir demo-output/external-scene-linear-batch `
+  --scene-linear path\to\scene-linear.tif
+```
+
+多張圖或需要 metadata 時，使用 `image2dng.external_scene_linear_sources.v1` manifest：
+
+```json
+{
+  "schema": "image2dng.external_scene_linear_sources.v1",
+  "scenes": [
+    {
+      "slug": "renderer-frame-001",
+      "path": "renderer-frame-001.tif",
+      "input_space": "linear-rec709",
+      "producer": "external renderer",
+      "prompt": "studio material test",
+      "description": "scene-linear output from an upstream generator",
+      "lighting": "virtual D65 studio",
+      "semantic_manifest": "renderer-frame-001.semantic.json"
+    }
+  ]
+}
+```
+
+`semantic_manifest` 是刻意保留的下一階段接點：目前只複製並記錄到 batch manifest，不把語意資訊轉成 raw sample values。後續真正有價值的方向，是讓 upstream generator 在生成時帶出 scene semantics，再由本專案把語意、材質、照明與 sensor model 映射成對應的光子/感測器反應數值，最後儲存為 RAW。
+
 ## Artifact contract
 
 每次 batch 至少輸出：
@@ -58,6 +92,7 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 
 - `PromptIntentNode`
 - `SceneLinearGeneratorNode`
+- `ExternalSceneLinearInputNode`：只在使用外部 scene-linear input 時出現
 - `VirtualCameraLinearRawNode`
 - `VirtualCameraCfaNode`
 - `JpegPreviewRenderNode`
@@ -74,6 +109,6 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 ## 下一個 gate
 
 1. 用代表樣本持續驗證 `preview-subifd` layout 在 RAW tools 中的行為；這是格式實驗，不直接宣稱完整 Adobe 相容。
-2. 讓 pipeline 支援外部 scene-linear image producer，作為 future AI model adapter boundary。
-3. 在 DNG tag contract 與 compatibility evidence 穩定後，再做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor，輸出 DNG path、sidecar JPEG path、manifest。
+2. 擴充 semantic sidecar contract，定義語意、材質、光照、mask/depth 等如何進入 photon/sensor-response mapping。
+3. 在 DNG tag contract 與 compatibility evidence 穩定後，再做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor/semantic sidecar，輸出 DNG path、sidecar JPEG path、manifest。
 4. 若 ComfyUI custom node 穩定，再加入 ComfyUI 安裝與 smoke workflow 文件。

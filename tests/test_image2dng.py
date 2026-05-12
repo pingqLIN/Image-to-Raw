@@ -34,7 +34,13 @@ from image2dng.dng_writer import (
 )
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
 from image2dng.models import AIMetadataModel, CameraProfileModel
-from image2dng.pipeline import GenerationScene, run_raw_native_batch
+from image2dng.pipeline import (
+    ExternalSceneLinearInput,
+    GenerationScene,
+    load_external_scene_manifest,
+    run_external_scene_linear_batch,
+    run_raw_native_batch,
+)
 from image2dng.validate import TAG_MAKER_NOTE, find_raw_image_page, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
 
@@ -386,6 +392,8 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "dng_layout": "preview-subifd",
         "embedded_preview": "IFD0 JPEG preview",
         "raw_ifd_location": "Raw SubIFD referenced from IFD0",
+        "external_scene_linear_boundary": "available",
+        "semantic_boundary": "metadata sidecar is preserved but not converted to raw values yet",
     }
     assert scene_manifest.keys() >= {
         "slug",
@@ -424,6 +432,9 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "samples": [
             {
                 "slug": "contract-chart",
+                "source_type": "procedural",
+                "producer": "image2dng procedural scene generator",
+                "input_space": "linear-rec709",
                 "prompt_hash": scene_manifest["prompt_hash"],
                 "artifacts": scene_manifest["outputs"],
                 "validation_ok": {"linearraw": True, "cfa": True},
@@ -431,6 +442,89 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
             }
         ],
     }
+
+
+def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    semantic_path = tmp_path / "external-semantics.json"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path.write_text(
+        json.dumps(
+            {
+                "schema": "example.semantic_scene.v1",
+                "regions": [{"name": "highlight ramp", "material": "emissive"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "external-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                prompt="external rendered chart",
+                description="external scene-linear producer test",
+                lighting="virtual studio",
+                producer="unit-test-renderer",
+                semantic_manifest=semantic_path,
+            )
+        ],
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    scene_manifest = manifest["scenes"][0]
+    outputs = scene_manifest["outputs"]
+
+    assert manifest["graph"]["nodes"][0] == "ExternalSceneLinearInputNode"
+    assert scene_manifest["source_type"] == "external-scene-linear"
+    assert scene_manifest["producer"] == "unit-test-renderer"
+    assert scene_manifest["input_space"] == "linear-rec709"
+    assert scene_manifest["semantic_artifacts"].keys() == {"semantic_manifest"}
+    assert Path(outputs["scene_linear_input"]).exists()
+    assert Path(scene_manifest["semantic_artifacts"]["semantic_manifest"]).exists()
+    assert validate_dng(outputs["linearraw_dng"], run_smoke=False).ok
+    assert validate_dng(outputs["cfa_dng"], run_smoke=False).ok
+    assert scene_manifest["validations"]["linearraw"]["ok"] is True
+    assert scene_manifest["validations"]["cfa"]["ok"] is True
+
+
+def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
+    source_path = tmp_path / "manifest-scene.tif"
+    semantic_path = tmp_path / "manifest-semantics.json"
+    manifest_path = tmp_path / "external-scenes.json"
+    tifffile.imwrite(source_path, _gradient_image(8, 8), photometric="rgb")
+    semantic_path.write_text("{}", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "image2dng.external_scene_linear_sources.v1",
+                "scenes": [
+                    {
+                        "slug": "manifest-scene",
+                        "path": source_path.name,
+                        "input_space": "linear-rec709",
+                        "producer": "manifest-renderer",
+                        "semantic_manifest": semantic_path.name,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    scenes = load_external_scene_manifest(manifest_path)
+
+    assert scenes == [
+        ExternalSceneLinearInput(
+            slug="manifest-scene",
+            path=source_path,
+            input_space="linear-rec709",
+            producer="manifest-renderer",
+            semantic_manifest=semantic_path,
+        )
+    ]
 
 
 def test_visual_demo_generates_phase3_evidence(tmp_path):

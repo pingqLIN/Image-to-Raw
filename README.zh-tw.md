@@ -58,6 +58,36 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 
 目前決策是先自建 repo 內的最小核心 pipeline。ComfyUI 適合作為後續視覺化編排、工作流 UI 或 custom node 整合層，但不先成為核心 RAW/DNG 語意的必要依賴。
 
+外部 renderer、AI generator 或 simulator 已可透過 scene-linear producer boundary 交付輸入：
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py `
+  --output-dir demo-output/external-scene-linear-batch `
+  --scene-linear path\to\scene-linear.tif
+```
+
+若需要每張圖的 producer、prompt、lighting 或 semantic sidecar metadata，使用 manifest：
+
+```json
+{
+  "schema": "image2dng.external_scene_linear_sources.v1",
+  "scenes": [
+    {
+      "slug": "renderer-frame-001",
+      "path": "renderer-frame-001.tif",
+      "input_space": "linear-rec709",
+      "producer": "external renderer",
+      "prompt": "studio material test",
+      "description": "scene-linear output from an upstream generator",
+      "lighting": "virtual D65 studio",
+      "semantic_manifest": "renderer-frame-001.semantic.json"
+    }
+  ]
+}
+```
+
+`semantic_manifest` 目前會被複製並寫入 batch manifest，作為未來「語意資訊轉光子/感測器反應 raw 數值」的邊界；現階段尚不把 semantic sidecar 轉成 raw sample values。
+
 ## 執行開發基線驗證
 
 ```powershell

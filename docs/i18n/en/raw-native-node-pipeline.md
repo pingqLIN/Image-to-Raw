@@ -36,6 +36,40 @@ flowchart LR
   I --> J["Graph Manifest"]
 ```
 
+## External Scene-Linear Producer Boundary
+
+External renderers, AI generators, simulation engines, and future ComfyUI nodes do not need to understand the DNG writer directly. They can hand off scene-linear TIFF/PNG files, then this repository owns the virtual camera step, sensor effects, DNG layout, sidecar previews, validation, and manifests.
+
+Minimal CLI:
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py `
+  --output-dir demo-output/external-scene-linear-batch `
+  --scene-linear path\to\scene-linear.tif
+```
+
+For multiple images or per-image metadata, use an `image2dng.external_scene_linear_sources.v1` manifest:
+
+```json
+{
+  "schema": "image2dng.external_scene_linear_sources.v1",
+  "scenes": [
+    {
+      "slug": "renderer-frame-001",
+      "path": "renderer-frame-001.tif",
+      "input_space": "linear-rec709",
+      "producer": "external renderer",
+      "prompt": "studio material test",
+      "description": "scene-linear output from an upstream generator",
+      "lighting": "virtual D65 studio",
+      "semantic_manifest": "renderer-frame-001.semantic.json"
+    }
+  ]
+}
+```
+
+`semantic_manifest` is a deliberate next-stage hook: the current implementation copies it and records it in the batch manifest, but does not convert semantic information into raw sample values. The more valuable long-term direction is for the upstream generator to emit scene semantics during generation, then for this project to map semantics, material, lighting, and sensor model data into photon/sensor-response values stored as RAW.
+
 ## Artifact Contract
 
 Each batch emits at least:
@@ -58,6 +92,7 @@ Current nodes:
 
 - `PromptIntentNode`
 - `SceneLinearGeneratorNode`
+- `ExternalSceneLinearInputNode`: appears only when external scene-linear input is used
 - `VirtualCameraLinearRawNode`
 - `VirtualCameraCfaNode`
 - `JpegPreviewRenderNode`
@@ -74,6 +109,6 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 ## Next Gate
 
 1. Continue validating the `preview-subifd` layout with representative samples in RAW tools; this is a format experiment, not a full Adobe compatibility claim.
-2. Support an external scene-linear image producer as the future AI model adapter boundary.
-3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt or scene-linear tensor input and returns DNG path, sidecar JPEG path, and manifest.
+2. Expand the semantic sidecar contract and define how semantics, material, lighting, mask, and depth data enter photon/sensor-response mapping.
+3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt, scene-linear tensor, and semantic sidecar input and returns DNG path, sidecar JPEG path, and manifest.
 4. Add ComfyUI installation and smoke workflow docs after the custom node is stable.

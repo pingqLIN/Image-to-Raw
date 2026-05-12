@@ -3,7 +3,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from image2dng.pipeline import run_raw_native_batch
+from image2dng.pipeline import (
+    ExternalSceneLinearInput,
+    load_external_scene_manifest,
+    run_external_scene_linear_batch,
+    run_raw_native_batch,
+)
 
 
 def main() -> int:
@@ -15,9 +20,42 @@ def main() -> int:
         type=Path,
         default=Path("demo-output/raw-native-node-batch"),
     )
+    parser.add_argument(
+        "--external-manifest",
+        type=Path,
+        default=None,
+        help="JSON manifest with image2dng.external_scene_linear_sources.v1 scenes",
+    )
+    parser.add_argument(
+        "--scene-linear",
+        type=Path,
+        action="append",
+        default=[],
+        help="external scene-linear TIFF/PNG input; may be passed multiple times",
+    )
     args = parser.parse_args()
 
-    result = run_raw_native_batch(args.output_dir, overwrite=True)
+    external_scenes = []
+    if args.external_manifest is not None:
+        external_scenes.extend(load_external_scene_manifest(args.external_manifest))
+    external_scenes.extend(
+        ExternalSceneLinearInput(
+            slug=path.stem,
+            path=path,
+            description=f"external scene-linear input: {path.name}",
+            producer="image2dng CLI external scene-linear input",
+        )
+        for path in args.scene_linear
+    )
+
+    if external_scenes:
+        result = run_external_scene_linear_batch(
+            args.output_dir,
+            scenes=external_scenes,
+            overwrite=True,
+        )
+    else:
+        result = run_raw_native_batch(args.output_dir, overwrite=True)
     print(f"Wrote raw-native node batch to {result.output_dir}")
     print(f"Wrote manifest to {result.manifest_path}")
     print(f"Wrote sample index to {result.sample_index_path}")
