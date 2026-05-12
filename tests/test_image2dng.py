@@ -230,7 +230,7 @@ def test_public_convert_api_returns_result(tmp_path):
     assert result.width == 24
     assert result.height == 24
     assert result.prompt_hash == "sha256:api"
-    assert result.raw_data_unique_id is not None
+    assert result.raw_data_unique_id == _raw_data_unique_id_hex(output_path)
     validation = validate_dng(output_path, run_smoke=False)
     assert validation.ok, validation.errors
 
@@ -336,8 +336,12 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "validations",
         "nodes",
     }
-    assert scene_manifest["raw_data_unique_ids"]["linearraw"].startswith("sha256:")
-    assert scene_manifest["raw_data_unique_ids"]["cfa"].startswith("sha256:")
+    assert scene_manifest["raw_data_unique_ids"]["linearraw"] == _raw_data_unique_id_hex(
+        Path(scene_manifest["outputs"]["linearraw_dng"])
+    )
+    assert scene_manifest["raw_data_unique_ids"]["cfa"] == _raw_data_unique_id_hex(
+        Path(scene_manifest["outputs"]["cfa_dng"])
+    )
     assert scene_manifest["validations"]["linearraw"]["ok"] is True
     assert scene_manifest["validations"]["cfa"]["ok"] is True
 
@@ -988,6 +992,10 @@ def _write_test_dng(tmp_path, *, prompt_hash: str):
 def _raw_data_unique_id(path: Path) -> tuple[int, ...]:
     with tifffile.TiffFile(path) as tif:
         return tuple(tif.pages[0].tags[TAG_RAW_DATA_UNIQUE_ID].value)
+
+
+def _raw_data_unique_id_hex(path: Path) -> str:
+    return "".join(f"{value:02X}" for value in _raw_data_unique_id(path))
 
 
 def _gradient_image(width: int, height: int) -> np.ndarray:

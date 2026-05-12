@@ -134,11 +134,11 @@ def convert(
         width=int(core.width),
         height=int(core.height),
         prompt_hash=prompt_hash,
-        raw_data_unique_id=_stable_buffer_id(raw_buffer),
+        raw_data_unique_id=_raw_data_unique_id_hex(raw_buffer),
     )
 
 
-def _stable_buffer_id(raw_buffer: np.ndarray) -> str:
+def _raw_data_unique_id_hex(raw_buffer: np.ndarray) -> str:
     import hashlib
 
-    return f"sha256:{hashlib.sha256(raw_buffer.tobytes()).hexdigest()}"
+    return hashlib.md5(raw_buffer.tobytes()).hexdigest().upper()
