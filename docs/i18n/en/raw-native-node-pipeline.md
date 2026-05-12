@@ -65,10 +65,15 @@ Current nodes:
 
 The current scene generator is deterministic and procedural, not the final AI diffusion model. This is intentional: Phase 1 validates the RAW-native pipeline semantics, manifest, DNG parseability, and JPEG preview delivery path before integrating a heavier image generation runtime.
 
-## Next Steps
+`raw-native-node-batch.json` and `sample-index.json` are now stabilized as focused test contracts. The demo review bundle also collects RAW-native DNG files, JPEG previews, validation JSON, manifests, and compatibility evidence for external review:
 
-1. Stabilize `raw-native-node-batch.json` as a tested schema contract.
+```powershell
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+```
+
+## Next Gate
+
+1. Decide the boundary between preview IFDs and sidecar JPEG previews. The current preview is a sidecar artifact and is not written into a DNG preview IFD.
 2. Support an external scene-linear image producer as the future AI model adapter boundary.
-3. Decide preview IFD versus sidecar preview policy.
-4. Prototype a ComfyUI custom node that accepts prompt or scene-linear tensor input and returns DNG path, JPEG path, and manifest.
-5. Add ComfyUI installation and smoke workflow docs after the custom node is stable.
+3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt or scene-linear tensor input and returns DNG path, JPEG path, and manifest.
+4. Add ComfyUI installation and smoke workflow docs after the custom node is stable.

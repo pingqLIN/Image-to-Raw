@@ -65,10 +65,15 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 
 目前的 scene generator 是 deterministic procedural generator，不是最終 AI diffusion model。這是刻意設計：第一階段先驗證 RAW-native pipeline 的檔案語意、manifest、DNG 可解析性與 JPEG preview 交付流程。
 
-## 下一步
+目前 `raw-native-node-batch.json` 與 `sample-index.json` 已由 focused tests 固定為 contract。Demo review bundle 也會收斂 RAW-native DNG、JPEG preview、validation JSON、manifest 與 compatibility evidence，供外部審查使用：
 
-1. 把 `raw-native-node-batch.json` schema 固化為可測試 contract。
-2. 讓 pipeline 支援外部 scene-linear image producer，作為 future AI model adapter。
-3. 增加 preview IFD 或 sidecar preview policy 的設計決策。
-4. 做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor，輸出 DNG path、JPEG path、manifest。
-5. 若 ComfyUI custom node 穩定，再加入 ComfyUI 安裝與 smoke workflow 文件。
+```powershell
+uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
+```
+
+## 下一個 gate
+
+1. 決定 preview IFD 與 sidecar JPEG preview 的邊界：目前 preview 是 sidecar artifact，不寫入 DNG preview IFD。
+2. 讓 pipeline 支援外部 scene-linear image producer，作為 future AI model adapter boundary。
+3. 在 DNG tag contract 與 compatibility evidence 穩定後，再做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor，輸出 DNG path、JPEG path、manifest。
+4. 若 ComfyUI custom node 穩定，再加入 ComfyUI 安裝與 smoke workflow 文件。
