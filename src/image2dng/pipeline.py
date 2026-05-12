@@ -14,6 +14,13 @@ from PIL import Image
 
 from image2dng.api import ConversionResult, convert
 from image2dng.image_processing import InputSpace
+from image2dng.semantic_reaction import (
+    SUPPORTED_REACTION_INPUT_SPACES,
+    SemanticReactionResult,
+    apply_region_exposure_reaction,
+    load_semantic_payload,
+    read_scene_linear_image,
+)
 from image2dng.semantic_scene import (
     SEMANTIC_SCENE_SCHEMA,
     SemanticSceneValidationResult,
@@ -22,6 +29,11 @@ from image2dng.semantic_scene import (
 from image2dng.validate import find_raw_image_page, validate_dng
 
 SceneStyle = Literal["chart-ramp", "portrait-light-study", "material-still-life"]
+
+SEMANTIC_BOUNDARY = (
+    "semantic sidecar is preserved by default; opt-in region-exposure-mask-v1 "
+    "can affect raw values"
+)
 
 
 @dataclass(frozen=True)
@@ -48,6 +60,7 @@ class ExternalSceneLinearInput:
     weather: str = ""
     producer: str = "external-scene-linear"
     semantic_manifest: Path | None = None
+    apply_semantic_reaction: bool = False
 
 
 @dataclass(frozen=True)
@@ -74,6 +87,7 @@ class PipelineSceneResult:
     semantic_validation: dict[str, Any] | None = None
     semantic_contract: str | None = None
     semantic_to_raw_status: str | None = None
+    semantic_reaction: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -291,17 +305,35 @@ def _run_external_scene_graph(
     source_path = scene.path
     if not source_path.exists():
         raise FileNotFoundError(source_path)
+    _validate_semantic_reaction_request(scene)
 
-    prompt_hash = _external_prompt_hash(scene)
     target_input = inputs_dir / f"{scene.slug}-scene-linear{source_path.suffix.lower()}"
     shutil.copy2(source_path, target_input)
     semantic_artifacts, semantic_validation = _copy_semantic_manifest(scene, inputs_dir)
+    prompt_hash = _external_prompt_hash(
+        scene,
+        copied_source=target_input,
+        semantic_artifacts=semantic_artifacts,
+    )
+    capture_input = target_input
+    semantic_reaction: SemanticReactionResult | None = None
+    if scene.apply_semantic_reaction:
+        capture_input, semantic_reaction = _apply_semantic_reaction(
+            scene=scene,
+            scene_linear_path=target_input,
+            semantic_artifacts=semantic_artifacts,
+            inputs_dir=inputs_dir,
+        )
     nodes.append(
         PipelineNodeRecord(
             node_id=f"{scene.slug}:external-scene-linear",
             node_type="ExternalSceneLinearInputNode",
             inputs={"source": str(source_path)},
-            outputs={"scene_linear_input": str(target_input), **semantic_artifacts},
+            outputs={
+                "scene_linear_input": str(target_input),
+                "capture_scene_linear_input": str(capture_input),
+                **semantic_artifacts,
+            },
             parameters={
                 "input_space": scene.input_space,
                 "producer": scene.producer,
@@ -309,7 +341,8 @@ def _run_external_scene_graph(
                 "scene_description": scene.description,
                 "lighting": scene.lighting,
                 "weather": scene.weather,
-                "semantic_boundary": "optional sidecar metadata; not converted to raw values yet",
+                "apply_semantic_reaction": scene.apply_semantic_reaction,
+                "semantic_boundary": _external_semantic_boundary(scene),
             },
         )
     )
@@ -317,7 +350,8 @@ def _run_external_scene_graph(
     return _run_capture_graph(
         slug=scene.slug,
         prompt_hash=prompt_hash,
-        scene_linear_path=target_input,
+        scene_linear_path=capture_input,
+        original_scene_linear_path=target_input,
         input_space=scene.input_space,
         description=scene.description,
         lighting=scene.lighting,
@@ -332,6 +366,7 @@ def _run_external_scene_graph(
         nodes=nodes,
         semantic_artifacts=semantic_artifacts or None,
         semantic_validation=semantic_validation,
+        semantic_reaction=semantic_reaction,
     )
 
 
@@ -340,6 +375,7 @@ def _run_capture_graph(
     slug: str,
     prompt_hash: str,
     scene_linear_path: Path,
+    original_scene_linear_path: Path | None = None,
     input_space: InputSpace,
     description: str,
     lighting: str,
@@ -354,6 +390,7 @@ def _run_capture_graph(
     nodes: list[PipelineNodeRecord],
     semantic_artifacts: dict[str, str] | None,
     semantic_validation: dict[str, Any] | None = None,
+    semantic_reaction: SemanticReactionResult | None = None,
 ) -> PipelineSceneResult:
     linear_dng = raw_dir / f"{slug}-linearraw.dng"
     linear_result = _convert_node(
@@ -445,6 +482,12 @@ def _run_capture_graph(
         outputs={
             "scene_linear_tiff": str(scene_linear_path),
             "scene_linear_input": str(scene_linear_path),
+            **(
+                {"original_scene_linear_input": str(original_scene_linear_path)}
+                if original_scene_linear_path is not None
+                and original_scene_linear_path != scene_linear_path
+                else {}
+            ),
             "linearraw_dng": str(linear_dng),
             "cfa_dng": str(cfa_dng),
             "linearraw_jpeg": str(linear_jpeg),
@@ -462,9 +505,8 @@ def _run_capture_graph(
         semantic_contract=(
             SEMANTIC_SCENE_SCHEMA if semantic_validation is not None else None
         ),
-        semantic_to_raw_status=(
-            "preserved-not-applied" if semantic_validation is not None else None
-        ),
+        semantic_to_raw_status=_semantic_to_raw_status(semantic_validation, semantic_reaction),
+        semantic_reaction=semantic_reaction.to_dict() if semantic_reaction is not None else None,
     )
 
 
@@ -553,9 +595,7 @@ def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, 
             "embedded_preview": "IFD0 JPEG preview",
             "raw_ifd_location": "Raw SubIFD referenced from IFD0",
             "external_scene_linear_boundary": "available",
-            "semantic_boundary": (
-                "metadata sidecar is preserved but not converted to raw values yet"
-            ),
+            "semantic_boundary": SEMANTIC_BOUNDARY,
         },
         "scenes": [_scene_result_to_dict(scene) for scene in scenes],
     }
@@ -594,6 +634,18 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
                 "semantic_validation": scene.semantic_validation,
             }
         )
+    if scene.semantic_reaction is not None:
+        sample["semantic_reaction"] = {
+            "model": scene.semantic_reaction["model"],
+            "applied": scene.semantic_reaction["applied"],
+            "region_count": scene.semantic_reaction["region_count"],
+            "affected_pixels": scene.semantic_reaction["affected_pixels"],
+            **(
+                {"reason": scene.semantic_reaction["reason"]}
+                if "reason" in scene.semantic_reaction
+                else {}
+            ),
+        }
     return sample
 
 
@@ -609,6 +661,7 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "semantic_validation": scene.semantic_validation or {},
         "semantic_contract": scene.semantic_contract,
         "semantic_to_raw_status": scene.semantic_to_raw_status,
+        "semantic_reaction": scene.semantic_reaction or {},
         "raw_data_unique_ids": scene.raw_data_unique_ids,
         "validations": {
             key: {
@@ -645,6 +698,9 @@ def _external_scene_from_manifest_item(
     input_space = item.get("input_space", "linear-rec709")
     if input_space not in {"srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"}:
         raise ValueError(f"{slug}: unsupported input_space: {input_space}")
+    apply_semantic_reaction = item.get("apply_semantic_reaction", False)
+    if not isinstance(apply_semantic_reaction, bool):
+        raise ValueError(f"{slug}: apply_semantic_reaction must be boolean when present")
     return ExternalSceneLinearInput(
         slug=slug,
         path=source_path,
@@ -655,7 +711,66 @@ def _external_scene_from_manifest_item(
         weather=str(item.get("weather", "")),
         producer=str(item.get("producer", "external-scene-linear")),
         semantic_manifest=semantic_manifest,
+        apply_semantic_reaction=apply_semantic_reaction,
     )
+
+
+def _semantic_to_raw_status(
+    semantic_validation: dict[str, Any] | None,
+    semantic_reaction: SemanticReactionResult | None,
+) -> str | None:
+    if semantic_reaction is not None:
+        return semantic_reaction.status
+    if semantic_validation is not None:
+        return "preserved-not-applied"
+    return None
+
+
+def _external_semantic_boundary(scene: ExternalSceneLinearInput) -> str:
+    if scene.apply_semantic_reaction:
+        return "semantic sidecar applied through opt-in region-exposure-mask-v1 reaction"
+    if scene.semantic_manifest is not None:
+        return "semantic sidecar preserved and validated, but not applied to raw values"
+    return "semantic sidecar absent"
+
+
+def _validate_semantic_reaction_request(scene: ExternalSceneLinearInput) -> None:
+    if not scene.apply_semantic_reaction:
+        return
+    if scene.semantic_manifest is None:
+        raise ValueError(f"{scene.slug}: apply_semantic_reaction requires semantic_manifest")
+    if scene.input_space not in SUPPORTED_REACTION_INPUT_SPACES:
+        supported = ", ".join(sorted(SUPPORTED_REACTION_INPUT_SPACES))
+        raise ValueError(
+            f"{scene.slug}: semantic reaction requires linear-light input_space; "
+            f"got {scene.input_space!r}, supported: {supported}"
+        )
+
+
+def _apply_semantic_reaction(
+    *,
+    scene: ExternalSceneLinearInput,
+    scene_linear_path: Path,
+    semantic_artifacts: dict[str, str],
+    inputs_dir: Path,
+) -> tuple[Path, SemanticReactionResult]:
+    semantic_path_value = semantic_artifacts.get("semantic_manifest")
+    if semantic_path_value is None:
+        raise ValueError(f"{scene.slug}: semantic_manifest artifact missing")
+    semantic_path = Path(semantic_path_value)
+    payload = load_semantic_payload(semantic_path)
+    image = read_scene_linear_image(scene_linear_path)
+    reacted_image, reaction = apply_region_exposure_reaction(
+        image,
+        semantic_payload=payload,
+        semantic_base_dir=semantic_path.parent,
+        input_space=scene.input_space,
+    )
+    if not reaction.applied:
+        return scene_linear_path, reaction
+    target = inputs_dir / f"{scene.slug}-semantic-reaction.tif"
+    tifffile.imwrite(target, reacted_image, photometric="rgb")
+    return target, reaction
 
 
 def _copy_semantic_manifest(
@@ -742,27 +857,41 @@ def _manifest_path(item: dict[str, object], key: str, base: Path) -> Path:
     return path if path.is_absolute() else base / path
 
 
-def _external_prompt_hash(scene: ExternalSceneLinearInput) -> str:
-    source_hash = hashlib.sha256(scene.path.read_bytes()).hexdigest()
-    semantic_hash = (
-        hashlib.sha256(scene.semantic_manifest.read_bytes()).hexdigest()
-        if scene.semantic_manifest is not None
-        else ""
-    )
+def _external_prompt_hash(
+    scene: ExternalSceneLinearInput,
+    *,
+    copied_source: Path,
+    semantic_artifacts: dict[str, str],
+) -> str:
+    semantic_manifest = semantic_artifacts.get("semantic_manifest")
     payload = json.dumps(
         {
-            "source_sha256": source_hash,
-            "semantic_sha256": semantic_hash,
+            "source_sha256": _sha256_file(copied_source),
+            "semantic_sha256": _sha256_file(Path(semantic_manifest)) if semantic_manifest else "",
+            "semantic_asset_sha256": _semantic_asset_hashes(semantic_artifacts),
             "prompt": scene.prompt,
             "description": scene.description,
             "lighting": scene.lighting,
             "weather": scene.weather,
             "producer": scene.producer,
             "input_space": scene.input_space,
+            "apply_semantic_reaction": scene.apply_semantic_reaction,
         },
         sort_keys=True,
     ).encode("utf-8")
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+
+def _semantic_asset_hashes(semantic_artifacts: dict[str, str]) -> dict[str, str]:
+    return {
+        artifact_key.removeprefix("asset:"): _sha256_file(Path(path))
+        for artifact_key, path in sorted(semantic_artifacts.items())
+        if artifact_key.startswith("asset:")
+    }
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _prompt_hash(scene: GenerationScene) -> str:

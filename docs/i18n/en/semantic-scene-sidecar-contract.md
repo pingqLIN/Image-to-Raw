@@ -65,7 +65,19 @@ When `semantic_manifest` is present, the pipeline:
 - records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation` in `raw-native-node-batch.json`;
 - records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation` in `sample-index.json`.
 
-`semantic_to_raw_status` is currently `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation yet.
+By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation yet.
+
+When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable the deterministic `region-exposure-mask-v1` prototype. This prototype reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, applies EV modulation to 16-bit scene-linear RGB values inside the mask, and records a `semantic_reaction` summary in the manifests. It only supports linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. It is not a full physical sensor model and does not claim spectral or camera-simulation accuracy.
+
+For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input.
+
+`semantic_to_raw_status` has three current states:
+
+| Status | Manifest shape | Meaning |
+| --- | --- | --- |
+| `preserved-not-applied` | `semantic_validation` is present, `semantic_reaction` is empty | Sidecar was copied and validated, but raw values were generated from the original scene-linear input. |
+| `applied` | `semantic_reaction.applied` is `true` with affected-region counts | Opt-in `region-exposure-mask-v1` modified a copied scene-linear input before RAW generation. |
+| `no-op` | `semantic_reaction.applied` is `false` with a `reason` | Reaction was requested and validated, but no eligible exposure-mask region changed pixels. |
 
 ## Validation
 

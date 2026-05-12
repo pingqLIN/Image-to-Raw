@@ -68,7 +68,9 @@ For multiple images or per-image metadata, use an `image2dng.external_scene_line
 }
 ```
 
-`semantic_manifest` is a deliberate next-stage hook. When the sidecar uses `image2dng.semantic_scene.v1`, the pipeline validates it before DNG generation, copies the sidecar, copies resolvable local assets, and records a validation summary in the batch manifest and sample index. The current implementation still does not convert semantic information into raw sample values. See [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md) for the detailed contract.
+`semantic_manifest` is a deliberate next-stage hook. When the sidecar uses `image2dng.semantic_scene.v1`, the pipeline validates it before DNG generation, copies the sidecar, copies resolvable local assets, and records a validation summary in the batch manifest and sample index. By default, the implementation still does not convert semantic information into raw sample values.
+
+When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline enables the `region-exposure-mask-v1` prototype, using region masks and `exposure_bias_ev` to apply deterministic EV modulation to 16-bit scene-linear RGB input. This only supports `linear-rec709`, `acescg`, and `xyz`; encoded `srgb` or `prophoto-rgb` inputs cannot apply the reaction directly. See [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md) for the detailed contract.
 
 ## Artifact Contract
 
@@ -82,6 +84,7 @@ Each batch emits at least:
 - `validation/*.json`: validator results.
 - `manifests/raw-native-node-batch.json`: node flow, inputs, outputs, parameters, and validation summary.
 - With a semantic sidecar, the batch manifest records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`; the sample index records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`.
+- When semantic reaction is enabled, the batch manifest and sample index record a `semantic_reaction` summary; the reaction-applied input is preserved as `inputs/*-semantic-reaction.tif`.
 
 ## Current Implementation
 

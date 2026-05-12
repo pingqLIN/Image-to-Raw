@@ -65,7 +65,19 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 - 在 `raw-native-node-batch.json` 寫入 `semantic_artifacts`、`semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`。
 - 在 `sample-index.json` 寫入 `semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`。
 
-`semantic_to_raw_status` 目前固定為 `preserved-not-applied`，表示 sidecar 已保存並驗證，但未參與 raw buffer 生成。
+預設 `semantic_to_raw_status` 為 `preserved-not-applied`，表示 sidecar 已保存並驗證，但未參與 raw buffer 生成。
+
+若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic `region-exposure-mask-v1` prototype。這個 prototype 會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation，並在 manifest 中記錄 `semantic_reaction` summary。它只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。它不是完整物理 sensor model，也不宣稱光譜或相機模擬正確性。
+
+對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。
+
+目前 `semantic_to_raw_status` 有三種狀態：
+
+| Status | Manifest shape | 意義 |
+| --- | --- | --- |
+| `preserved-not-applied` | 有 `semantic_validation`，`semantic_reaction` 為空 | sidecar 已複製並驗證，但 raw values 仍由原始 scene-linear input 產生。 |
+| `applied` | `semantic_reaction.applied` 為 `true`，並包含 affected-region counts | opt-in `region-exposure-mask-v1` 在 RAW generation 前修改了複製後的 scene-linear input。 |
+| `no-op` | `semantic_reaction.applied` 為 `false`，並包含 `reason` | 已要求並驗證 reaction，但沒有符合條件的 exposure-mask region 造成 pixel 變更。 |
 
 ## 驗證
 

@@ -41,6 +41,7 @@ from image2dng.pipeline import (
     run_external_scene_linear_batch,
     run_raw_native_batch,
 )
+from image2dng.semantic_reaction import apply_region_exposure_reaction, load_semantic_payload
 from image2dng.semantic_scene import SEMANTIC_SCENE_SCHEMA, validate_semantic_scene
 from image2dng.validate import TAG_MAKER_NOTE, find_raw_image_page, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
@@ -394,7 +395,10 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "embedded_preview": "IFD0 JPEG preview",
         "raw_ifd_location": "Raw SubIFD referenced from IFD0",
         "external_scene_linear_boundary": "available",
-        "semantic_boundary": "metadata sidecar is preserved but not converted to raw values yet",
+        "semantic_boundary": (
+            "semantic sidecar is preserved by default; opt-in region-exposure-mask-v1 "
+            "can affect raw values"
+        ),
     }
     assert scene_manifest.keys() >= {
         "slug",
@@ -512,6 +516,103 @@ def test_semantic_scene_validator_rejects_boolean_numeric_values(tmp_path):
     assert "scene.width must be a positive integer" in result.errors
     assert any("exposure_bias_ev must be numeric" in error for error in result.errors)
     assert "sensor_response_hints.target_middle_gray must be between 0 and 1" in result.errors
+
+
+def test_semantic_scene_validator_rejects_non_finite_numeric_values(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["regions"][0]["response_hints"]["exposure_bias_ev"] = float("inf")
+    payload["sensor_response_hints"]["target_middle_gray"] = float("nan")
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert any("exposure_bias_ev must be numeric" in error for error in result.errors)
+    assert "sensor_response_hints.target_middle_gray must be between 0 and 1" in result.errors
+
+
+def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=4,
+        height=3,
+        exposure_bias_ev=1.0,
+        mask_columns=2,
+    )
+    image = np.full((3, 4, 3), 1000, dtype=np.uint16)
+
+    reacted, result = apply_region_exposure_reaction(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+        semantic_base_dir=tmp_path,
+    )
+
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.affected_pixels == 6
+    assert np.all(reacted[:, :2] == 2000)
+    assert np.all(reacted[:, 2:] == 1000)
+
+
+def test_semantic_reaction_reports_noop_without_exposure_regions(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=4,
+        height=3,
+        exposure_bias_ev=None,
+    )
+    image = np.full((3, 4, 3), 1000, dtype=np.uint16)
+
+    reacted, result = apply_region_exposure_reaction(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+        semantic_base_dir=tmp_path,
+    )
+
+    assert result.applied is False
+    assert result.status == "no-op"
+    assert result.reason == "no regions with exposure_bias_ev and mask_asset_id"
+    assert np.array_equal(reacted, image)
+
+
+def test_semantic_reaction_rejects_bad_mask_size(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=4, height=3)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    bad_mask = tmp_path / "bad-mask.png"
+    _write_gray_png(bad_mask, np.ones((2, 4), dtype=np.uint16))
+    payload["assets"][0]["path"] = bad_mask.name
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+    image = np.full((3, 4, 3), 1000, dtype=np.uint16)
+
+    try:
+        apply_region_exposure_reaction(
+            image,
+            semantic_payload=load_semantic_payload(semantic_path),
+            semantic_base_dir=tmp_path,
+        )
+    except ValueError as exc:
+        assert "semantic reaction mask size mismatch" in str(exc)
+    else:
+        raise AssertionError("expected bad mask size to fail")
+
+
+def test_semantic_reaction_rejects_non_finite_exposure_bias(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=4, height=3)
+    payload = load_semantic_payload(semantic_path)
+    payload["regions"][0]["response_hints"]["exposure_bias_ev"] = float("nan")
+    image = np.full((3, 4, 3), 1000, dtype=np.uint16)
+
+    try:
+        apply_region_exposure_reaction(
+            image,
+            semantic_payload=payload,
+            semantic_base_dir=tmp_path,
+        )
+    except ValueError as exc:
+        assert "semantic reaction exposure_bias_ev must be finite" in str(exc)
+    else:
+        raise AssertionError("expected non-finite exposure bias to fail")
 
 
 def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
@@ -643,6 +744,220 @@ def test_external_scene_linear_batch_preserves_same_basename_semantic_assets(tmp
     assert validate_semantic_scene(copied_semantic).ok
 
 
+def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        exposure_bias_ev=1.0,
+        mask_columns=10,
+    )
+
+    preserved = run_external_scene_linear_batch(
+        tmp_path / "preserved-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+            )
+        ],
+    )
+    reacted = run_external_scene_linear_batch(
+        tmp_path / "reacted-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    preserved_scene = json.loads(preserved.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    reacted_scene = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    assert preserved_scene["semantic_to_raw_status"] == "preserved-not-applied"
+    assert reacted_scene["semantic_to_raw_status"] == "applied"
+    assert reacted_scene["semantic_reaction"]["model"] == "region-exposure-mask-v1"
+    assert reacted_scene["semantic_reaction"]["affected_pixels"] == 180
+    assert Path(reacted_scene["outputs"]["original_scene_linear_input"]).exists()
+    assert Path(reacted_scene["outputs"]["scene_linear_input"]).name.endswith(
+        "-semantic-reaction.tif"
+    )
+    assert reacted_scene["nodes"][0]["parameters"]["semantic_boundary"] == (
+        "semantic sidecar applied through opt-in region-exposure-mask-v1 reaction"
+    )
+    assert (
+        preserved_scene["raw_data_unique_ids"]["linearraw"]
+        != reacted_scene["raw_data_unique_ids"]["linearraw"]
+    )
+    assert preserved_scene["prompt_hash"] != reacted_scene["prompt_hash"]
+
+    sample = json.loads(reacted.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
+    assert sample["semantic_to_raw_status"] == "applied"
+    assert sample["semantic_reaction"] == {
+        "model": "region-exposure-mask-v1",
+        "applied": True,
+        "region_count": 1,
+        "affected_pixels": 180,
+    }
+
+
+def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        exposure_bias_ev=None,
+    )
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "noop-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    scene_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    assert scene_manifest["semantic_to_raw_status"] == "no-op"
+    assert scene_manifest["semantic_reaction"]["applied"] is False
+    assert scene_manifest["semantic_reaction"]["reason"] == (
+        "no regions with exposure_bias_ev and mask_asset_id"
+    )
+
+
+def test_external_scene_linear_batch_semantic_reaction_rejects_encoded_input(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(tmp_path, width=20, height=18)
+
+    try:
+        run_external_scene_linear_batch(
+            tmp_path / "encoded-batch",
+            scenes=[
+                ExternalSceneLinearInput(
+                    slug="external-scene",
+                    path=source_path,
+                    input_space="srgb",
+                    semantic_manifest=semantic_path,
+                    apply_semantic_reaction=True,
+                )
+            ],
+        )
+    except ValueError as exc:
+        assert "semantic reaction requires linear-light input_space" in str(exc)
+    else:
+        raise AssertionError("expected encoded semantic reaction input to fail")
+
+
+def test_external_scene_linear_batch_semantic_reaction_hashes_mask_asset_bytes(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        exposure_bias_ev=1.0,
+        mask_columns=5,
+    )
+
+    first = run_external_scene_linear_batch(
+        tmp_path / "first-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+    _write_gray_png(
+        tmp_path / "renderer-frame-001-mask.png",
+        np.full((18, 20), 65535, dtype=np.uint16),
+    )
+    second = run_external_scene_linear_batch(
+        tmp_path / "second-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    first_scene = json.loads(first.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    second_scene = json.loads(second.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    assert first_scene["prompt_hash"] != second_scene["prompt_hash"]
+    assert first_scene["semantic_reaction"]["affected_pixels"] == 90
+    assert second_scene["semantic_reaction"]["affected_pixels"] == 360
+    assert (
+        first_scene["raw_data_unique_ids"]["linearraw"]
+        != second_scene["raw_data_unique_ids"]["linearraw"]
+    )
+
+
+def test_external_scene_linear_batch_semantic_reaction_rejects_dimension_mismatch(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(tmp_path, width=19, height=18)
+
+    try:
+        run_external_scene_linear_batch(
+            tmp_path / "bad-dimensions-batch",
+            scenes=[
+                ExternalSceneLinearInput(
+                    slug="external-scene",
+                    path=source_path,
+                    semantic_manifest=semantic_path,
+                    apply_semantic_reaction=True,
+                )
+            ],
+        )
+    except ValueError as exc:
+        assert "semantic reaction scene dimensions mismatch" in str(exc)
+    else:
+        raise AssertionError("expected dimension-mismatched semantic reaction to fail")
+
+
+def test_external_scene_linear_batch_semantic_reaction_rejects_sidecar_input_space_mismatch(
+    tmp_path,
+):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(tmp_path, width=20, height=18, input_space="acescg")
+
+    try:
+        run_external_scene_linear_batch(
+            tmp_path / "bad-input-space-batch",
+            scenes=[
+                ExternalSceneLinearInput(
+                    slug="external-scene",
+                    path=source_path,
+                    input_space="linear-rec709",
+                    semantic_manifest=semantic_path,
+                    apply_semantic_reaction=True,
+                )
+            ],
+        )
+    except ValueError as exc:
+        assert "semantic reaction input_space mismatch" in str(exc)
+    else:
+        raise AssertionError("expected sidecar input_space-mismatched semantic reaction to fail")
+
+
 def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
     source_path = tmp_path / "manifest-scene.tif"
     semantic_path = tmp_path / "manifest-semantics.json"
@@ -660,6 +975,7 @@ def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
                         "input_space": "linear-rec709",
                         "producer": "manifest-renderer",
                         "semantic_manifest": semantic_path.name,
+                        "apply_semantic_reaction": True,
                     }
                 ],
             }
@@ -676,6 +992,7 @@ def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
             input_space="linear-rec709",
             producer="manifest-renderer",
             semantic_manifest=semantic_path,
+            apply_semantic_reaction=True,
         )
     ]
 
@@ -1335,10 +1652,14 @@ def _write_semantic_scene(
     *,
     width: int,
     height: int,
+    input_space: str = "linear-rec709",
     include_hash: bool = False,
+    exposure_bias_ev: float | None = 0.0,
+    mask_columns: int | None = None,
 ) -> Path:
     mask_path = directory / "renderer-frame-001-mask.png"
-    mask = np.full((height, width), 65535, dtype=np.uint16)
+    mask = np.zeros((height, width), dtype=np.uint16)
+    mask[:, : (mask_columns or width)] = 65535
     with mask_path.open("wb") as handle:
         png.Writer(width=width, height=height, bitdepth=16, greyscale=True).write(
             handle,
@@ -1363,7 +1684,7 @@ def _write_semantic_scene(
                     "width": width,
                     "height": height,
                     "coordinate_space": "pixel",
-                    "input_space": "linear-rec709",
+                    "input_space": input_space,
                 },
                 "producer": {
                     "name": "external renderer",
@@ -1397,11 +1718,17 @@ def _write_semantic_scene(
                         "material_id": "mat-neutral-card",
                         "mask_asset_id": "mask-material-chart",
                         "bbox": [0, 0, width, height],
-                        "response_hints": {
-                            "exposure_bias_ev": 0.0,
-                            "preserve_highlight_detail": True,
-                            "noise_priority": "low",
-                        },
+                        **(
+                            {
+                                "response_hints": {
+                                    "exposure_bias_ev": exposure_bias_ev,
+                                    "preserve_highlight_detail": True,
+                                    "noise_priority": "low",
+                                }
+                            }
+                            if exposure_bias_ev is not None
+                            else {}
+                        ),
                     }
                 ],
                 "sensor_response_hints": {
