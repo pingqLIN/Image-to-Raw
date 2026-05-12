@@ -68,7 +68,7 @@ uv run python scripts/generate_raw_native_batch.py `
 }
 ```
 
-`semantic_manifest` 是刻意保留的下一階段接點：目前只複製並記錄到 batch manifest，不把語意資訊轉成 raw sample values。後續真正有價值的方向，是讓 upstream generator 在生成時帶出 scene semantics，再由本專案把語意、材質、照明與 sensor model 映射成對應的光子/感測器反應數值，最後儲存為 RAW。
+`semantic_manifest` 是刻意保留的下一階段接點。若 sidecar 使用 `image2dng.semantic_scene.v1`，pipeline 會在 DNG 產生前驗證它、複製 sidecar、複製可 resolve 的 local assets，並在 batch manifest 與 sample index 記錄 validation summary。現階段仍不把語意資訊轉成 raw sample values。詳細 contract 見 [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md)。
 
 ## Artifact contract
 
@@ -81,6 +81,7 @@ uv run python scripts/generate_raw_native_batch.py `
 - `jpeg/*-cfa-rggb.jpg`：由 CFA DNG raw page false-color render 的 sidecar JPEG preview。
 - `validation/*.json`：validator 結果。
 - `manifests/raw-native-node-batch.json`：節點流程、輸入輸出、參數與驗證摘要。
+- 若使用 semantic sidecar，batch manifest 會記錄 `semantic_artifacts`、`semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`；sample index 會記錄 `semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`。
 
 ## 目前實作
 
@@ -109,6 +110,6 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 ## 下一個 gate
 
 1. 用代表樣本持續驗證 `preview-subifd` layout 在 RAW tools 中的行為；這是格式實驗，不直接宣稱完整 Adobe 相容。
-2. 擴充 semantic sidecar contract，定義語意、材質、光照、mask/depth 等如何進入 photon/sensor-response mapping。
+2. 在已驗證的 semantic sidecar contract 上，設計語意、材質、光照、mask/depth 等如何進入 photon/sensor-response mapping。
 3. 在 DNG tag contract 與 compatibility evidence 穩定後，再做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor/semantic sidecar，輸出 DNG path、sidecar JPEG path、manifest。
 4. 若 ComfyUI custom node 穩定，再加入 ComfyUI 安裝與 smoke workflow 文件。

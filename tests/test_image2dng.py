@@ -41,6 +41,7 @@ from image2dng.pipeline import (
     run_external_scene_linear_batch,
     run_raw_native_batch,
 )
+from image2dng.semantic_scene import SEMANTIC_SCENE_SCHEMA, validate_semantic_scene
 from image2dng.validate import TAG_MAKER_NOTE, find_raw_image_page, validate_dng
 from image2dng.xmp import XMP_AI_NAMESPACE
 
@@ -444,19 +445,79 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
     }
 
 
+def test_semantic_scene_validator_accepts_minimal_valid_sidecar(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert result.ok, result.errors
+    assert result.warnings == []
+    assert result.schema == SEMANTIC_SCENE_SCHEMA
+    assert result.to_dict()["counts"] == {
+        "assets": 1,
+        "materials": 1,
+        "lights": 1,
+        "regions": 1,
+    }
+
+
+def test_semantic_scene_validator_rejects_duplicate_ids_and_bad_references(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["materials"].append({"id": "mat-neutral-card"})
+    payload["regions"][0]["material_id"] = "missing-material"
+    payload["regions"][0]["mask_asset_id"] = "missing-asset"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "duplicate materials id: mat-neutral-card" in result.errors
+    assert any("unknown material: missing-material" in error for error in result.errors)
+    assert any("unknown asset: missing-asset" in error for error in result.errors)
+
+
+def test_semantic_scene_validator_warns_when_optional_asset_hash_is_missing(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert result.ok, result.errors
+    assert result.warnings == ["assets[0].sha256 is missing; asset integrity is unverified"]
+
+
+def test_semantic_scene_validator_rejects_unsupported_schema(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["schema"] = "example.semantic_scene.v1"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "unsupported semantic scene schema: 'example.semantic_scene.v1'" in result.errors
+
+
+def test_semantic_scene_validator_rejects_boolean_numeric_values(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["scene"]["width"] = True
+    payload["regions"][0]["response_hints"]["exposure_bias_ev"] = False
+    payload["sensor_response_hints"]["target_middle_gray"] = True
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "scene.width must be a positive integer" in result.errors
+    assert any("exposure_bias_ev must be numeric" in error for error in result.errors)
+    assert "sensor_response_hints.target_middle_gray must be between 0 and 1" in result.errors
+
+
 def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
     source_path = tmp_path / "external-scene.tif"
-    semantic_path = tmp_path / "external-semantics.json"
     tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
-    semantic_path.write_text(
-        json.dumps(
-            {
-                "schema": "example.semantic_scene.v1",
-                "regions": [{"name": "highlight ramp", "material": "emissive"}],
-            }
-        ),
-        encoding="utf-8",
-    )
+    semantic_path = _write_semantic_scene(tmp_path, width=20, height=18)
 
     result = run_external_scene_linear_batch(
         tmp_path / "external-batch",
@@ -481,13 +542,105 @@ def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
     assert scene_manifest["source_type"] == "external-scene-linear"
     assert scene_manifest["producer"] == "unit-test-renderer"
     assert scene_manifest["input_space"] == "linear-rec709"
-    assert scene_manifest["semantic_artifacts"].keys() == {"semantic_manifest"}
+    assert scene_manifest["semantic_artifacts"].keys() == {
+        "semantic_manifest",
+        "asset:mask-material-chart",
+    }
+    assert scene_manifest["semantic_contract"] == SEMANTIC_SCENE_SCHEMA
+    assert scene_manifest["semantic_to_raw_status"] == "preserved-not-applied"
+    assert scene_manifest["semantic_validation"]["ok"] is True
+    assert scene_manifest["semantic_validation"]["warnings"]
     assert Path(outputs["scene_linear_input"]).exists()
-    assert Path(scene_manifest["semantic_artifacts"]["semantic_manifest"]).exists()
+    copied_semantic = Path(scene_manifest["semantic_artifacts"]["semantic_manifest"])
+    assert copied_semantic.exists()
+    assert Path(scene_manifest["semantic_artifacts"]["asset:mask-material-chart"]).exists()
+    copied_validation = validate_semantic_scene(copied_semantic)
+    assert copied_validation.ok, copied_validation.errors
     assert validate_dng(outputs["linearraw_dng"], run_smoke=False).ok
     assert validate_dng(outputs["cfa_dng"], run_smoke=False).ok
     assert scene_manifest["validations"]["linearraw"]["ok"] is True
     assert scene_manifest["validations"]["cfa"]["ok"] is True
+
+    sample_index = json.loads(result.sample_index_path.read_text(encoding="utf-8"))
+    sample = sample_index["samples"][0]
+    assert sample["semantic_contract"] == SEMANTIC_SCENE_SCHEMA
+    assert sample["semantic_to_raw_status"] == "preserved-not-applied"
+    assert sample["semantic_validation"]["ok"] is True
+
+
+def test_external_scene_linear_batch_rejects_invalid_semantic_sidecar(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    semantic_path = tmp_path / "bad-semantics.json"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path.write_text(
+        json.dumps({"schema": SEMANTIC_SCENE_SCHEMA, "scene": {"id": "missing-dimensions"}}),
+        encoding="utf-8",
+    )
+
+    try:
+        run_external_scene_linear_batch(
+            tmp_path / "external-batch",
+            scenes=[
+                ExternalSceneLinearInput(
+                    slug="external-scene",
+                    path=source_path,
+                    semantic_manifest=semantic_path,
+                )
+            ],
+        )
+    except ValueError as exc:
+        assert "invalid semantic scene sidecar" in str(exc)
+        assert "scene.width must be a positive integer" in str(exc)
+    else:
+        raise AssertionError("expected invalid semantic sidecar to stop the batch")
+
+
+def test_external_scene_linear_batch_preserves_same_basename_semantic_assets(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    asset_a = tmp_path / "a" / "mask.png"
+    asset_b = tmp_path / "b" / "mask.png"
+    asset_a.parent.mkdir()
+    asset_b.parent.mkdir()
+    _write_gray_png(asset_a, np.zeros((18, 20), dtype=np.uint16))
+    _write_gray_png(asset_b, np.full((18, 20), 65535, dtype=np.uint16))
+    semantic_path = _write_semantic_scene(tmp_path, width=20, height=18)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["assets"] = [
+        {"id": "mask-dark", "kind": "mask", "path": "a/mask.png", "space": "pixel"},
+        {"id": "mask-bright", "kind": "mask", "path": "b/mask.png", "space": "pixel"},
+    ]
+    payload["regions"][0]["mask_asset_id"] = "mask-dark"
+    payload["regions"].append(
+        {
+            "id": "region-bright",
+            "material_id": "mat-neutral-card",
+            "mask_asset_id": "mask-bright",
+            "bbox": [0, 0, 20, 18],
+        }
+    )
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "external-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+            )
+        ],
+    )
+
+    scene_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    dark_copy = Path(scene_manifest["semantic_artifacts"]["asset:mask-dark"])
+    bright_copy = Path(scene_manifest["semantic_artifacts"]["asset:mask-bright"])
+    assert dark_copy != bright_copy
+    assert dark_copy.name == "mask-dark.png"
+    assert bright_copy.name == "mask-bright.png"
+    assert dark_copy.read_bytes() != bright_copy.read_bytes()
+    copied_semantic = Path(scene_manifest["semantic_artifacts"]["semantic_manifest"])
+    assert validate_semantic_scene(copied_semantic).ok
 
 
 def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
@@ -1175,6 +1328,101 @@ def _gradient_image(width: int, height: int) -> np.ndarray:
     green = np.tile(y[:, np.newaxis], (1, width))
     blue = ((red.astype(np.uint32) + green.astype(np.uint32)) // 2).astype(np.uint16)
     return np.stack([red, green, blue], axis=2)
+
+
+def _write_semantic_scene(
+    directory: Path,
+    *,
+    width: int,
+    height: int,
+    include_hash: bool = False,
+) -> Path:
+    mask_path = directory / "renderer-frame-001-mask.png"
+    mask = np.full((height, width), 65535, dtype=np.uint16)
+    with mask_path.open("wb") as handle:
+        png.Writer(width=width, height=height, bitdepth=16, greyscale=True).write(
+            handle,
+            mask.tolist(),
+        )
+    asset = {
+        "id": "mask-material-chart",
+        "kind": "mask",
+        "path": mask_path.name,
+        "space": "pixel",
+    }
+    if include_hash:
+        asset["sha256"] = f"sha256:{hashlib.sha256(mask_path.read_bytes()).hexdigest()}"
+    semantic_path = directory / "renderer-frame-001.semantic.json"
+    semantic_path.write_text(
+        json.dumps(
+            {
+                "schema": SEMANTIC_SCENE_SCHEMA,
+                "scene": {
+                    "id": "renderer-frame-001",
+                    "description": "scene-linear output from an upstream generator",
+                    "width": width,
+                    "height": height,
+                    "coordinate_space": "pixel",
+                    "input_space": "linear-rec709",
+                },
+                "producer": {
+                    "name": "external renderer",
+                    "version": "0.1.0",
+                    "prompt_hash": "sha256:unit",
+                },
+                "assets": [asset],
+                "materials": [
+                    {
+                        "id": "mat-neutral-card",
+                        "label": "neutral gray card",
+                        "base_color": [0.18, 0.18, 0.18],
+                        "roughness": 0.5,
+                        "metallic": 0.0,
+                        "emission": [0.0, 0.0, 0.0],
+                    }
+                ],
+                "lights": [
+                    {
+                        "id": "key-light",
+                        "type": "area",
+                        "color_temperature_kelvin": 6500,
+                        "relative_intensity": 1.0,
+                        "direction": [0.0, -0.5, -1.0],
+                    }
+                ],
+                "regions": [
+                    {
+                        "id": "region-neutral-card",
+                        "label": "neutral card",
+                        "material_id": "mat-neutral-card",
+                        "mask_asset_id": "mask-material-chart",
+                        "bbox": [0, 0, width, height],
+                        "response_hints": {
+                            "exposure_bias_ev": 0.0,
+                            "preserve_highlight_detail": True,
+                            "noise_priority": "low",
+                        },
+                    }
+                ],
+                "sensor_response_hints": {
+                    "target_white_balance_kelvin": 6500,
+                    "target_middle_gray": 0.18,
+                    "clipping_policy": "preserve-highlights",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return semantic_path
+
+
+def _write_gray_png(path: Path, image: np.ndarray) -> None:
+    height, width = image.shape
+    with path.open("wb") as handle:
+        png.Writer(width=width, height=height, bitdepth=16, greyscale=True).write(
+            handle,
+            image.tolist(),
+        )
 
 
 def _write_png(path, image: np.ndarray) -> None:

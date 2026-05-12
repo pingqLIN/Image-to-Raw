@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,11 @@ from PIL import Image
 
 from image2dng.api import ConversionResult, convert
 from image2dng.image_processing import InputSpace
+from image2dng.semantic_scene import (
+    SEMANTIC_SCENE_SCHEMA,
+    SemanticSceneValidationResult,
+    validate_semantic_scene,
+)
 from image2dng.validate import find_raw_image_page, validate_dng
 
 SceneStyle = Literal["chart-ramp", "portrait-light-study", "material-still-life"]
@@ -65,6 +71,9 @@ class PipelineSceneResult:
     producer: str = ""
     input_space: str = "linear-rec709"
     semantic_artifacts: dict[str, str] | None = None
+    semantic_validation: dict[str, Any] | None = None
+    semantic_contract: str | None = None
+    semantic_to_raw_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -286,7 +295,7 @@ def _run_external_scene_graph(
     prompt_hash = _external_prompt_hash(scene)
     target_input = inputs_dir / f"{scene.slug}-scene-linear{source_path.suffix.lower()}"
     shutil.copy2(source_path, target_input)
-    semantic_artifacts = _copy_semantic_manifest(scene, inputs_dir)
+    semantic_artifacts, semantic_validation = _copy_semantic_manifest(scene, inputs_dir)
     nodes.append(
         PipelineNodeRecord(
             node_id=f"{scene.slug}:external-scene-linear",
@@ -322,6 +331,7 @@ def _run_external_scene_graph(
         overwrite=overwrite,
         nodes=nodes,
         semantic_artifacts=semantic_artifacts or None,
+        semantic_validation=semantic_validation,
     )
 
 
@@ -343,6 +353,7 @@ def _run_capture_graph(
     overwrite: bool,
     nodes: list[PipelineNodeRecord],
     semantic_artifacts: dict[str, str] | None,
+    semantic_validation: dict[str, Any] | None = None,
 ) -> PipelineSceneResult:
     linear_dng = raw_dir / f"{slug}-linearraw.dng"
     linear_result = _convert_node(
@@ -447,6 +458,13 @@ def _run_capture_graph(
         producer=producer,
         input_space=input_space,
         semantic_artifacts=semantic_artifacts,
+        semantic_validation=semantic_validation,
+        semantic_contract=(
+            SEMANTIC_SCENE_SCHEMA if semantic_validation is not None else None
+        ),
+        semantic_to_raw_status=(
+            "preserved-not-applied" if semantic_validation is not None else None
+        ),
     )
 
 
@@ -551,22 +569,32 @@ def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, An
         "all_validations_ok": all(
             report["ok"] for scene in scenes for report in scene.validations.values()
         ),
-        "samples": [
-            {
-                "slug": scene.slug,
-                "source_type": scene.source_type,
-                "producer": scene.producer,
-                "input_space": scene.input_space,
-                "prompt_hash": scene.prompt_hash,
-                "artifacts": scene.outputs,
-                "validation_ok": {
-                    name: report["ok"] for name, report in scene.validations.items()
-                },
-                "raw_data_unique_ids": scene.raw_data_unique_ids,
-            }
-            for scene in scenes
-        ],
+        "samples": [_sample_index_scene(scene) for scene in scenes],
     }
+
+
+def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
+    sample = {
+        "slug": scene.slug,
+        "source_type": scene.source_type,
+        "producer": scene.producer,
+        "input_space": scene.input_space,
+        "prompt_hash": scene.prompt_hash,
+        "artifacts": scene.outputs,
+        "validation_ok": {
+            name: report["ok"] for name, report in scene.validations.items()
+        },
+        "raw_data_unique_ids": scene.raw_data_unique_ids,
+    }
+    if scene.semantic_validation is not None:
+        sample.update(
+            {
+                "semantic_contract": scene.semantic_contract,
+                "semantic_to_raw_status": scene.semantic_to_raw_status,
+                "semantic_validation": scene.semantic_validation,
+            }
+        )
+    return sample
 
 
 def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
@@ -578,6 +606,9 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "prompt_hash": scene.prompt_hash,
         "outputs": scene.outputs,
         "semantic_artifacts": scene.semantic_artifacts or {},
+        "semantic_validation": scene.semantic_validation or {},
+        "semantic_contract": scene.semantic_contract,
+        "semantic_to_raw_status": scene.semantic_to_raw_status,
         "raw_data_unique_ids": scene.raw_data_unique_ids,
         "validations": {
             key: {
@@ -630,14 +661,73 @@ def _external_scene_from_manifest_item(
 def _copy_semantic_manifest(
     scene: ExternalSceneLinearInput,
     inputs_dir: Path,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, Any] | None]:
     if scene.semantic_manifest is None:
-        return {}
+        return {}, None
     if not scene.semantic_manifest.exists():
         raise FileNotFoundError(scene.semantic_manifest)
+    validation = validate_semantic_scene(scene.semantic_manifest)
+    if not validation.ok:
+        raise ValueError(
+            f"{scene.slug}: invalid semantic scene sidecar: {'; '.join(validation.errors)}"
+        )
     target = inputs_dir / f"{scene.slug}-semantic{scene.semantic_manifest.suffix.lower()}"
-    shutil.copy2(scene.semantic_manifest, target)
-    return {"semantic_manifest": str(target)}
+    payload = json.loads(scene.semantic_manifest.read_text(encoding="utf-8"))
+    artifacts = {"semantic_manifest": str(target)}
+    copied_assets = _copy_semantic_assets(scene.slug, validation, inputs_dir)
+    artifacts.update(copied_assets)
+    _rewrite_semantic_asset_paths(payload, copied_assets, inputs_dir)
+    target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    copied_validation = validate_semantic_scene(target)
+    if not copied_validation.ok:
+        raise ValueError(
+            f"{scene.slug}: copied semantic scene sidecar is invalid: "
+            f"{'; '.join(copied_validation.errors)}"
+        )
+    return artifacts, copied_validation.to_dict()
+
+
+def _copy_semantic_assets(
+    slug: str,
+    validation: SemanticSceneValidationResult,
+    inputs_dir: Path,
+) -> dict[str, str]:
+    artifacts: dict[str, str] = {}
+    asset_paths = validation.asset_paths or {}
+    if not asset_paths:
+        return artifacts
+    asset_dir = inputs_dir / f"{slug}-semantic-assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    for asset_id, source in asset_paths.items():
+        target = asset_dir / _semantic_asset_filename(asset_id, source)
+        shutil.copy2(source, target)
+        artifacts[f"asset:{asset_id}"] = str(target)
+    return artifacts
+
+
+def _rewrite_semantic_asset_paths(
+    payload: Any,
+    copied_assets: dict[str, str],
+    inputs_dir: Path,
+) -> None:
+    if not isinstance(payload, dict):
+        return
+    assets = payload.get("assets")
+    if not isinstance(assets, list):
+        return
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        asset_id = asset.get("id")
+        copied_path = copied_assets.get(f"asset:{asset_id}")
+        if copied_path is None:
+            continue
+        asset["path"] = str(Path(copied_path).relative_to(inputs_dir))
+
+
+def _semantic_asset_filename(asset_id: str, source: Path) -> str:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", asset_id).strip(".-")
+    return f"{safe_id or 'asset'}{source.suffix.lower()}"
 
 
 def _manifest_string(item: dict[str, object], key: str) -> str:

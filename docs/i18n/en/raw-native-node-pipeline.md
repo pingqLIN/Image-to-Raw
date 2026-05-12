@@ -68,7 +68,7 @@ For multiple images or per-image metadata, use an `image2dng.external_scene_line
 }
 ```
 
-`semantic_manifest` is a deliberate next-stage hook: the current implementation copies it and records it in the batch manifest, but does not convert semantic information into raw sample values. The more valuable long-term direction is for the upstream generator to emit scene semantics during generation, then for this project to map semantics, material, lighting, and sensor model data into photon/sensor-response values stored as RAW.
+`semantic_manifest` is a deliberate next-stage hook. When the sidecar uses `image2dng.semantic_scene.v1`, the pipeline validates it before DNG generation, copies the sidecar, copies resolvable local assets, and records a validation summary in the batch manifest and sample index. The current implementation still does not convert semantic information into raw sample values. See [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md) for the detailed contract.
 
 ## Artifact Contract
 
@@ -81,6 +81,7 @@ Each batch emits at least:
 - `jpeg/*-cfa-rggb.jpg`: sidecar false-color JPEG preview rendered from the CFA DNG raw page.
 - `validation/*.json`: validator results.
 - `manifests/raw-native-node-batch.json`: node flow, inputs, outputs, parameters, and validation summary.
+- With a semantic sidecar, the batch manifest records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`; the sample index records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`.
 
 ## Current Implementation
 
@@ -109,6 +110,6 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 ## Next Gate
 
 1. Continue validating the `preview-subifd` layout with representative samples in RAW tools; this is a format experiment, not a full Adobe compatibility claim.
-2. Expand the semantic sidecar contract and define how semantics, material, lighting, mask, and depth data enter photon/sensor-response mapping.
+2. Build on the validated semantic sidecar contract and define how semantics, material, lighting, mask, and depth data enter photon/sensor-response mapping.
 3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt, scene-linear tensor, and semantic sidecar input and returns DNG path, sidecar JPEG path, and manifest.
 4. Add ComfyUI installation and smoke workflow docs after the custom node is stable.

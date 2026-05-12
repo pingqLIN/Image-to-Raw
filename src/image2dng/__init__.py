@@ -20,6 +20,11 @@ from image2dng.pipeline import (
     run_external_scene_linear_batch,
     run_raw_native_batch,
 )
+from image2dng.semantic_scene import (
+    SEMANTIC_SCENE_SCHEMA,
+    SemanticSceneValidationResult,
+    validate_semantic_scene,
+)
 from image2dng.sensor_effects import SensorEffectModel
 
 __all__ = [
@@ -33,11 +38,14 @@ __all__ = [
     "InvalidMetadataError",
     "OutputExistsError",
     "PipelineBatchResult",
+    "SEMANTIC_SCENE_SCHEMA",
     "SensorEffectModel",
+    "SemanticSceneValidationResult",
     "UnsupportedInputError",
     "ValidationError",
     "convert",
     "load_external_scene_manifest",
     "run_external_scene_linear_batch",
     "run_raw_native_batch",
+    "validate_semantic_scene",
 ]

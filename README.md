@@ -28,6 +28,7 @@ This product includes DNG technology under license by Adobe.
 | Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
 | Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
 | RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
+| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; not yet applied to raw values |
 | Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
 | Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
 
@@ -90,7 +91,7 @@ Use a manifest when each image needs producer, prompt, lighting, or semantic sid
 }
 ```
 
-`semantic_manifest` is copied and recorded in the batch manifest as the future boundary for mapping semantic scene information into photon/sensor-response raw values. The current implementation preserves the sidecar but does not convert semantic metadata into raw sample values yet.
+When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. This is the future boundary for mapping semantic scene information into photon/sensor-response raw values; the current implementation still does not convert semantic metadata into raw sample values yet. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
 
 ## Run the development baseline verification
 
@@ -268,6 +269,7 @@ Current MVP:
 - Explicit simulated CFA mosaic mode.
 - Default `preview-subifd` DNG layout with an IFD0 JPEG preview and Raw SubIFD.
 - Built-in minimal RAW-native node pipeline that emits DNG, sidecar JPEG preview, validation JSON, and graph manifest artifacts.
+- `image2dng.semantic_scene.v1` sidecar validation and preservation.
 - Optional deterministic synthetic sensor effects for demos and compatibility testing.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.

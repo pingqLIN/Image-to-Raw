@@ -28,6 +28,7 @@ This product includes DNG technology under license by Adobe.
 | Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
 | Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
 | RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
+| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; not yet applied to raw values |
 | Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
 | Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
 
@@ -86,7 +87,7 @@ uv run python scripts/generate_raw_native_batch.py `
 }
 ```
 
-`semantic_manifest` 目前會被複製並寫入 batch manifest，作為未來「語意資訊轉光子/感測器反應 raw 數值」的邊界；現階段尚不把 semantic sidecar 轉成 raw sample values。
+`semantic_manifest` 若使用 `image2dng.semantic_scene.v1`，會在 DNG 產生前被驗證，sidecar 與可解析的 local assets 會被複製並寫入 batch manifest / sample index。這是未來「語意資訊轉光子/感測器反應 raw 數值」的邊界；現階段尚不把 semantic sidecar 轉成 raw sample values。詳細格式見 [docs/i18n/zh-TW/semantic-scene-sidecar-contract.md](docs/i18n/zh-TW/semantic-scene-sidecar-contract.md)。
 
 ## 執行開發基線驗證
 
@@ -251,6 +252,7 @@ uv run ruff check
 - 明確 opt-in 的 simulated CFA mosaic mode。
 - 預設 `preview-subifd` DNG layout：IFD0 JPEG preview 加上 Raw SubIFD。
 - 內建最小 RAW-native node pipeline，可產生 DNG、sidecar JPEG preview、validation JSON 與 graph manifest。
+- `image2dng.semantic_scene.v1` sidecar validation 與 preservation。
 - 可選 deterministic synthetic sensor effects，供 demo 與 compatibility testing 使用。
 - RGB input normalization 與 simple virtual camera transform。
 - XMP custom namespace：`https://example.org/ns/xmp/ai/1.0/`。
