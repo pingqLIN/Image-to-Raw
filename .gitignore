@@ -6,7 +6,17 @@ __pycache__/
 .venv/
 build/
 dist/
+data/
+demo-output/
+docs/local/
 *.dng
+*.arw
+*.cr2
+*.cr3
+*.nef
+*.orf
+*.raf
+*.rw2
 *.tif
 *.tiff
 *.png

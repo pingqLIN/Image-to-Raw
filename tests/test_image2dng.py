@@ -1205,6 +1205,178 @@ def test_processor_inventory_discovers_darktable_common_install_path(tmp_path, m
     assert inventory["darktable-cli"]["version"] == "fake-tool 1.0"
 
 
+def test_real_raw_sample_audit_writes_local_research_reports(tmp_path, monkeypatch):
+    module = _load_script_module("audit_real_raw_sample")
+    sample_dir = tmp_path / "samples"
+    sample_dir.mkdir()
+    dng_path = _write_test_dng(sample_dir, prompt_hash="sha256:real-raw-audit")
+    output_dir = tmp_path / "real-raw-reports"
+    monkeypatch.setattr(module, "resolve_processor_executable", lambda _tool: (None, None))
+
+    exit_code = module.main(
+        [
+            "--input",
+            str(dng_path),
+            "--sample-id",
+            "synthetic-dng-local",
+            "--source-name",
+            "unit-test local sample",
+            "--license-summary",
+            "local research only",
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    assert exit_code == 0
+    assert sorted(path.name for path in output_dir.iterdir()) == [
+        "metadata-summary.json",
+        "redaction-report.json",
+        "research-ledger-entry.json",
+    ]
+    metadata = json.loads((output_dir / "metadata-summary.json").read_text(encoding="utf-8"))
+    redaction = json.loads((output_dir / "redaction-report.json").read_text(encoding="utf-8"))
+    ledger = json.loads((output_dir / "research-ledger-entry.json").read_text(encoding="utf-8"))
+
+    assert metadata["schema"] == "image2dng.real_raw_sample_research.v1"
+    assert metadata["sample_id"] == "synthetic-dng-local"
+    assert metadata["raw_format"] == "dng"
+    assert metadata["input_sha256"].startswith("sha256:")
+    assert metadata["detected_metadata"]["camera_make"] == "image2dng"
+    assert metadata["detected_metadata"]["preview_ifd_present"] is True
+    assert metadata["optional_tools"]["exiftool"]["result"] == "skipped"
+    assert "metadata" not in metadata["optional_tools"]["exiftool"]
+
+    assert redaction["schema"] == "image2dng.real_raw_sample_research.v1"
+    assert set(redaction["fields"].values()) <= {"present", "absent", "unknown"}
+    assert redaction["fields"]["embedded_preview_present"] == "present"
+    assert redaction["policy"]["public_release_allowed_by_this_report"] is False
+
+    assert ledger["schema"] == "image2dng.real_raw_sample_research.v1"
+    assert ledger["local_research_only"] is True
+    assert ledger["source"]["redistribution_allowed"] is False
+    assert ledger["input_sha256"] == metadata["input_sha256"]
+    assert "metadata" not in ledger["optional_tools"]["exiftool"]
+
+
+def test_real_raw_sample_audit_rejects_missing_input(tmp_path):
+    module = _load_script_module("audit_real_raw_sample")
+
+    exit_code = module.main(
+        [
+            "--input",
+            str(tmp_path / "missing.dng"),
+            "--sample-id",
+            "missing",
+            "--output-dir",
+            str(tmp_path / "reports"),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    assert exit_code == 2
+    assert not (tmp_path / "reports").exists()
+
+
+def test_real_raw_sample_audit_refuses_tracked_output_without_override(tmp_path):
+    module = _load_script_module("audit_real_raw_sample")
+    dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:real-raw-refuse")
+    output_dir = tmp_path / "reports"
+
+    exit_code = module.main(
+        [
+            "--input",
+            str(dng_path),
+            "--sample-id",
+            "refuse-outside-demo-output",
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_real_raw_sample_audit_refuses_output_inside_sample_directory(tmp_path):
+    module = _load_script_module("audit_real_raw_sample")
+    sample_dir = tmp_path / "real-raw-samples"
+    sample_dir.mkdir()
+    raw_path = sample_dir / "sample.nef"
+    raw_path.write_bytes(b"not a real nef")
+    output_dir = sample_dir / "reports"
+
+    exit_code = module.main(
+        [
+            "--input",
+            str(raw_path),
+            "--sample-id",
+            "refuse-sample-dir-output",
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_real_raw_sample_audit_refuses_output_inside_input_directory(tmp_path):
+    module = _load_script_module("audit_real_raw_sample")
+    dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:real-raw-overlap")
+    output_dir = dng_path.parent / "reports"
+
+    exit_code = module.main(
+        [
+            "--input",
+            str(dng_path),
+            "--sample-id",
+            "refuse-overlap",
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_real_raw_sample_audit_marks_proprietary_raw_redaction_unknown(tmp_path, monkeypatch):
+    module = _load_script_module("audit_real_raw_sample")
+    sample_dir = tmp_path / "samples"
+    sample_dir.mkdir()
+    raw_path = sample_dir / "sample.nef"
+    raw_path.write_bytes(b"not a real nef, enough for scaffold hashing")
+    output_dir = tmp_path / "nef-reports"
+    monkeypatch.setattr(module, "resolve_processor_executable", lambda _tool: (None, None))
+
+    assert (
+        module.main(
+            [
+                "--input",
+                str(raw_path),
+                "--sample-id",
+                "nef-local",
+                "--output-dir",
+                str(output_dir),
+                "--allow-output-outside-demo-output",
+            ]
+        )
+        == 0
+    )
+
+    metadata = json.loads((output_dir / "metadata-summary.json").read_text(encoding="utf-8"))
+    redaction = json.loads((output_dir / "redaction-report.json").read_text(encoding="utf-8"))
+    assert metadata["raw_format"] == "nef"
+    assert metadata["optional_tools"]["exiftool"]["result"] == "skipped"
+    assert set(redaction["fields"].values()) == {"unknown"}
+    assert redaction["status"] == "needs-manual-review"
+    assert any("Proprietary RAW metadata needs ExifTool" in item for item in redaction["warnings"])
+
+
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:darktable-common-path")
     common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
