@@ -6,7 +6,7 @@ from pathlib import Path
 from image2dng.comfyui_importer import import_comfyui_outputs
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Import ComfyUI image outputs into the image2dng external scene pipeline."
     )
@@ -33,7 +33,7 @@ def main() -> int:
         action="store_true",
         help="fail if importer outputs already exist",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     result = import_comfyui_outputs(
         args.input,

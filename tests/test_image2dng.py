@@ -1052,6 +1052,77 @@ def test_comfyui_importer_rejects_unsupported_input_space(tmp_path):
         )
 
 
+def test_import_comfyui_output_script_manifest_only(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    output_dir = tmp_path / "script-import"
+    _write_comfyui_png(source_path)
+
+    module = _load_script_module("import_comfyui_output")
+    exit_code = module.main([str(source_path), "--output-dir", str(output_dir)])
+
+    assert exit_code == 0
+    manifest_path = output_dir / "manifests" / "comfyui-external-scenes.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["scenes"][0]["producer"] == "ComfyUI"
+    assert manifest["scenes"][0]["producer_metadata"]["seed"] == 123456789
+
+
+def test_import_comfyui_output_script_run_pipeline(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    output_dir = tmp_path / "script-import"
+    _write_comfyui_png(source_path)
+
+    module = _load_script_module("import_comfyui_output")
+    exit_code = module.main(
+        [
+            str(source_path),
+            "--output-dir",
+            str(output_dir),
+            "--run-pipeline",
+        ]
+    )
+
+    assert exit_code == 0
+    batch_manifest = (
+        output_dir / "raw-native-node-batch" / "manifests" / "raw-native-node-batch.json"
+    )
+    sample_index = output_dir / "raw-native-node-batch" / "manifests" / "sample-index.json"
+    assert batch_manifest.exists()
+    assert sample_index.exists()
+    scene = json.loads(batch_manifest.read_text(encoding="utf-8"))["scenes"][0]
+    assert scene["producer_metadata"]["checkpoint"] == (
+        "v1-5-pruned-emaonly-fp16.safetensors"
+    )
+    assert scene["validations"]["linearraw"]["ok"] is True
+    assert scene["validations"]["cfa"]["ok"] is True
+
+
+def test_import_comfyui_output_script_subprocess_entrypoint(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    output_dir = tmp_path / "subprocess-import"
+    _write_comfyui_png(source_path)
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "import_comfyui_output.py"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            str(source_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "Wrote ComfyUI external scene manifest" in completed.stdout
+    manifest_path = output_dir / "manifests" / "comfyui-external-scenes.json"
+    assert manifest_path.exists()
+
+
 def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
     source_path = tmp_path / "external-scene.tif"
     tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
