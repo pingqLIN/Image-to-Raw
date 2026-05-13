@@ -112,6 +112,8 @@ uv run python scripts/import_comfyui_output.py `
 
 ComfyUI PNG outputs are usually display-referred, so the importer defaults to `--input-space srgb`. If an upstream workflow is known to emit scene-linear TIFF, pass `--input-space linear-rec709` explicitly. This bridge is not the ComfyUI custom-node integration; custom nodes remain a later layer after the DNG contract and compatibility evidence stabilize.
 
+The importer writes the ComfyUI summary as `producer_metadata` and records the metadata summary sidecar as `producer_metadata_manifest`. The later RAW-native batch copies that sidecar into the batch input area and preserves `producer_metadata` / `producer_metadata_artifacts` in both `raw-native-node-batch.json` and `sample-index.json` so the source workflow remains traceable. This is manifest/sidecar preservation only; the metadata is not embedded in `DNGPrivateData`.
+
 When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. By default this remains preservation + validation; when the manifest explicitly sets `apply_semantic_reaction: true`, the deterministic `region-exposure-mask-v1` prototype can use region masks and `exposure_bias_ev` to affect 16-bit scene-linear RGB values. This prototype is not a full physical sensor model. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
 
 ## Run the development baseline verification

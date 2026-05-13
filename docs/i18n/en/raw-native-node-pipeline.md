@@ -59,6 +59,8 @@ uv run python scripts/import_comfyui_output.py `
 
 This path intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
 
+The importer writes `producer_metadata` and `producer_metadata_manifest` into the external scene manifest. The RAW-native external batch copies the metadata sidecar and records `producer_metadata_artifacts` in the batch manifest / sample index, keeping the ComfyUI workflow summary traceable to the output DNGs. Producer metadata is preserved for traceability only and does not modify raw sample values; deterministic pixel changes live only in the explicit opt-in semantic reaction path.
+
 For multiple images or per-image metadata, use an `image2dng.external_scene_linear_sources.v1` manifest:
 
 ```json
@@ -94,6 +96,7 @@ Each batch emits at least:
 - `jpeg/*-cfa-rggb.jpg`: sidecar false-color JPEG preview rendered from the CFA DNG raw page.
 - `validation/*.json`: validator results.
 - `manifests/raw-native-node-batch.json`: node flow, inputs, outputs, parameters, and validation summary.
+- With producer metadata, the batch manifest and sample index record `producer_metadata` and `producer_metadata_artifacts`; this is sidecar/manifest preservation, not DNG payload embedding.
 - With a semantic sidecar, the batch manifest records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`; the sample index records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`.
 - When semantic reaction is enabled, the batch manifest and sample index record a `semantic_reaction` summary; the reaction-applied input is preserved as `inputs/*-semantic-reaction.tif`.
 

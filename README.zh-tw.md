@@ -108,6 +108,8 @@ uv run python scripts/import_comfyui_output.py `
 
 ComfyUI 一般輸出 PNG 是 display-referred，因此 importer 預設使用 `--input-space srgb`。若上游已確定交付 scene-linear TIFF，可明確改用 `--input-space linear-rec709`。這個 bridge 不等同於 ComfyUI custom node；custom node 仍保留為 DNG contract 與相容性證據更穩定後的後續整合層。
 
+Importer 會把 ComfyUI 摘要寫入 `producer_metadata`，並把 metadata summary sidecar 記錄為 `producer_metadata_manifest`。後續 RAW-native batch 會將 sidecar 複製進 batch input area，並在 `raw-native-node-batch.json` 與 `sample-index.json` 中保留 `producer_metadata` / `producer_metadata_artifacts`，方便追蹤來源 workflow。這些 metadata 目前是 manifest/sidecar 層級保存，不會寫入 `DNGPrivateData`。
+
 `semantic_manifest` 若使用 `image2dng.semantic_scene.v1`，會在 DNG 產生前被驗證，sidecar 與可解析的 local assets 會被複製並寫入 batch manifest / sample index。預設仍只做 preservation + validation；若 manifest 明確設定 `apply_semantic_reaction: true`，可啟用 deterministic `region-exposure-mask-v1` prototype，使用 region mask 與 `exposure_bias_ev` 影響 16-bit scene-linear RGB values。此 prototype 不是完整物理 sensor model。詳細格式見 [docs/i18n/zh-TW/semantic-scene-sidecar-contract.md](docs/i18n/zh-TW/semantic-scene-sidecar-contract.md)。
 
 ## 執行開發基線驗證

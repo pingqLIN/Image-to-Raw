@@ -59,6 +59,8 @@ uv run python scripts/import_comfyui_output.py `
 
 這條路徑刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
 
+Importer 會在 external scene manifest 中寫入 `producer_metadata` 與 `producer_metadata_manifest`。RAW-native external batch 會複製 metadata sidecar，並在 batch manifest / sample index 中記錄 `producer_metadata_artifacts`，讓 ComfyUI workflow 摘要與 output DNG 維持可追溯關係。Producer metadata 只做保存與追蹤，不會改變 raw sample values；會影響像素值的 deterministic transform 只存在於明確 opt-in 的 semantic reaction path。
+
 多張圖或需要 metadata 時，使用 `image2dng.external_scene_linear_sources.v1` manifest：
 
 ```json
@@ -94,6 +96,7 @@ uv run python scripts/import_comfyui_output.py `
 - `jpeg/*-cfa-rggb.jpg`：由 CFA DNG raw page false-color render 的 sidecar JPEG preview。
 - `validation/*.json`：validator 結果。
 - `manifests/raw-native-node-batch.json`：節點流程、輸入輸出、參數與驗證摘要。
+- 若使用 producer metadata，batch manifest 與 sample index 會記錄 `producer_metadata` 與 `producer_metadata_artifacts`；這是 sidecar/manifest 保存，不是 DNG payload embedding。
 - 若使用 semantic sidecar，batch manifest 會記錄 `semantic_artifacts`、`semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`；sample index 會記錄 `semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`。
 - 若啟用 semantic reaction，batch manifest 與 sample index 會記錄 `semantic_reaction` summary；reaction-applied input 會以 `inputs/*-semantic-reaction.tif` 保存。
 
