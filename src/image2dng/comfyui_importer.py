@@ -145,6 +145,8 @@ def import_comfyui_outputs(
                     prompt=scene.prompt,
                     description=scene.description,
                     producer="ComfyUI",
+                    producer_metadata=scene.metadata.to_dict(),
+                    producer_metadata_manifest=scene.metadata_path,
                 )
                 for scene in scenes
             ],
@@ -258,6 +260,8 @@ def _external_manifest(
                 "description": scene.description,
                 "lighting": "",
                 "weather": "",
+                "producer_metadata_manifest": _relative_path(scene.metadata_path, manifest_dir),
+                "producer_metadata": scene.metadata.to_dict(),
                 "comfyui_metadata": _relative_path(scene.metadata_path, manifest_dir),
                 "comfyui": scene.metadata.to_dict(),
             }

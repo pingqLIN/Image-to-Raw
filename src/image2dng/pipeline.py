@@ -61,6 +61,8 @@ class ExternalSceneLinearInput:
     producer: str = "external-scene-linear"
     semantic_manifest: Path | None = None
     apply_semantic_reaction: bool = False
+    producer_metadata: dict[str, Any] | None = None
+    producer_metadata_manifest: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,8 @@ class PipelineSceneResult:
     semantic_contract: str | None = None
     semantic_to_raw_status: str | None = None
     semantic_reaction: dict[str, Any] | None = None
+    producer_metadata: dict[str, Any] | None = None
+    producer_metadata_artifacts: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -310,10 +314,12 @@ def _run_external_scene_graph(
     target_input = inputs_dir / f"{scene.slug}-scene-linear{source_path.suffix.lower()}"
     shutil.copy2(source_path, target_input)
     semantic_artifacts, semantic_validation = _copy_semantic_manifest(scene, inputs_dir)
+    producer_metadata_artifacts = _copy_producer_metadata_manifest(scene, inputs_dir)
     prompt_hash = _external_prompt_hash(
         scene,
         copied_source=target_input,
         semantic_artifacts=semantic_artifacts,
+        producer_metadata_artifacts=producer_metadata_artifacts,
     )
     capture_input = target_input
     semantic_reaction: SemanticReactionResult | None = None
@@ -343,6 +349,7 @@ def _run_external_scene_graph(
                 "weather": scene.weather,
                 "apply_semantic_reaction": scene.apply_semantic_reaction,
                 "semantic_boundary": _external_semantic_boundary(scene),
+                "producer_metadata": scene.producer_metadata or {},
             },
         )
     )
@@ -367,6 +374,8 @@ def _run_external_scene_graph(
         semantic_artifacts=semantic_artifacts or None,
         semantic_validation=semantic_validation,
         semantic_reaction=semantic_reaction,
+        producer_metadata=scene.producer_metadata,
+        producer_metadata_artifacts=producer_metadata_artifacts or None,
     )
 
 
@@ -391,6 +400,8 @@ def _run_capture_graph(
     semantic_artifacts: dict[str, str] | None,
     semantic_validation: dict[str, Any] | None = None,
     semantic_reaction: SemanticReactionResult | None = None,
+    producer_metadata: dict[str, Any] | None = None,
+    producer_metadata_artifacts: dict[str, str] | None = None,
 ) -> PipelineSceneResult:
     linear_dng = raw_dir / f"{slug}-linearraw.dng"
     linear_result = _convert_node(
@@ -507,6 +518,8 @@ def _run_capture_graph(
         ),
         semantic_to_raw_status=_semantic_to_raw_status(semantic_validation, semantic_reaction),
         semantic_reaction=semantic_reaction.to_dict() if semantic_reaction is not None else None,
+        producer_metadata=producer_metadata,
+        producer_metadata_artifacts=producer_metadata_artifacts,
     )
 
 
@@ -646,6 +659,10 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
                 else {}
             ),
         }
+    if scene.producer_metadata is not None:
+        sample["producer_metadata"] = scene.producer_metadata
+    if scene.producer_metadata_artifacts is not None:
+        sample["producer_metadata_artifacts"] = scene.producer_metadata_artifacts
     return sample
 
 
@@ -662,6 +679,8 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "semantic_contract": scene.semantic_contract,
         "semantic_to_raw_status": scene.semantic_to_raw_status,
         "semantic_reaction": scene.semantic_reaction or {},
+        "producer_metadata": scene.producer_metadata or {},
+        "producer_metadata_artifacts": scene.producer_metadata_artifacts or {},
         "raw_data_unique_ids": scene.raw_data_unique_ids,
         "validations": {
             key: {
@@ -701,6 +720,14 @@ def _external_scene_from_manifest_item(
     apply_semantic_reaction = item.get("apply_semantic_reaction", False)
     if not isinstance(apply_semantic_reaction, bool):
         raise ValueError(f"{slug}: apply_semantic_reaction must be boolean when present")
+    producer_metadata = item.get("producer_metadata", item.get("comfyui"))
+    if producer_metadata is not None and not isinstance(producer_metadata, dict):
+        raise ValueError(f"{slug}: producer_metadata must be an object when present")
+    producer_metadata_manifest = _optional_manifest_path(
+        item,
+        ("producer_metadata_manifest", "comfyui_metadata"),
+        base,
+    )
     return ExternalSceneLinearInput(
         slug=slug,
         path=source_path,
@@ -712,6 +739,8 @@ def _external_scene_from_manifest_item(
         producer=str(item.get("producer", "external-scene-linear")),
         semantic_manifest=semantic_manifest,
         apply_semantic_reaction=apply_semantic_reaction,
+        producer_metadata=producer_metadata,
+        producer_metadata_manifest=producer_metadata_manifest,
     )
 
 
@@ -802,6 +831,22 @@ def _copy_semantic_manifest(
     return artifacts, copied_validation.to_dict()
 
 
+def _copy_producer_metadata_manifest(
+    scene: ExternalSceneLinearInput,
+    inputs_dir: Path,
+) -> dict[str, str]:
+    if scene.producer_metadata_manifest is None:
+        return {}
+    if not scene.producer_metadata_manifest.exists():
+        raise FileNotFoundError(scene.producer_metadata_manifest)
+    target = (
+        inputs_dir
+        / f"{scene.slug}-producer-metadata{scene.producer_metadata_manifest.suffix.lower()}"
+    )
+    shutil.copy2(scene.producer_metadata_manifest, target)
+    return {"producer_metadata_manifest": str(target)}
+
+
 def _copy_semantic_assets(
     slug: str,
     validation: SemanticSceneValidationResult,
@@ -857,18 +902,37 @@ def _manifest_path(item: dict[str, object], key: str, base: Path) -> Path:
     return path if path.is_absolute() else base / path
 
 
+def _optional_manifest_path(
+    item: dict[str, object],
+    keys: tuple[str, ...],
+    base: Path,
+) -> Path | None:
+    for key in keys:
+        if item.get(key):
+            return _manifest_path(item, key, base)
+    return None
+
+
 def _external_prompt_hash(
     scene: ExternalSceneLinearInput,
     *,
     copied_source: Path,
     semantic_artifacts: dict[str, str],
+    producer_metadata_artifacts: dict[str, str],
 ) -> str:
     semantic_manifest = semantic_artifacts.get("semantic_manifest")
+    producer_metadata_manifest = producer_metadata_artifacts.get("producer_metadata_manifest")
     payload = json.dumps(
         {
             "source_sha256": _sha256_file(copied_source),
             "semantic_sha256": _sha256_file(Path(semantic_manifest)) if semantic_manifest else "",
             "semantic_asset_sha256": _semantic_asset_hashes(semantic_artifacts),
+            "producer_metadata_sha256": (
+                _sha256_file(Path(producer_metadata_manifest))
+                if producer_metadata_manifest
+                else ""
+            ),
+            "producer_metadata": scene.producer_metadata or {},
             "prompt": scene.prompt,
             "description": scene.description,
             "lighting": scene.lighting,

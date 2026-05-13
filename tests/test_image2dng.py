@@ -879,6 +879,12 @@ def test_comfyui_importer_writes_external_manifest_and_prepared_tiff(tmp_path):
     assert loaded_scenes[0].path.resolve() == scene.prepared_path.resolve()
     assert loaded_scenes[0].producer == "ComfyUI"
     assert loaded_scenes[0].input_space == "srgb"
+    assert loaded_scenes[0].producer_metadata_manifest is not None
+    assert loaded_scenes[0].producer_metadata_manifest.resolve() == scene.metadata_path.resolve()
+    assert loaded_scenes[0].producer_metadata is not None
+    assert loaded_scenes[0].producer_metadata["checkpoint"] == (
+        "v1-5-pruned-emaonly-fp16.safetensors"
+    )
 
 
 def test_comfyui_importer_keeps_duplicate_input_stems_distinct(tmp_path):
@@ -936,8 +942,90 @@ def test_comfyui_importer_runs_existing_external_pipeline(tmp_path):
     assert scene_manifest["source_type"] == "external-scene-linear"
     assert scene_manifest["producer"] == "ComfyUI"
     assert scene_manifest["input_space"] == "srgb"
+    assert scene_manifest["producer_metadata"]["checkpoint"] == (
+        "v1-5-pruned-emaonly-fp16.safetensors"
+    )
+    metadata_copy = Path(
+        scene_manifest["producer_metadata_artifacts"]["producer_metadata_manifest"]
+    )
+    assert metadata_copy.exists()
     assert scene_manifest["validations"]["linearraw"]["ok"] is True
     assert scene_manifest["validations"]["cfa"]["ok"] is True
+    sample_index = json.loads(result.pipeline_result.sample_index_path.read_text(encoding="utf-8"))
+    sample = sample_index["samples"][0]
+    assert sample["producer_metadata"]["seed"] == 123456789
+    assert Path(sample["producer_metadata_artifacts"]["producer_metadata_manifest"]).exists()
+
+
+def test_external_scene_linear_batch_preserves_inline_producer_metadata(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(12, 10), photometric="rgb")
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "external-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                producer="unit-test-renderer",
+                producer_metadata={
+                    "generator": "unit-test-renderer",
+                    "seed": 42,
+                    "workflow": "inline-only",
+                },
+            )
+        ],
+    )
+
+    scene_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    assert scene_manifest["producer_metadata"] == {
+        "generator": "unit-test-renderer",
+        "seed": 42,
+        "workflow": "inline-only",
+    }
+    assert scene_manifest["producer_metadata_artifacts"] == {}
+    sample = json.loads(result.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
+    assert sample["producer_metadata"]["seed"] == 42
+    assert "producer_metadata_artifacts" not in sample
+
+
+def test_external_scene_linear_batch_preserves_metadata_manifest_without_inline_metadata(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    metadata_path = tmp_path / "producer-metadata.json"
+    tifffile.imwrite(source_path, _gradient_image(12, 10), photometric="rgb")
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "schema": "example.producer_metadata.v1",
+                "producer": "unit-test-renderer",
+                "seed": 42,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "external-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                producer="unit-test-renderer",
+                producer_metadata_manifest=metadata_path,
+            )
+        ],
+    )
+
+    scene_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    copied_metadata = Path(
+        scene_manifest["producer_metadata_artifacts"]["producer_metadata_manifest"]
+    )
+    assert scene_manifest["producer_metadata"] == {}
+    assert copied_metadata.exists()
+    assert json.loads(copied_metadata.read_text(encoding="utf-8"))["seed"] == 42
+    sample = json.loads(result.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
+    assert "producer_metadata" not in sample
+    assert Path(sample["producer_metadata_artifacts"]["producer_metadata_manifest"]).exists()
 
 
 def test_comfyui_importer_handles_missing_metadata(tmp_path):
