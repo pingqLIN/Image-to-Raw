@@ -15,7 +15,10 @@ def main(argv: list[str] | None = None) -> int:
         "--output-dir",
         type=Path,
         default=Path("demo-output/comfyui-import"),
-        help="directory for prepared TIFF inputs, metadata, manifests, and optional RAW batch",
+        help=(
+            "directory for prepared TIFF inputs, metadata, importer manifest, "
+            "and optional raw-native-node-batch"
+        ),
     )
     parser.add_argument(
         "--input-space",
@@ -26,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--run-pipeline",
         action="store_true",
-        help="run the RAW-native external scene pipeline after writing the manifest",
+        help="run the RAW-native external scene pipeline after writing the importer manifest",
     )
     parser.add_argument(
         "--no-overwrite",

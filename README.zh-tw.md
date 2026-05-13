@@ -106,6 +106,8 @@ uv run python scripts/import_comfyui_output.py `
   --run-pipeline
 ```
 
+預設匯入只會在 `<output-dir>/manifests/comfyui-external-scenes.json` 寫出 importer handoff manifest。加上 `--run-pipeline` 時，RAW-native batch 會另外寫在 `<output-dir>/raw-native-node-batch/`，其中 batch manifest 是 `manifests/raw-native-node-batch.json`，樣片索引是 `manifests/sample-index.json`；CLI 也會分別印出這三個路徑，避免把 importer manifest 與 batch manifest 混在一起。
+
 ComfyUI 一般輸出 PNG 是 display-referred，因此 importer 預設使用 `--input-space srgb`。若上游已確定交付 scene-linear TIFF，可明確改用 `--input-space linear-rec709`。這個 bridge 不等同於 ComfyUI custom node；custom node 仍保留為 DNG contract 與相容性證據更穩定後的後續整合層。
 
 Importer 會把 ComfyUI 摘要寫入 `producer_metadata`，並把 metadata summary sidecar 記錄為 `producer_metadata_manifest`。後續 RAW-native batch 會將 sidecar 複製進 batch input area，並在 `raw-native-node-batch.json` 與 `sample-index.json` 中保留 `producer_metadata` / `producer_metadata_artifacts`，方便追蹤來源 workflow。這些 metadata 目前是 manifest/sidecar 層級保存，不會寫入 `DNGPrivateData`。
