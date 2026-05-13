@@ -87,6 +87,27 @@ uv run python scripts/generate_raw_native_batch.py `
 }
 ```
 
+## 匯入 ComfyUI 輸出
+
+第一版 ComfyUI bridge 是離線 importer，不需要啟動 ComfyUI，也不安裝 custom node。它會讀取 ComfyUI 產出的 PNG/JPEG/TIFF，若 PNG 內含 `prompt` / `workflow` metadata，會抽取 prompt、negative prompt、checkpoint、seed、尺寸、steps、CFG、sampler 與 scheduler；接著把影像轉成 16-bit RGB TIFF handoff artifact，並寫出 `image2dng.external_scene_linear_sources.v1` manifest。
+
+```powershell
+uv run python scripts/import_comfyui_output.py `
+  path\to\ComfyUI_00002_.png `
+  --output-dir demo-output/comfyui-import
+```
+
+若要直接接續產生 synthetic DNG、sidecar JPEG preview 與 validation JSON：
+
+```powershell
+uv run python scripts/import_comfyui_output.py `
+  path\to\ComfyUI_00002_.png `
+  --output-dir demo-output/comfyui-import `
+  --run-pipeline
+```
+
+ComfyUI 一般輸出 PNG 是 display-referred，因此 importer 預設使用 `--input-space srgb`。若上游已確定交付 scene-linear TIFF，可明確改用 `--input-space linear-rec709`。這個 bridge 不等同於 ComfyUI custom node；custom node 仍保留為 DNG contract 與相容性證據更穩定後的後續整合層。
+
 `semantic_manifest` 若使用 `image2dng.semantic_scene.v1`，會在 DNG 產生前被驗證，sidecar 與可解析的 local assets 會被複製並寫入 batch manifest / sample index。預設仍只做 preservation + validation；若 manifest 明確設定 `apply_semantic_reaction: true`，可啟用 deterministic `region-exposure-mask-v1` prototype，使用 region mask 與 `exposure_bias_ev` 影響 16-bit scene-linear RGB values。此 prototype 不是完整物理 sensor model。詳細格式見 [docs/i18n/zh-TW/semantic-scene-sidecar-contract.md](docs/i18n/zh-TW/semantic-scene-sidecar-contract.md)。
 
 ## 執行開發基線驗證

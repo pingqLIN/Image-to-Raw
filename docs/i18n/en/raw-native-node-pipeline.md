@@ -48,6 +48,17 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
+The first ComfyUI integration point is an offline importer, not a custom node. This lets the project read ComfyUI output PNG `prompt` / `workflow` metadata, convert the image into a 16-bit TIFF handoff artifact, and write an external scene manifest:
+
+```powershell
+uv run python scripts/import_comfyui_output.py `
+  path\to\ComfyUI_00002_.png `
+  --output-dir demo-output/comfyui-import `
+  --run-pipeline
+```
+
+This path intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
+
 For multiple images or per-image metadata, use an `image2dng.external_scene_linear_sources.v1` manifest:
 
 ```json

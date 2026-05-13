@@ -48,6 +48,17 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
+ComfyUI 的第一個整合點是離線 importer，而不是 custom node。這讓本專案可以先吃 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
+
+```powershell
+uv run python scripts/import_comfyui_output.py `
+  path\to\ComfyUI_00002_.png `
+  --output-dir demo-output/comfyui-import `
+  --run-pipeline
+```
+
+這條路徑刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
+
 多張圖或需要 metadata 時，使用 `image2dng.external_scene_linear_sources.v1` manifest：
 
 ```json

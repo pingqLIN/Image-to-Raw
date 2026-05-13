@@ -91,6 +91,27 @@ Use a manifest when each image needs producer, prompt, lighting, or semantic sid
 }
 ```
 
+## Import ComfyUI outputs
+
+The first ComfyUI bridge is an offline importer. It does not require ComfyUI to be running and does not install a custom node. It reads ComfyUI-generated PNG/JPEG/TIFF files, extracts PNG `prompt` / `workflow` metadata when available, captures prompt, negative prompt, checkpoint, seed, dimensions, steps, CFG, sampler, and scheduler, converts the image into a 16-bit RGB TIFF handoff artifact, and writes an `image2dng.external_scene_linear_sources.v1` manifest.
+
+```powershell
+uv run python scripts/import_comfyui_output.py `
+  path\to\ComfyUI_00002_.png `
+  --output-dir demo-output/comfyui-import
+```
+
+To immediately generate synthetic DNG files, sidecar JPEG previews, and validation JSON:
+
+```powershell
+uv run python scripts/import_comfyui_output.py `
+  path\to\ComfyUI_00002_.png `
+  --output-dir demo-output/comfyui-import `
+  --run-pipeline
+```
+
+ComfyUI PNG outputs are usually display-referred, so the importer defaults to `--input-space srgb`. If an upstream workflow is known to emit scene-linear TIFF, pass `--input-space linear-rec709` explicitly. This bridge is not the ComfyUI custom-node integration; custom nodes remain a later layer after the DNG contract and compatibility evidence stabilize.
+
 When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. By default this remains preservation + validation; when the manifest explicitly sets `apply_semantic_reaction: true`, the deterministic `region-exposure-mask-v1` prototype can use region masks and `exposure_bias_ev` to affect 16-bit scene-linear RGB values. This prototype is not a full physical sensor model. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
 
 ## Run the development baseline verification

@@ -11,6 +11,14 @@ from image2dng.api import (
     ValidationError,
     convert,
 )
+from image2dng.comfyui_importer import (
+    COMFYUI_EXTERNAL_SCENE_SCHEMA,
+    ComfyUIImportResult,
+    ComfyUIImportScene,
+    ComfyUIMetadataSummary,
+    extract_comfyui_metadata,
+    import_comfyui_outputs,
+)
 from image2dng.models import AIMetadataModel, CameraProfileModel, CoreRawModel
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
@@ -40,8 +48,12 @@ from image2dng.sensor_effects import SensorEffectModel
 __all__ = [
     "AIMetadataModel",
     "CameraProfileModel",
+    "COMFYUI_EXTERNAL_SCENE_SCHEMA",
     "ConversionResult",
     "CoreRawModel",
+    "ComfyUIImportResult",
+    "ComfyUIImportScene",
+    "ComfyUIMetadataSummary",
     "ExternalSceneLinearInput",
     "GenerationScene",
     "HIGHLIGHT_CLIPPING_REACTION_MODEL",
@@ -61,6 +73,8 @@ __all__ = [
     "ValidationError",
     "apply_region_exposure_reaction",
     "convert",
+    "extract_comfyui_metadata",
+    "import_comfyui_outputs",
     "load_external_scene_manifest",
     "run_external_scene_linear_batch",
     "run_raw_native_batch",

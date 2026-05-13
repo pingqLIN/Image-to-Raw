@@ -10,11 +10,14 @@ from pathlib import Path
 
 import numpy as np
 import png
+import pytest
 import tifffile
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 
 from image2dng import OutputExistsError, convert
 from image2dng.cli import main
+from image2dng.comfyui_importer import extract_comfyui_metadata, import_comfyui_outputs
 from image2dng.compatibility import (
     PROCESSOR_TOOL_SPECS,
     ProcessorToolSpec,
@@ -824,6 +827,141 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
         "region_count": 1,
         "affected_pixels": 180,
     }
+
+
+def test_comfyui_importer_extracts_prompt_graph_metadata(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    _write_comfyui_png(source_path)
+
+    metadata = extract_comfyui_metadata(source_path)
+
+    assert metadata.has_prompt_metadata is True
+    assert metadata.has_workflow_metadata is True
+    assert metadata.prompt == "a small glass teapot on a wooden desk, soft window light"
+    assert metadata.negative_prompt == "text, watermark"
+    assert metadata.checkpoint == "v1-5-pruned-emaonly-fp16.safetensors"
+    assert metadata.seed == 123456789
+    assert metadata.width == 512
+    assert metadata.height == 512
+    assert metadata.steps == 20
+    assert metadata.cfg == 7.0
+    assert metadata.sampler == "euler"
+    assert metadata.scheduler == "normal"
+    assert metadata.denoise == 1.0
+
+
+def test_comfyui_importer_writes_external_manifest_and_prepared_tiff(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    _write_comfyui_png(source_path)
+
+    result = import_comfyui_outputs([source_path], tmp_path / "comfyui-import")
+
+    assert result.manifest_path.exists()
+    assert len(result.scenes) == 1
+    scene = result.scenes[0]
+    assert scene.prepared_path.exists()
+    assert scene.metadata_path.exists()
+    prepared = tifffile.imread(scene.prepared_path)
+    assert prepared.dtype == np.uint16
+    assert prepared.shape == (16, 16, 3)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    manifest_scene = manifest["scenes"][0]
+    assert manifest["schema"] == "image2dng.external_scene_linear_sources.v1"
+    assert manifest_scene["slug"] == "comfyui_00002_"
+    assert manifest_scene["path"] == "../inputs/comfyui_00002_-scene-linear.tif"
+    assert manifest_scene["input_space"] == "srgb"
+    assert manifest_scene["producer"] == "ComfyUI"
+    assert manifest_scene["prompt"] == "a small glass teapot on a wooden desk, soft window light"
+    assert manifest_scene["comfyui"]["checkpoint"] == "v1-5-pruned-emaonly-fp16.safetensors"
+    loaded_scenes = load_external_scene_manifest(result.manifest_path)
+    assert len(loaded_scenes) == 1
+    assert loaded_scenes[0].path.resolve() == scene.prepared_path.resolve()
+    assert loaded_scenes[0].producer == "ComfyUI"
+    assert loaded_scenes[0].input_space == "srgb"
+
+
+def test_comfyui_importer_keeps_duplicate_input_stems_distinct(tmp_path):
+    first_dir = tmp_path / "a"
+    second_dir = tmp_path / "b"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_path = first_dir / "ComfyUI_00002_.png"
+    second_path = second_dir / "ComfyUI_00002_.png"
+    _write_comfyui_png(first_path)
+    _write_comfyui_png(second_path)
+
+    result = import_comfyui_outputs([first_path, second_path], tmp_path / "comfyui-import")
+
+    assert [scene.slug for scene in result.scenes] == ["comfyui_00002_", "comfyui_00002_-2"]
+    assert result.scenes[0].prepared_path != result.scenes[1].prepared_path
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert [scene["slug"] for scene in manifest["scenes"]] == [
+        "comfyui_00002_",
+        "comfyui_00002_-2",
+    ]
+
+
+def test_comfyui_importer_preserves_16bit_tiff_input(tmp_path):
+    source_path = tmp_path / "comfyui-linear.tif"
+    source = _gradient_image(8, 6)
+    tifffile.imwrite(source_path, source, photometric="rgb")
+
+    result = import_comfyui_outputs(
+        [source_path],
+        tmp_path / "comfyui-import",
+        input_space="linear-rec709",
+    )
+
+    prepared = tifffile.imread(result.scenes[0].prepared_path)
+    assert prepared.dtype == np.uint16
+    assert np.array_equal(prepared, source)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["scenes"][0]["input_space"] == "linear-rec709"
+
+
+def test_comfyui_importer_runs_existing_external_pipeline(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    _write_comfyui_png(source_path)
+
+    result = import_comfyui_outputs(
+        [source_path],
+        tmp_path / "comfyui-import",
+        run_pipeline=True,
+    )
+
+    assert result.pipeline_result is not None
+    batch_manifest = json.loads(result.pipeline_result.manifest_path.read_text(encoding="utf-8"))
+    scene_manifest = batch_manifest["scenes"][0]
+    assert scene_manifest["source_type"] == "external-scene-linear"
+    assert scene_manifest["producer"] == "ComfyUI"
+    assert scene_manifest["input_space"] == "srgb"
+    assert scene_manifest["validations"]["linearraw"]["ok"] is True
+    assert scene_manifest["validations"]["cfa"]["ok"] is True
+
+
+def test_comfyui_importer_handles_missing_metadata(tmp_path):
+    source_path = tmp_path / "plain-output.png"
+    Image.fromarray(np.zeros((4, 4, 3), dtype=np.uint8)).save(source_path)
+
+    metadata = extract_comfyui_metadata(source_path)
+
+    assert metadata.has_prompt_metadata is False
+    assert metadata.has_workflow_metadata is False
+    assert metadata.prompt == ""
+    assert metadata.checkpoint == ""
+
+
+def test_comfyui_importer_rejects_unsupported_input_space(tmp_path):
+    source_path = tmp_path / "plain-output.png"
+    Image.fromarray(np.zeros((4, 4, 3), dtype=np.uint8)).save(source_path)
+
+    with pytest.raises(ValueError, match="unsupported input_space"):
+        import_comfyui_outputs(
+            [source_path],
+            tmp_path / "comfyui-import",
+            input_space="display-p3",
+        )
 
 
 def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
@@ -1950,6 +2088,55 @@ def _write_png(path, image: np.ndarray) -> None:
     writer = png.Writer(width=width, height=height, bitdepth=16, greyscale=False)
     with path.open("wb") as handle:
         writer.write(handle, image.reshape(height, width * samples).tolist())
+
+
+def _write_comfyui_png(path: Path) -> None:
+    image = np.zeros((16, 16, 3), dtype=np.uint8)
+    image[..., 0] = np.arange(16, dtype=np.uint8)[np.newaxis, :] * 16
+    image[..., 1] = np.arange(16, dtype=np.uint8)[:, np.newaxis] * 16
+    image[..., 2] = 96
+    metadata = PngInfo()
+    metadata.add_text(
+        "prompt",
+        json.dumps(
+            {
+                "1": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "v1-5-pruned-emaonly-fp16.safetensors"},
+                },
+                "2": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {
+                        "text": "a small glass teapot on a wooden desk, soft window light"
+                    },
+                },
+                "3": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {"text": "text, watermark"},
+                },
+                "4": {
+                    "class_type": "EmptyLatentImage",
+                    "inputs": {"width": 512, "height": 512, "batch_size": 1},
+                },
+                "5": {
+                    "class_type": "KSampler",
+                    "inputs": {
+                        "seed": 123456789,
+                        "steps": 20,
+                        "cfg": 7.0,
+                        "sampler_name": "euler",
+                        "scheduler": "normal",
+                        "denoise": 1.0,
+                        "positive": ["2", 0],
+                        "negative": ["3", 0],
+                        "latent_image": ["4", 0],
+                    },
+                },
+            }
+        ),
+    )
+    metadata.add_text("workflow", json.dumps({"nodes": [{"type": "KSampler"}]}))
+    Image.fromarray(image).save(path, pnginfo=metadata)
 
 
 def _fake_processor_run(*, create_outputs: bool, return_code: int):
