@@ -11,6 +11,7 @@ import numpy as np
 import tifffile
 from PIL import Image
 
+from image2dng.dng_writer import DngLayout
 from image2dng.image_processing import InputSpace, ensure_rgb
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
@@ -96,6 +97,7 @@ def import_comfyui_outputs(
     input_space: InputSpace = "srgb",
     run_pipeline: bool = False,
     overwrite: bool = True,
+    dng_layout: DngLayout = "preview-subifd",
 ) -> ComfyUIImportResult:
     if not inputs:
         raise ValueError("at least one ComfyUI output image is required")
@@ -151,6 +153,7 @@ def import_comfyui_outputs(
                 for scene in scenes
             ],
             overwrite=overwrite,
+            dng_layout=dng_layout,
         )
     return ComfyUIImportResult(
         output_dir=root,

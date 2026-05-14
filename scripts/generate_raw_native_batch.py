@@ -33,6 +33,15 @@ def main() -> int:
         default=[],
         help="external scene-linear TIFF/PNG input; may be passed multiple times",
     )
+    parser.add_argument(
+        "--dng-layout",
+        choices=["preview-subifd", "single-raw-ifd"],
+        default="preview-subifd",
+        help=(
+            "DNG IFD layout to write; use single-raw-ifd for Adobe DNG Converter "
+            "input compatibility"
+        ),
+    )
     args = parser.parse_args()
 
     external_scenes = []
@@ -53,9 +62,14 @@ def main() -> int:
             args.output_dir,
             scenes=external_scenes,
             overwrite=True,
+            dng_layout=args.dng_layout,
         )
     else:
-        result = run_raw_native_batch(args.output_dir, overwrite=True)
+        result = run_raw_native_batch(
+            args.output_dir,
+            overwrite=True,
+            dng_layout=args.dng_layout,
+        )
     print(f"Wrote raw-native node batch to {result.output_dir}")
     print(f"Wrote manifest to {result.manifest_path}")
     print(f"Wrote sample index to {result.sample_index_path}")

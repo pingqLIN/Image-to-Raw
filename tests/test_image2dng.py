@@ -458,6 +458,39 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
     }
 
 
+def test_raw_native_batch_can_write_single_raw_ifd_for_adobe_converter(tmp_path):
+    scene = GenerationScene(
+        slug="adobe-contract-chart",
+        prompt="adobe converter layout test",
+        description="single raw IFD compatibility test scene",
+        lighting="contract D65",
+        style="chart-ramp",
+        seed=789,
+        width=24,
+        height=24,
+    )
+
+    result = run_raw_native_batch(
+        tmp_path / "adobe-raw-native-contract",
+        scenes=[scene],
+        dng_layout="single-raw-ifd",
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    scene_manifest = manifest["scenes"][0]
+    assert manifest["graph"]["dng_layout"] == "single-raw-ifd"
+    assert manifest["graph"]["embedded_preview"] == "absent; sidecar JPEG preview only"
+    assert manifest["graph"]["raw_ifd_location"] == "IFD0"
+    assert scene_manifest["nodes"][2]["parameters"]["dng_layout"] == "single-raw-ifd"
+    assert scene_manifest["nodes"][3]["parameters"]["dng_layout"] == "single-raw-ifd"
+    assert scene_manifest["validations"]["linearraw"]["dng_layout"] == "single-raw-ifd"
+    assert scene_manifest["validations"]["cfa"]["dng_layout"] == "single-raw-ifd"
+    assert validate_dng(scene_manifest["outputs"]["linearraw_dng"], run_smoke=False).ok
+    assert validate_dng(scene_manifest["outputs"]["cfa_dng"], run_smoke=False).ok
+    assert Path(scene_manifest["outputs"]["linearraw_jpeg"]).exists()
+    assert Path(scene_manifest["outputs"]["cfa_jpeg"]).exists()
+
+
 def test_semantic_scene_validator_accepts_minimal_valid_sidecar(tmp_path):
     semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
 
@@ -1096,6 +1129,35 @@ def test_import_comfyui_output_script_run_pipeline(tmp_path):
     )
     assert scene["validations"]["linearraw"]["ok"] is True
     assert scene["validations"]["cfa"]["ok"] is True
+
+
+def test_import_comfyui_output_script_run_pipeline_single_raw_ifd(tmp_path):
+    source_path = tmp_path / "ComfyUI_00002_.png"
+    output_dir = tmp_path / "script-import-adobe"
+    _write_comfyui_png(source_path)
+
+    module = _load_script_module("import_comfyui_output")
+    exit_code = module.main(
+        [
+            str(source_path),
+            "--output-dir",
+            str(output_dir),
+            "--run-pipeline",
+            "--dng-layout",
+            "single-raw-ifd",
+        ]
+    )
+
+    assert exit_code == 0
+    batch_manifest = (
+        output_dir / "raw-native-node-batch" / "manifests" / "raw-native-node-batch.json"
+    )
+    scene = json.loads(batch_manifest.read_text(encoding="utf-8"))["scenes"][0]
+    nodes = {node["type"]: node for node in scene["nodes"]}
+    assert nodes["VirtualCameraLinearRawNode"]["parameters"]["dng_layout"] == "single-raw-ifd"
+    assert nodes["VirtualCameraCfaNode"]["parameters"]["dng_layout"] == "single-raw-ifd"
+    assert scene["validations"]["linearraw"]["dng_layout"] == "single-raw-ifd"
+    assert scene["validations"]["cfa"]["dng_layout"] == "single-raw-ifd"
 
 
 def test_import_comfyui_output_script_subprocess_entrypoint(tmp_path):

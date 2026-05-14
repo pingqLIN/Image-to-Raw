@@ -32,6 +32,15 @@ def main(argv: list[str] | None = None) -> int:
         help="run the RAW-native external scene pipeline after writing the importer manifest",
     )
     parser.add_argument(
+        "--dng-layout",
+        choices=["preview-subifd", "single-raw-ifd"],
+        default="preview-subifd",
+        help=(
+            "DNG IFD layout for --run-pipeline; use single-raw-ifd for Adobe DNG "
+            "Converter input compatibility"
+        ),
+    )
+    parser.add_argument(
         "--no-overwrite",
         action="store_true",
         help="fail if importer outputs already exist",
@@ -44,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
         input_space=args.input_space,
         run_pipeline=args.run_pipeline,
         overwrite=not args.no_overwrite,
+        dng_layout=args.dng_layout,
     )
     print(f"Wrote ComfyUI external scene manifest to {result.manifest_path}")
     for scene in result.scenes:

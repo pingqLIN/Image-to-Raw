@@ -50,6 +50,15 @@ uv sync --extra dev
 uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
 ```
 
+If the generated DNG files need to be passed into Adobe DNG Converter, write the
+single raw IFD layout:
+
+```powershell
+uv run python scripts/generate_raw_native_batch.py `
+  --output-dir demo-output/raw-native-node-batch-adobe `
+  --dng-layout single-raw-ifd
+```
+
 The batch emits:
 
 - scene-linear TIFF intermediates;
@@ -109,6 +118,11 @@ uv run python scripts/import_comfyui_output.py `
   --output-dir demo-output/comfyui-import `
   --run-pipeline
 ```
+
+If these DNG files need to be used as Adobe DNG Converter inputs, add
+`--dng-layout single-raw-ifd`. Adobe DNG Converter 18.3 recognizes the single
+raw IFD layout; with this project's default `preview-subifd` layout, it may exit
+without writing converted files.
 
 By default, import writes only the importer handoff manifest at `<output-dir>/manifests/comfyui-external-scenes.json`. With `--run-pipeline`, the RAW-native batch is written separately under `<output-dir>/raw-native-node-batch/`; its batch manifest is `manifests/raw-native-node-batch.json`, and its sample index is `manifests/sample-index.json`. The CLI prints all three paths separately so the importer manifest and batch manifest stay distinct.
 

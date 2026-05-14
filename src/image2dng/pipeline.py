@@ -13,6 +13,7 @@ import tifffile
 from PIL import Image
 
 from image2dng.api import ConversionResult, convert
+from image2dng.dng_writer import DngLayout
 from image2dng.image_processing import InputSpace
 from image2dng.semantic_reaction import (
     SUPPORTED_REACTION_INPUT_SPACES,
@@ -136,6 +137,7 @@ def run_raw_native_batch(
     *,
     scenes: list[GenerationScene] | None = None,
     overwrite: bool = True,
+    dng_layout: DngLayout = "preview-subifd",
 ) -> PipelineBatchResult:
     root = Path(output_dir)
     inputs_dir = root / "inputs"
@@ -154,6 +156,7 @@ def run_raw_native_batch(
             jpeg_dir=jpeg_dir,
             validation_dir=validation_dir,
             overwrite=overwrite,
+            dng_layout=dng_layout,
         )
         for scene in (scenes or default_scenes())
     ]
@@ -178,6 +181,7 @@ def run_external_scene_linear_batch(
     *,
     scenes: list[ExternalSceneLinearInput],
     overwrite: bool = True,
+    dng_layout: DngLayout = "preview-subifd",
 ) -> PipelineBatchResult:
     if not scenes:
         raise ValueError("at least one external scene-linear input is required")
@@ -199,6 +203,7 @@ def run_external_scene_linear_batch(
             jpeg_dir=jpeg_dir,
             validation_dir=validation_dir,
             overwrite=overwrite,
+            dng_layout=dng_layout,
         )
         for scene in scenes
     ]
@@ -238,6 +243,7 @@ def _run_scene_graph(
     jpeg_dir: Path,
     validation_dir: Path,
     overwrite: bool,
+    dng_layout: DngLayout,
 ) -> PipelineSceneResult:
     nodes: list[PipelineNodeRecord] = []
     prompt_hash = _prompt_hash(scene)
@@ -293,6 +299,7 @@ def _run_scene_graph(
         overwrite=overwrite,
         nodes=nodes,
         semantic_artifacts=None,
+        dng_layout=dng_layout,
     )
 
 
@@ -304,6 +311,7 @@ def _run_external_scene_graph(
     jpeg_dir: Path,
     validation_dir: Path,
     overwrite: bool,
+    dng_layout: DngLayout,
 ) -> PipelineSceneResult:
     nodes: list[PipelineNodeRecord] = []
     source_path = scene.path
@@ -376,6 +384,7 @@ def _run_external_scene_graph(
         semantic_reaction=semantic_reaction,
         producer_metadata=scene.producer_metadata,
         producer_metadata_artifacts=producer_metadata_artifacts or None,
+        dng_layout=dng_layout,
     )
 
 
@@ -402,6 +411,7 @@ def _run_capture_graph(
     semantic_reaction: SemanticReactionResult | None = None,
     producer_metadata: dict[str, Any] | None = None,
     producer_metadata_artifacts: dict[str, str] | None = None,
+    dng_layout: DngLayout = "preview-subifd",
 ) -> PipelineSceneResult:
     linear_dng = raw_dir / f"{slug}-linearraw.dng"
     linear_result = _convert_node(
@@ -416,6 +426,7 @@ def _run_capture_graph(
         producer=producer,
         seed=seed,
         overwrite=overwrite,
+        dng_layout=dng_layout,
     )
     nodes.append(
         PipelineNodeRecord(
@@ -423,7 +434,11 @@ def _run_capture_graph(
             node_type="VirtualCameraLinearRawNode",
             inputs={"scene_linear_input": str(scene_linear_path)},
             outputs={"linearraw_dng": str(linear_dng)},
-            parameters={"mode": "linearraw", "input_space": input_space},
+            parameters={
+                "mode": "linearraw",
+                "input_space": input_space,
+                "dng_layout": dng_layout,
+            },
         )
     )
 
@@ -440,6 +455,7 @@ def _run_capture_graph(
         producer=producer,
         seed=seed,
         overwrite=overwrite,
+        dng_layout=dng_layout,
     )
     nodes.append(
         PipelineNodeRecord(
@@ -447,7 +463,12 @@ def _run_capture_graph(
             node_type="VirtualCameraCfaNode",
             inputs={"scene_linear_input": str(scene_linear_path)},
             outputs={"cfa_dng": str(cfa_dng)},
-            parameters={"mode": "cfa", "cfa_pattern": "rggb", "input_space": input_space},
+            parameters={
+                "mode": "cfa",
+                "cfa_pattern": "rggb",
+                "input_space": input_space,
+                "dng_layout": dng_layout,
+            },
         )
     )
 
@@ -536,6 +557,7 @@ def _convert_node(
     producer: str,
     seed: int | None,
     overwrite: bool,
+    dng_layout: DngLayout,
 ) -> ConversionResult:
     return convert(
         input_path=input_path,
@@ -555,6 +577,7 @@ def _convert_node(
         model_version="0.1.0",
         lighting=lighting,
         weather=weather,
+        dng_layout=dng_layout,
         overwrite=overwrite,
     )
 
@@ -604,14 +627,35 @@ def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, 
             "nodes": graph_nodes,
             "primary_artifact": "synthetic DNG",
             "preview_artifact": "sidecar JPEG rendered from generated RAW buffers",
-            "dng_layout": "preview-subifd",
-            "embedded_preview": "IFD0 JPEG preview",
-            "raw_ifd_location": "Raw SubIFD referenced from IFD0",
+            "dng_layout": _batch_dng_layout(scenes),
+            "embedded_preview": _batch_embedded_preview(scenes),
+            "raw_ifd_location": _batch_raw_ifd_location(scenes),
             "external_scene_linear_boundary": "available",
             "semantic_boundary": SEMANTIC_BOUNDARY,
         },
         "scenes": [_scene_result_to_dict(scene) for scene in scenes],
     }
+
+
+def _batch_dng_layout(scenes: list[PipelineSceneResult]) -> str:
+    if not scenes:
+        return "preview-subifd"
+    for node in scenes[0].nodes:
+        if node.node_type == "VirtualCameraLinearRawNode":
+            return str(node.parameters.get("dng_layout") or "preview-subifd")
+    return "preview-subifd"
+
+
+def _batch_embedded_preview(scenes: list[PipelineSceneResult]) -> str:
+    if _batch_dng_layout(scenes) == "single-raw-ifd":
+        return "absent; sidecar JPEG preview only"
+    return "IFD0 JPEG preview"
+
+
+def _batch_raw_ifd_location(scenes: list[PipelineSceneResult]) -> str:
+    if _batch_dng_layout(scenes) == "single-raw-ifd":
+        return "IFD0"
+    return "Raw SubIFD referenced from IFD0"
 
 
 def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, Any]:
@@ -685,6 +729,8 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "validations": {
             key: {
                 "ok": report["ok"],
+                "dng_layout": report["dng_layout"],
+                "raw_ifd_location": report["raw_ifd_location"],
                 "errors": report["errors"],
                 "warnings": report["warnings"],
             }
