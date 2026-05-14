@@ -86,19 +86,20 @@ def main(argv: list[str] | None = None) -> int:
     ]
     converter_result: dict[str, Any] | None = None
     converted_inspection: dict[str, Any] | None = None
+    moved_existing_converted_dng: str | None = None
     errors: list[str] = []
 
     if not source_validation["ok"]:
         errors.append("source image2dng contract validation failed")
 
     if args.dry_run:
-        status = "dry-run"
+        status = "dry-run" if not errors else "failed"
     elif converter is None:
         status = "failed"
         errors.append("Adobe DNG Converter executable was not found")
     else:
         if converted_dng.exists():
-            converted_dng.unlink()
+            moved_existing_converted_dng = str(_move_existing_output_aside(converted_dng))
         processor_result = run_adobe_dng_converter(
             source_dng,
             converted_dir,
@@ -138,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
             "input": str(input_path),
             "source_dng": str(source_dng),
             "converted_dng": str(converted_dng),
+            "moved_existing_converted_dng": moved_existing_converted_dng,
         },
         "source_contract_validation": source_validation,
         "converter_result": converter_result,
@@ -156,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Adobe DNG Converter output: {converted_dng}")
     else:
         print("Adobe DNG Converter did not emit the expected output DNG.")
-    return 0 if report["ok"] or args.dry_run else 1
+    return 0 if report["ok"] else 1
 
 
 def _resolve_converter(explicit: Path | None) -> tuple[str | None, str | None]:
@@ -178,6 +180,19 @@ def _fixture_image(size: int = 64) -> np.ndarray:
     image[8:24, 24:40] = [0, 65535, 0]
     image[8:24, 40:56] = [0, 0, 65535]
     return image
+
+
+def _move_existing_output_aside(path: Path) -> Path:
+    clean_dir = path.parent / ".clean"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    candidate = clean_dir / f"{path.stem}-{timestamp}{path.suffix}"
+    counter = 1
+    while candidate.exists():
+        candidate = clean_dir / f"{path.stem}-{timestamp}-{counter}{path.suffix}"
+        counter += 1
+    path.replace(candidate)
+    return candidate
 
 
 if __name__ == "__main__":

@@ -553,6 +553,7 @@ def _run_optional_command(name: str, command: list[str], result: ValidationResul
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=30, check=False)
     except Exception as exc:  # noqa: BLE001
+        result.smoke_tests[name] = f"failed: {exc}"
         result.add_check(
             f"smoke:{name}",
             "failed",
@@ -563,6 +564,7 @@ def _run_optional_command(name: str, command: list[str], result: ValidationResul
     if completed.returncode != 0:
         stderr = completed.stderr.strip().splitlines()
         detail = stderr[-1] if stderr else f"exit code {completed.returncode}"
+        result.smoke_tests[name] = f"failed: {detail}"
         result.add_check(
             f"smoke:{name}",
             "failed",

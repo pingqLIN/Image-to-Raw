@@ -30,12 +30,56 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 - `scene.id`、`scene.width`、`scene.height`、`scene.coordinate_space`、`scene.input_space` 必填。
 - `assets`、`materials`、`lights`、`regions` 可省略或為空陣列。
 - `assets[].id`、`materials[].id`、`lights[].id`、`regions[].id` 在各自集合中不可重複。
-- `assets[].path` 若存在，必須能從 semantic sidecar 所在資料夾 resolve。
+- `assets[].path` 若存在，必須是相對於 semantic sidecar 所在資料夾的檔案路徑，且不得指向絕對路徑、資料夾或跳出 sidecar 目錄。
+- `assets[].sha256` 若存在，必須是 `sha256:<hex>`，且會與 asset bytes 比對。
 - `regions[].material_id` 若存在，必須引用已定義 material。
 - `regions[].mask_asset_id` 若存在，必須引用已定義 asset。
+- `capture_physics`、`camera_response` 與 `regions[].raw_statistics` 是 optional semantic-physics 研究欄位；它們可被保存與驗證，但不代表已量測真實拍攝現場。
+- `capture_physics.source` 與 `regions[].response_hints.source` 若存在，必須是 `measured`、`metadata`、`inferred`、`synthetic` 或 `retrieved`。
+- confidence、ratio 類欄位必須是 0 到 1 之間的有限數字；ISO、曝光時間、光圈、白平衡、lux 與 white level 等量值若存在必須為正數。`ev100` 若存在必須是有限數字，低光場景可為 0 或負值。
+- `camera_response.cfa_pattern` 若存在，必須是 `rggb`、`bggr`、`grbg` 或 `gbrg`；black level 必須為非負，且必須小於 white level。
+- `regions[].raw_statistics.mean_linear_rgb`、`p50_linear_rgb`、`p95_linear_rgb` 若存在，必須是三個非負有限數字。
 - 未知欄位會被保留並容忍，方便外部 producer 擴充。
 
-缺少 `assets[].sha256` 會產生 warning，但不會讓 validation 失敗。這代表 asset 可被 resolve，但完整性尚未被 sidecar 自身鎖定。
+缺少 `assets[].sha256` 會產生 warning，但不會讓 validation 失敗。這代表 asset 可被 resolve，但完整性尚未被 sidecar 自身鎖定；若提供 hash，validator 會驗證內容是否相符。
+
+## Semantic-Physics 欄位範例
+
+```json
+{
+  "capture_physics": {
+    "source": "metadata",
+    "iso": 100,
+    "exposure_time_seconds": 0.008,
+    "aperture_f_number": 5.6,
+    "white_balance_kelvin": 6500,
+    "illuminant_confidence": 0.75
+  },
+  "camera_response": {
+    "cfa_pattern": "rggb",
+    "black_level": [512, 512, 512, 512],
+    "white_level": 16383
+  },
+  "regions": [
+    {
+      "id": "region-neutral-card",
+      "raw_statistics": {
+        "mean_linear_rgb": [0.18, 0.18, 0.18],
+        "p50_linear_rgb": [0.18, 0.18, 0.18],
+        "p95_linear_rgb": [0.72, 0.72, 0.72],
+        "clipped_pixel_ratio": 0.0,
+        "shadow_pixel_ratio": 0.01
+      },
+      "response_hints": {
+        "source": "inferred",
+        "confidence": 0.82
+      }
+    }
+  ]
+}
+```
+
+這些欄位用來建立可審查、可追溯的研究 sidecar。`source: inferred`、`retrieved` 或 `synthetic` 不可被解讀為真實物理量測。
 
 ## Pipeline 行為
 

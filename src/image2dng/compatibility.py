@@ -395,13 +395,16 @@ def _resolved_version_command(
 def _tool_version(command: list[str] | None, timeout_seconds: int) -> str | None:
     if command is None:
         return None
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return f"unavailable: {exc}"[:200]
     text = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part.strip())
     first_line = text.splitlines()[0] if text.splitlines() else f"exit code {completed.returncode}"
     return first_line[:200]

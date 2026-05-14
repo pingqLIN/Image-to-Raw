@@ -30,12 +30,56 @@ The v1 goal is semantic preservation and validation. It lets the RAW-native pipe
 - `scene.id`, `scene.width`, `scene.height`, `scene.coordinate_space`, and `scene.input_space` are required.
 - `assets`, `materials`, `lights`, and `regions` may be omitted or empty arrays.
 - `assets[].id`, `materials[].id`, `lights[].id`, and `regions[].id` must be unique inside their own collections.
-- `assets[].path`, when present, must resolve from the folder containing the semantic sidecar.
+- `assets[].path`, when present, must be a file path relative to the folder containing the semantic sidecar; it must not be absolute, point at a directory, or escape the sidecar directory.
+- `assets[].sha256`, when present, must be `sha256:<hex>` and match the asset bytes.
 - `regions[].material_id`, when present, must reference a defined material.
 - `regions[].mask_asset_id`, when present, must reference a defined asset.
+- `capture_physics`, `camera_response`, and `regions[].raw_statistics` are optional semantic-physics research fields. They can be preserved and validated, but they do not mean that real capture physics was measured.
+- `capture_physics.source` and `regions[].response_hints.source`, when present, must be `measured`, `metadata`, `inferred`, `synthetic`, or `retrieved`.
+- Confidence and ratio fields must be finite numbers between 0 and 1. ISO, exposure time, aperture, white balance, lux, and white level values must be positive when present. `ev100`, when present, must be finite and may be zero or negative for low-light scenes.
+- `camera_response.cfa_pattern`, when present, must be `rggb`, `bggr`, `grbg`, or `gbrg`. Black level values must be non-negative and less than white level.
+- `regions[].raw_statistics.mean_linear_rgb`, `p50_linear_rgb`, and `p95_linear_rgb`, when present, must be three finite non-negative numbers.
 - Unknown fields are tolerated and preserved so upstream producers can extend the sidecar.
 
-Missing `assets[].sha256` values produce warnings, not failures. This means the asset can be resolved, but the sidecar has not locked its integrity.
+Missing `assets[].sha256` values produce warnings, not failures. This means the asset can be resolved, but the sidecar has not locked its integrity. When a hash is provided, the validator verifies it against the asset contents.
+
+## Semantic-Physics Field Example
+
+```json
+{
+  "capture_physics": {
+    "source": "metadata",
+    "iso": 100,
+    "exposure_time_seconds": 0.008,
+    "aperture_f_number": 5.6,
+    "white_balance_kelvin": 6500,
+    "illuminant_confidence": 0.75
+  },
+  "camera_response": {
+    "cfa_pattern": "rggb",
+    "black_level": [512, 512, 512, 512],
+    "white_level": 16383
+  },
+  "regions": [
+    {
+      "id": "region-neutral-card",
+      "raw_statistics": {
+        "mean_linear_rgb": [0.18, 0.18, 0.18],
+        "p50_linear_rgb": [0.18, 0.18, 0.18],
+        "p95_linear_rgb": [0.72, 0.72, 0.72],
+        "clipped_pixel_ratio": 0.0,
+        "shadow_pixel_ratio": 0.01
+      },
+      "response_hints": {
+        "source": "inferred",
+        "confidence": 0.82
+      }
+    }
+  ]
+}
+```
+
+These fields are for auditable and traceable research sidecars. `source: inferred`, `retrieved`, or `synthetic` must not be interpreted as real physical measurement.
 
 ## Pipeline Behavior
 

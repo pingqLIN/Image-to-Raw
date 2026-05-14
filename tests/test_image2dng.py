@@ -579,6 +579,152 @@ def test_semantic_scene_validator_rejects_non_finite_numeric_values(tmp_path):
     assert "sensor_response_hints.target_middle_gray must be between 0 and 1" in result.errors
 
 
+def test_semantic_scene_validator_verifies_asset_paths_and_hashes(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["assets"][0]["sha256"] = "sha256:" + "0" * 64
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "assets[0].sha256 does not match asset contents" in result.errors
+
+
+def test_semantic_scene_validator_rejects_asset_paths_outside_sidecar(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["assets"][0]["path"] = "../outside-mask.png"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "assets[0].path must stay within the semantic sidecar directory" in result.errors
+
+
+def test_semantic_scene_validator_rejects_asset_directory_paths(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    asset_dir = tmp_path / "asset-dir"
+    asset_dir.mkdir()
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["assets"][0]["path"] = asset_dir.name
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert any("asset path must reference a file" in error for error in result.errors)
+
+
+def test_semantic_scene_validator_accepts_semantic_physics_fields(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert result.ok, result.errors
+    assert result.warnings == []
+
+
+def test_semantic_scene_validator_accepts_zero_and_negative_ev100(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["capture_physics"]["ev100"] = -2.0
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert result.ok, result.errors
+
+
+def test_semantic_scene_validator_rejects_bad_semantic_physics_fields(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["capture_physics"]["source"] = "guessed"
+    payload["capture_physics"]["white_balance_kelvin"] = 0
+    payload["capture_physics"]["illuminant_confidence"] = 1.5
+    payload["capture_physics"]["ev100"] = False
+    payload["camera_response"]["cfa_pattern"] = "rgb"
+    payload["regions"][0]["raw_statistics"]["mean_linear_rgb"] = [0.1, -0.1, 0.2]
+    payload["regions"][0]["response_hints"]["confidence"] = False
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert any("capture_physics.source must be one of" in error for error in result.errors)
+    assert "capture_physics.white_balance_kelvin must be a positive number" in result.errors
+    assert "capture_physics.illuminant_confidence must be between 0 and 1" in result.errors
+    assert "capture_physics.ev100 must be a finite number" in result.errors
+    assert "camera_response.cfa_pattern must be one of bggr, gbrg, grbg, rggb" in result.errors
+    assert any(
+        "mean_linear_rgb must contain three non-negative" in error for error in result.errors
+    )
+    assert "regions[0].response_hints.confidence must be between 0 and 1" in result.errors
+
+
+def test_semantic_scene_validator_rejects_black_level_array_above_white_level(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["camera_response"]["black_level"] = [512, 20000, 512, 512]
+    payload["camera_response"]["white_level"] = 16383
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "camera_response.black_level must be less than white_level" in result.errors
+
+
+def test_semantic_scene_validator_rejects_non_string_semantic_physics_enums(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["capture_physics"]["source"] = ["metadata"]
+    payload["camera_response"]["cfa_pattern"] = {"pattern": "rggb"}
+    payload["regions"][0]["response_hints"]["source"] = ["inferred"]
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert any("capture_physics.source must be one of" in error for error in result.errors)
+    assert "camera_response.cfa_pattern must be one of bggr, gbrg, grbg, rggb" in result.errors
+    assert any(
+        "regions[0].response_hints.source must be one of" in error
+        for error in result.errors
+    )
+
+
 def test_semantic_reaction_model_registry_separates_implemented_and_candidate_models():
     registry = semantic_reaction_model_registry()
 
@@ -728,6 +874,44 @@ def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
     assert sample["semantic_contract"] == SEMANTIC_SCENE_SCHEMA
     assert sample["semantic_to_raw_status"] == "preserved-not-applied"
     assert sample["semantic_validation"]["ok"] is True
+
+
+def test_external_scene_linear_batch_preserves_semantic_physics_sidecar(tmp_path):
+    source_path = tmp_path / "semantic-physics-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "semantic-physics-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="semantic-physics-scene",
+                path=source_path,
+                description="semantic physics preservation test",
+                producer="unit-test-renderer",
+                semantic_manifest=semantic_path,
+            )
+        ],
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    scene_manifest = manifest["scenes"][0]
+    copied_semantic = Path(scene_manifest["semantic_artifacts"]["semantic_manifest"])
+    copied_payload = json.loads(copied_semantic.read_text(encoding="utf-8"))
+    sample = json.loads(result.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
+
+    assert scene_manifest["semantic_validation"]["ok"] is True
+    assert scene_manifest["semantic_to_raw_status"] == "preserved-not-applied"
+    assert copied_payload["capture_physics"]["source"] == "metadata"
+    assert copied_payload["camera_response"]["cfa_pattern"] == "rggb"
+    assert copied_payload["regions"][0]["raw_statistics"]["clipped_pixel_ratio"] == 0.0
+    assert sample["semantic_to_raw_status"] == "preserved-not-applied"
 
 
 def test_external_scene_linear_batch_rejects_invalid_semantic_sidecar(tmp_path):
@@ -1326,6 +1510,31 @@ def test_adobe_dng_converter_verifier_dry_run_writes_report(tmp_path, monkeypatc
     assert report["converted_artifact_inspection"] is None
 
 
+def test_adobe_dng_converter_verifier_dry_run_fails_invalid_source(tmp_path, monkeypatch):
+    module = _load_script_module("verify_adobe_dng_converter")
+    monkeypatch.setattr(module, "_resolve_converter", lambda _explicit: (None, None))
+
+    class FakeValidation:
+        def to_dict(self):
+            return {"ok": False, "errors": ["synthetic validation failure"]}
+
+    monkeypatch.setattr(module, "validate_dng", lambda *_args, **_kwargs: FakeValidation())
+    output_dir = tmp_path / "adobe-dry-run-invalid-source"
+
+    exit_code = module.main(["--output-dir", str(output_dir), "--dry-run"])
+
+    report = json.loads(
+        (output_dir / "reports" / "adobe-dng-converter-report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 1
+    assert report["dry_run"] is True
+    assert report["status"] == "failed"
+    assert report["ok"] is False
+    assert report["errors"] == ["source image2dng contract validation failed"]
+
+
 def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypatch):
     module = _load_script_module("verify_adobe_dng_converter")
     fake_converter = tmp_path / "Adobe DNG Converter.exe"
@@ -1345,6 +1554,9 @@ def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypa
 
     monkeypatch.setattr("image2dng.compatibility.subprocess.run", fake_adobe_run)
     output_dir = tmp_path / "adobe-run"
+    previous_output = output_dir / "converted" / "adobe-single-raw-ifd-fixture.dng"
+    previous_output.parent.mkdir(parents=True)
+    previous_output.write_bytes(b"previous converted artifact")
 
     exit_code = module.main(["--output-dir", str(output_dir), "--timeout-seconds", "1"])
 
@@ -1356,6 +1568,9 @@ def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypa
     assert exit_code == 0
     assert report["ok"] is True
     assert report["converter_result"]["result"] == "passed"
+    moved_existing = Path(report["artifacts"]["moved_existing_converted_dng"])
+    assert moved_existing.exists()
+    assert moved_existing.read_bytes() == b"previous converted artifact"
     assert Path(report["converter_result"]["output_artifacts"][0]).exists()
     assert report["converted_artifact_inspection"]["ok"] is True
     assert report["errors"] == []
@@ -1559,6 +1774,87 @@ def test_real_raw_sample_audit_marks_proprietary_raw_redaction_unknown(tmp_path,
     assert set(redaction["fields"].values()) == {"unknown"}
     assert redaction["status"] == "needs-manual-review"
     assert any("Proprietary RAW metadata needs ExifTool" in item for item in redaction["warnings"])
+
+
+def test_semantic_physics_manifest_builder_writes_local_manifest(tmp_path):
+    module = _load_script_module("build_semantic_physics_manifest")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+    output_dir = tmp_path / "semantic-physics-manifest"
+
+    exit_code = module.main(
+        [
+            "--semantic-sidecar",
+            str(semantic_path),
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    sample = manifest["samples"][0]
+    assert exit_code == 0
+    assert manifest["schema"] == "image2dng.semantic_physics_dataset_manifest.v1"
+    assert manifest["local_research_only"] is True
+    assert manifest["all_validations_ok"] is True
+    assert sample["semantic_sidecar_sha256"].startswith("sha256:")
+    assert sample["semantic_physics_fields"] == {
+        "capture_physics": True,
+        "camera_response": True,
+        "region_raw_statistics_count": 1,
+    }
+
+
+def test_semantic_physics_manifest_builder_refuses_tracked_output(tmp_path):
+    module = _load_script_module("build_semantic_physics_manifest")
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
+    output_dir = tmp_path / "tracked-manifest"
+
+    exit_code = module.main(
+        [
+            "--semantic-sidecar",
+            str(semantic_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_semantic_physics_manifest_builder_records_invalid_sidecar(tmp_path):
+    module = _load_script_module("build_semantic_physics_manifest")
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["capture_physics"] = {"source": "guessed"}
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+    output_dir = tmp_path / "invalid-semantic-physics-manifest"
+
+    exit_code = module.main(
+        [
+            "--semantic-sidecar",
+            str(semantic_path),
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert exit_code == 1
+    assert manifest["all_validations_ok"] is False
+    assert manifest["samples"][0]["validation_ok"] is False
+    assert any(
+        "capture_physics.source must be one of" in error
+        for error in manifest["samples"][0]["validation"]["errors"]
+    )
 
 
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
@@ -1977,6 +2273,32 @@ def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
     assert {check.status for check in smoke_checks} == {"skipped"}
 
 
+def test_failed_smoke_tools_are_recorded_in_smoke_summary(tmp_path, monkeypatch):
+    output_path = _write_test_dng(tmp_path, prompt_hash="sha256:smoke-failed")
+    monkeypatch.setattr(
+        "image2dng.validate.resolve_processor_executable",
+        lambda command: (f"C:/fake/{command}.exe", "fake"),
+    )
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 7, stdout="", stderr="synthetic failure\n")
+
+    monkeypatch.setattr("image2dng.validate.subprocess.run", fake_run)
+
+    result = validate_dng(output_path, run_smoke=True)
+
+    assert not result.ok
+    assert set(result.smoke_tests) == {
+        "exiftool",
+        "dcraw",
+        "darktable-cli",
+        "rawtherapee-cli",
+    }
+    assert all(value == "failed: synthetic failure" for value in result.smoke_tests.values())
+    smoke_checks = [check for check in result.checks if check.name.startswith("smoke:")]
+    assert {check.status for check in smoke_checks} == {"failed"}
+
+
 def _write_test_dng(tmp_path, *, prompt_hash: str):
     input_path = tmp_path / "input.tif"
     output_path = tmp_path / "output.dng"
@@ -2062,6 +2384,7 @@ def _write_semantic_scene(
     height: int,
     input_space: str = "linear-rec709",
     include_hash: bool = False,
+    include_semantic_physics: bool = False,
     exposure_bias_ev: float | None = 0.0,
     mask_columns: int | None = None,
 ) -> Path:
@@ -2081,71 +2404,102 @@ def _write_semantic_scene(
     }
     if include_hash:
         asset["sha256"] = f"sha256:{hashlib.sha256(mask_path.read_bytes()).hexdigest()}"
-    semantic_path = directory / "renderer-frame-001.semantic.json"
-    semantic_path.write_text(
-        json.dumps(
+    response_hints = {
+        "exposure_bias_ev": exposure_bias_ev,
+        "preserve_highlight_detail": True,
+        "noise_priority": "low",
+    }
+    if include_semantic_physics:
+        response_hints.update(
             {
-                "schema": SEMANTIC_SCENE_SCHEMA,
-                "scene": {
-                    "id": "renderer-frame-001",
-                    "description": "scene-linear output from an upstream generator",
-                    "width": width,
-                    "height": height,
-                    "coordinate_space": "pixel",
-                    "input_space": input_space,
+                "source": "inferred",
+                "confidence": 0.82,
+            }
+        )
+    region = {
+        "id": "region-neutral-card",
+        "label": "neutral card",
+        "material_id": "mat-neutral-card",
+        "mask_asset_id": "mask-material-chart",
+        "bbox": [0, 0, width, height],
+        **({"response_hints": response_hints} if exposure_bias_ev is not None else {}),
+    }
+    if include_semantic_physics:
+        region["raw_statistics"] = {
+            "mean_linear_rgb": [0.18, 0.18, 0.18],
+            "p50_linear_rgb": [0.18, 0.18, 0.18],
+            "p95_linear_rgb": [0.72, 0.72, 0.72],
+            "clipped_pixel_ratio": 0.0,
+            "shadow_pixel_ratio": 0.01,
+        }
+    payload = {
+        "schema": SEMANTIC_SCENE_SCHEMA,
+        "scene": {
+            "id": "renderer-frame-001",
+            "description": "scene-linear output from an upstream generator",
+            "width": width,
+            "height": height,
+            "coordinate_space": "pixel",
+            "input_space": input_space,
+        },
+        "producer": {
+            "name": "external renderer",
+            "version": "0.1.0",
+            "prompt_hash": "sha256:unit",
+        },
+        "assets": [asset],
+        "materials": [
+            {
+                "id": "mat-neutral-card",
+                "label": "neutral gray card",
+                "base_color": [0.18, 0.18, 0.18],
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "emission": [0.0, 0.0, 0.0],
+            }
+        ],
+        "lights": [
+            {
+                "id": "key-light",
+                "type": "area",
+                "color_temperature_kelvin": 6500,
+                "relative_intensity": 1.0,
+                "direction": [0.0, -0.5, -1.0],
+            }
+        ],
+        "regions": [region],
+        "sensor_response_hints": {
+            "target_white_balance_kelvin": 6500,
+            "target_middle_gray": 0.18,
+            "clipping_policy": "preserve-highlights",
+        },
+    }
+    if include_semantic_physics:
+        payload.update(
+            {
+                "capture_physics": {
+                    "source": "metadata",
+                    "iso": 100,
+                    "exposure_time_seconds": 0.008,
+                    "aperture_f_number": 5.6,
+                    "white_balance_kelvin": 6500,
+                    "illuminant_confidence": 0.75,
+                    "lux": 450,
+                    "ev100": 10.0,
                 },
-                "producer": {
-                    "name": "external renderer",
-                    "version": "0.1.0",
-                    "prompt_hash": "sha256:unit",
-                },
-                "assets": [asset],
-                "materials": [
-                    {
-                        "id": "mat-neutral-card",
-                        "label": "neutral gray card",
-                        "base_color": [0.18, 0.18, 0.18],
-                        "roughness": 0.5,
-                        "metallic": 0.0,
-                        "emission": [0.0, 0.0, 0.0],
-                    }
-                ],
-                "lights": [
-                    {
-                        "id": "key-light",
-                        "type": "area",
-                        "color_temperature_kelvin": 6500,
-                        "relative_intensity": 1.0,
-                        "direction": [0.0, -0.5, -1.0],
-                    }
-                ],
-                "regions": [
-                    {
-                        "id": "region-neutral-card",
-                        "label": "neutral card",
-                        "material_id": "mat-neutral-card",
-                        "mask_asset_id": "mask-material-chart",
-                        "bbox": [0, 0, width, height],
-                        **(
-                            {
-                                "response_hints": {
-                                    "exposure_bias_ev": exposure_bias_ev,
-                                    "preserve_highlight_detail": True,
-                                    "noise_priority": "low",
-                                }
-                            }
-                            if exposure_bias_ev is not None
-                            else {}
-                        ),
-                    }
-                ],
-                "sensor_response_hints": {
-                    "target_white_balance_kelvin": 6500,
-                    "target_middle_gray": 0.18,
-                    "clipping_policy": "preserve-highlights",
+                "camera_response": {
+                    "camera_make": "unit-test",
+                    "camera_model": "semantic physics fixture",
+                    "cfa_pattern": "rggb",
+                    "black_level": [512, 512, 512, 512],
+                    "white_level": 16383,
+                    "color_matrix_1": [],
                 },
             }
-        ),
+        )
+    semantic_path = directory / "renderer-frame-001.semantic.json"
+    semantic_path.write_text(
+        json.dumps(payload),
         encoding="utf-8",
     )
     return semantic_path

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -7,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 SEMANTIC_SCENE_SCHEMA = "image2dng.semantic_scene.v1"
+PHYSICS_SOURCE_VALUES = {"measured", "metadata", "inferred", "synthetic", "retrieved"}
+CFA_PATTERN_VALUES = {"rggb", "bggr", "grbg", "gbrg"}
 
 
 @dataclass(frozen=True)
@@ -104,6 +107,8 @@ def validate_semantic_scene(path: str | Path) -> SemanticSceneValidationResult:
     _validate_lights(lights, errors)
     _validate_regions(regions, material_ids, asset_ids, scene_width, scene_height, errors)
     _validate_sensor_response_hints(payload.get("sensor_response_hints"), errors)
+    _validate_capture_physics(payload.get("capture_physics"), errors)
+    _validate_camera_response(payload.get("camera_response"), errors)
 
     return SemanticSceneValidationResult(
         path=source,
@@ -208,15 +213,60 @@ def _validate_assets(
         if not isinstance(asset_path, str) or not asset_path:
             errors.append(f"assets[{index}].path must be a non-empty string when present")
             continue
-        resolved = Path(asset_path)
-        resolved = resolved if resolved.is_absolute() else base / resolved
+        resolved = _resolve_asset_path(asset_path, base, index, errors)
+        if resolved is None:
+            continue
         if not resolved.exists():
             errors.append(f"asset path does not exist for {asset_id}: {resolved}")
+        elif not resolved.is_file():
+            errors.append(f"asset path must reference a file for {asset_id}: {resolved}")
         else:
+            _validate_asset_sha256(item.get("sha256"), resolved, f"assets[{index}]", errors)
             resolved_paths[asset_id] = resolved
         if not isinstance(item.get("sha256"), str):
             warnings.append(f"assets[{index}].sha256 is missing; asset integrity is unverified")
     return resolved_paths
+
+
+def _resolve_asset_path(
+    asset_path: str,
+    base: Path,
+    index: int,
+    errors: list[str],
+) -> Path | None:
+    candidate = Path(asset_path)
+    if candidate.is_absolute():
+        errors.append(f"assets[{index}].path must be relative to the semantic sidecar")
+        return None
+    resolved_base = base.resolve()
+    resolved = (base / candidate).resolve()
+    if resolved != resolved_base and resolved_base not in resolved.parents:
+        errors.append(f"assets[{index}].path must stay within the semantic sidecar directory")
+        return None
+    return resolved
+
+
+def _validate_asset_sha256(
+    value: Any,
+    path: Path,
+    label: str,
+    errors: list[str],
+) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        errors.append(f"{label}.sha256 must be a sha256:<hex> string when present")
+        return
+    prefix = "sha256:"
+    digest = value.removeprefix(prefix)
+    if not value.startswith(prefix) or len(digest) != 64 or any(
+        character not in "0123456789abcdefABCDEF" for character in digest
+    ):
+        errors.append(f"{label}.sha256 must be a sha256:<hex> string when present")
+        return
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest.lower() != actual:
+        errors.append(f"{label}.sha256 does not match asset contents")
 
 
 def _validate_materials(materials: list[Any], errors: list[str]) -> None:
@@ -271,6 +321,13 @@ def _validate_regions(
         hints = item.get("response_hints")
         if hints is not None:
             _validate_response_hints(hints, f"regions[{index}].response_hints", errors)
+        raw_statistics = item.get("raw_statistics")
+        if raw_statistics is not None:
+            _validate_raw_statistics(
+                raw_statistics,
+                f"regions[{index}].raw_statistics",
+                errors,
+            )
 
 
 def _validate_bbox(
@@ -309,6 +366,10 @@ def _validate_response_hints(value: Any, label: str, errors: list[str]) -> None:
     noise_priority = value.get("noise_priority")
     if noise_priority is not None and noise_priority not in {"low", "medium", "high"}:
         errors.append(f"{label}.noise_priority must be one of low, medium, high")
+    _validate_source(value.get("source"), f"{label}.source", errors)
+    confidence = value.get("confidence")
+    if confidence is not None:
+        _validate_unit_value(confidence, f"{label}.confidence", errors)
 
 
 def _validate_sensor_response_hints(value: Any, errors: list[str]) -> None:
@@ -332,7 +393,108 @@ def _validate_sensor_response_hints(value: Any, errors: list[str]) -> None:
         errors.append("sensor_response_hints.clipping_policy is unsupported")
 
 
+def _validate_capture_physics(value: Any, errors: list[str]) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        errors.append("capture_physics must be an object")
+        return
+    _validate_source(value.get("source"), "capture_physics.source", errors)
+    for key in (
+        "iso",
+        "exposure_time_seconds",
+        "aperture_f_number",
+        "white_balance_kelvin",
+        "lux",
+    ):
+        _validate_optional_positive_number(value.get(key), f"capture_physics.{key}", errors)
+    _validate_optional_finite_number(value.get("ev100"), "capture_physics.ev100", errors)
+    confidence = value.get("illuminant_confidence")
+    if confidence is not None:
+        _validate_unit_value(confidence, "capture_physics.illuminant_confidence", errors)
+
+
+def _validate_camera_response(value: Any, errors: list[str]) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        errors.append("camera_response must be an object")
+        return
+    cfa_pattern = value.get("cfa_pattern")
+    if (
+        cfa_pattern is not None
+        and (not isinstance(cfa_pattern, str) or cfa_pattern not in CFA_PATTERN_VALUES)
+    ):
+        errors.append("camera_response.cfa_pattern must be one of bggr, gbrg, grbg, rggb")
+    black_level = value.get("black_level")
+    white_level = value.get("white_level")
+    _validate_black_level(black_level, errors)
+    _validate_optional_positive_number(white_level, "camera_response.white_level", errors)
+    _validate_black_level_less_than_white_level(black_level, white_level, errors)
+
+
+def _validate_black_level(value: Any, errors: list[str]) -> None:
+    if value is None:
+        return
+    if _is_number(value):
+        if value < 0:
+            errors.append("camera_response.black_level must be non-negative")
+        return
+    if not isinstance(value, list) or not value:
+        errors.append("camera_response.black_level must be a non-negative number or array")
+        return
+    if any(not _is_number(item) or item < 0 for item in value):
+        errors.append("camera_response.black_level must contain non-negative numeric values")
+
+
+def _validate_black_level_less_than_white_level(
+    black_level: Any,
+    white_level: Any,
+    errors: list[str],
+) -> None:
+    if not _is_number(white_level):
+        return
+    if _is_number(black_level):
+        if black_level >= white_level:
+            errors.append("camera_response.black_level must be less than white_level")
+        return
+    if not isinstance(black_level, list):
+        return
+    numeric_black_levels = [item for item in black_level if _is_number(item)]
+    if any(item >= white_level for item in numeric_black_levels):
+        errors.append("camera_response.black_level must be less than white_level")
+
+
+def _validate_raw_statistics(value: Any, label: str, errors: list[str]) -> None:
+    if not isinstance(value, dict):
+        errors.append(f"{label} must be an object")
+        return
+    for key in ("mean_linear_rgb", "p50_linear_rgb", "p95_linear_rgb"):
+        _validate_non_negative_rgb_triplet(value.get(key), f"{label}.{key}", errors)
+    for key in ("clipped_pixel_ratio", "shadow_pixel_ratio"):
+        ratio = value.get(key)
+        if ratio is not None:
+            _validate_unit_value(ratio, f"{label}.{key}", errors)
+
+
+def _validate_source(value: Any, label: str, errors: list[str]) -> None:
+    if (
+        value is not None
+        and (not isinstance(value, str) or value not in PHYSICS_SOURCE_VALUES)
+    ):
+        errors.append(
+            f"{label} must be one of inferred, measured, metadata, retrieved, synthetic"
+        )
+
+
 def _validate_rgb_triplet(value: Any, label: str, errors: list[str]) -> None:
+    if value is not None and (
+        not _is_number_list(value, 3) or any(channel < 0 for channel in value)
+    ):
+        errors.append(f"{label} must contain three non-negative numeric values")
+
+
+def _validate_non_negative_rgb_triplet(value: Any, label: str, errors: list[str]) -> None:
     if value is not None and (
         not _is_number_list(value, 3) or any(channel < 0 for channel in value)
     ):
@@ -342,6 +504,16 @@ def _validate_rgb_triplet(value: Any, label: str, errors: list[str]) -> None:
 def _validate_unit_value(value: Any, label: str, errors: list[str]) -> None:
     if value is not None and (not _is_number(value) or not 0 <= value <= 1):
         errors.append(f"{label} must be between 0 and 1")
+
+
+def _validate_optional_positive_number(value: Any, label: str, errors: list[str]) -> None:
+    if value is not None and (not _is_number(value) or value <= 0):
+        errors.append(f"{label} must be a positive number")
+
+
+def _validate_optional_finite_number(value: Any, label: str, errors: list[str]) -> None:
+    if value is not None and not _is_number(value):
+        errors.append(f"{label} must be a finite number")
 
 
 def _is_number_list(value: Any, length: int) -> bool:
