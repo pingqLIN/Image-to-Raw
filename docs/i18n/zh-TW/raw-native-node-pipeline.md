@@ -4,16 +4,20 @@
 
 ## 核心判斷
 
-短期先自建 repo 內的最小節點式 pipeline，而不是直接把 ComfyUI 安裝成核心依賴。
+短期先自建 repo 內的最小節點式 pipeline，而不是直接把 ComfyUI 安裝成核心依賴。ComfyUI / Stable Diffusion bridge 已分割為 sibling project，核心 repo 只維持 generic external scene-linear boundary。
 
 理由：
 
 - RAW/DNG 語意、XMP provenance、synthetic camera 標示、validation contract 是本專案的核心責任，應先在本 repo 內保持可測試、可版本化、可回歸。
 - 現有 `convert()`、DNG writer、validator、sensor effects 已經提供足夠基礎，可以快速拆成 graph artifacts。
-- ComfyUI 很適合視覺化節點編排與生成模型生態，但若一開始綁為核心依賴，會讓 RAW 格式語意、模型工作流、UI extension 生命週期耦合過早。
+- ComfyUI 很適合視覺化節點編排與生成模型生態，但應由獨立 bridge project 包覆核心 pipeline，避免 RAW 格式語意、模型工作流、UI extension 生命週期過早耦合。
 - 第一批驗證目標是產生含 IFD0 JPEG preview 的 DNG、sidecar JPEG preview、validation JSON 與 graph manifest，不需要先引入大型 diffusion runtime。
 
-ComfyUI 仍然是 Phase 2 整合目標。官方文件顯示 ComfyUI 具備 node/custom-node 與 CLI 管理路徑，適合之後包成 custom node 或由 API workflow 呼叫本 repo 的核心 pipeline：
+ComfyUI / Stable Diffusion 整合位於 sibling bridge project：
+
+- [image-to-raw-comfyui-sd-bridge](../../../../image-to-raw-comfyui-sd-bridge/README.zh-tw.md)
+
+ComfyUI 官方文件仍是 bridge project 後續 custom-node / CLI 整合的參考：
 
 - <https://docs.comfy.org/development/core-concepts/custom-nodes>
 - <https://docs.comfy.org/comfy-cli/getting-started>
@@ -38,7 +42,7 @@ flowchart LR
 
 ## External scene-linear producer boundary
 
-外部 renderer、AI generator、simulation engine 或未來 ComfyUI node 不需要直接理解 DNG writer。它們可以先交出 scene-linear TIFF/PNG，讓本 repo 負責 virtual camera、sensor effect、DNG layout、sidecar preview、validation 與 manifest。
+外部 renderer、AI generator、simulation engine 或 bridge project 中的 ComfyUI node 不需要直接理解 DNG writer。它們可以先交出 scene-linear TIFF/PNG 與 manifest，讓本 repo 負責 virtual camera、sensor effect、DNG layout、sidecar preview、validation 與 manifest。
 
 最小 CLI：
 
@@ -48,18 +52,18 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
-ComfyUI 的第一個整合點是離線 importer，而不是 custom node。這讓本專案可以先吃 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
+ComfyUI / Stable Diffusion 的離線 importer 已搬到 bridge project。新的 CLI 會讀取 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
 
 ```powershell
-uv run python scripts/import_comfyui_output.py `
+uv run image2dng-comfyui-import `
   path\to\ComfyUI_00002_.png `
   --output-dir demo-output/comfyui-import `
   --run-pipeline
 ```
 
-這條路徑刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
+這條路徑位於 `../image-to-raw-comfyui-sd-bridge/`，刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
 
-Importer 會在 external scene manifest 中寫入 `producer_metadata` 與 `producer_metadata_manifest`。RAW-native external batch 會複製 metadata sidecar，並在 batch manifest / sample index 中記錄 `producer_metadata_artifacts`，讓 ComfyUI workflow 摘要與 output DNG 維持可追溯關係。Producer metadata 只做保存與追蹤，不會改變 raw sample values；會影響像素值的 deterministic transform 只存在於明確 opt-in 的 semantic reaction path。
+Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與 `producer_metadata_manifest`。RAW-native external batch 會複製 metadata sidecar，並在 batch manifest / sample index 中記錄 `producer_metadata_artifacts`，讓 ComfyUI workflow 摘要與 output DNG 維持可追溯關係。Producer metadata 只做保存與追蹤，不會改變 raw sample values；會影響像素值的 deterministic transform 只存在於明確 opt-in 的 semantic reaction path。
 
 多張圖或需要 metadata 時，使用 `image2dng.external_scene_linear_sources.v1` manifest：
 
@@ -128,5 +132,5 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 
 1. 用代表樣本持續驗證 `preview-subifd` layout 在 RAW tools 中的行為；這是格式實驗，不直接宣稱完整 Adobe 相容。
 2. 在已驗證的 semantic sidecar contract 上，設計語意、材質、光照、mask/depth 等如何進入 photon/sensor-response mapping。
-3. 在 DNG tag contract 與 compatibility evidence 穩定後，再做 ComfyUI custom node 原型：輸入 prompt/scene-linear tensor/semantic sidecar，輸出 DNG path、sidecar JPEG path、manifest。
-4. 若 ComfyUI custom node 穩定，再加入 ComfyUI 安裝與 smoke workflow 文件。
+3. 在 bridge project 中原型化 ComfyUI custom node：輸入 prompt/scene-linear tensor/semantic sidecar，輸出 DNG path、sidecar JPEG path、manifest。
+4. 若 ComfyUI custom node 穩定，再於 bridge project 加入 ComfyUI 安裝與 smoke workflow 文件；核心 repo 仍只保留 generic external manifest contract。

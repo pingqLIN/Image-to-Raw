@@ -1,6 +1,6 @@
 # Semantic Scene Sidecar Contract v1
 
-`image2dng.semantic_scene.v1` is the semantic sidecar contract for external renderers, AI generators, simulation engines, and future ComfyUI nodes that hand scene-linear images to this project.
+`image2dng.semantic_scene.v1` is the semantic sidecar contract for external renderers, AI generators, simulation engines, and ComfyUI nodes in bridge projects that hand scene-linear images to this project.
 
 The v1 goal is semantic preservation and validation. It lets the RAW-native pipeline preserve traceable scene, material, light, region, mask/depth asset, and sensor response hint data. It does not convert semantic information into raw sample values yet, and it does not write the sidecar into `DNGPrivateData`.
 

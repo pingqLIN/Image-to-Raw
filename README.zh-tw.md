@@ -65,7 +65,7 @@ uv run python scripts/generate_raw_native_batch.py `
 - `manifests/raw-native-node-batch.json` 節點流程 manifest；
 - `manifests/sample-index.json` 樣片索引。
 
-目前決策是先自建 repo 內的最小核心 pipeline。ComfyUI 適合作為後續視覺化編排、工作流 UI 或 custom node 整合層，但不先成為核心 RAW/DNG 語意的必要依賴。
+目前決策是先自建 repo 內的最小核心 pipeline。ComfyUI / Stable Diffusion 整合已分割到 sibling bridge 專案，核心 repo 只保留 generic external scene-linear manifest 與 RAW/DNG 語意。
 
 外部 renderer、AI generator 或 simulator 已可透過 scene-linear producer boundary 交付輸入：
 
@@ -95,32 +95,22 @@ uv run python scripts/generate_raw_native_batch.py `
 }
 ```
 
-## 匯入 ComfyUI 輸出
+## ComfyUI / Stable Diffusion bridge
 
-第一版 ComfyUI bridge 是離線 importer，不需要啟動 ComfyUI，也不安裝 custom node。它會讀取 ComfyUI 產出的 PNG/JPEG/TIFF，若 PNG 內含 `prompt` / `workflow` metadata，會抽取 prompt、negative prompt、checkpoint、seed、尺寸、steps、CFG、sampler 與 scheduler；接著把影像轉成 16-bit RGB TIFF handoff artifact，並寫出 `image2dng.external_scene_linear_sources.v1` manifest。
+ComfyUI / Stable Diffusion 專屬 importer 已分割到 sibling project：
 
-```powershell
-uv run python scripts/import_comfyui_output.py `
-  path\to\ComfyUI_00002_.png `
-  --output-dir demo-output/comfyui-import
-```
+[image-to-raw-comfyui-sd-bridge](../image-to-raw-comfyui-sd-bridge/README.zh-tw.md)
 
-若要直接接續產生 synthetic DNG、sidecar JPEG preview 與 validation JSON：
+原本位於本 repo 的 `scripts/import_comfyui_output.py` 與 `image2dng.comfyui_importer` 已搬到該 bridge 專案。新的 CLI 是：
 
 ```powershell
-uv run python scripts/import_comfyui_output.py `
+uv run image2dng-comfyui-import `
   path\to\ComfyUI_00002_.png `
   --output-dir demo-output/comfyui-import `
   --run-pipeline
 ```
 
-若這批 DNG 要作為 Adobe DNG Converter 的輸入，請加上 `--dng-layout single-raw-ifd`。目前 Adobe DNG Converter 18.3 可辨識單一 raw IFD layout；對本專案預設的 `preview-subifd` layout，可能會結束但不輸出轉換檔。
-
-預設匯入只會在 `<output-dir>/manifests/comfyui-external-scenes.json` 寫出 importer handoff manifest。加上 `--run-pipeline` 時，RAW-native batch 會另外寫在 `<output-dir>/raw-native-node-batch/`，其中 batch manifest 是 `manifests/raw-native-node-batch.json`，樣片索引是 `manifests/sample-index.json`；CLI 也會分別印出這三個路徑，避免把 importer manifest 與 batch manifest 混在一起。
-
-ComfyUI 一般輸出 PNG 是 display-referred，因此 importer 預設使用 `--input-space srgb`。若上游已確定交付 scene-linear TIFF，可明確改用 `--input-space linear-rec709`。這個 bridge 不等同於 ComfyUI custom node；custom node 仍保留為 DNG contract 與相容性證據更穩定後的後續整合層。
-
-Importer 會把 ComfyUI 摘要寫入 `producer_metadata`，並把 metadata summary sidecar 記錄為 `producer_metadata_manifest`。後續 RAW-native batch 會將 sidecar 複製進 batch input area，並在 `raw-native-node-batch.json` 與 `sample-index.json` 中保留 `producer_metadata` / `producer_metadata_artifacts`，方便追蹤來源 workflow。這些 metadata 目前是 manifest/sidecar 層級保存，不會寫入 `DNGPrivateData`。
+本核心 repo 只接收 bridge 或其他外部 producer 交付的 `image2dng.external_scene_linear_sources.v1` manifest，並負責 scene-linear input、semantic sidecar、DNG writer、validation 與 RAW-native batch。ComfyUI workflow metadata 仍以 `producer_metadata` / `producer_metadata_manifest` 進入 manifest，但不再是核心 package 的內建 API。
 
 `semantic_manifest` 若使用 `image2dng.semantic_scene.v1`，會在 DNG 產生前被驗證，sidecar 與可解析的 local assets 會被複製並寫入 batch manifest / sample index。預設仍只做 preservation + validation；若 manifest 明確設定 `apply_semantic_reaction: true`，可啟用 deterministic `region-exposure-mask-v1` prototype，使用 region mask 與 `exposure_bias_ev` 影響 16-bit scene-linear RGB values。此 prototype 不是完整物理 sensor model。詳細格式見 [docs/i18n/zh-TW/semantic-scene-sidecar-contract.md](docs/i18n/zh-TW/semantic-scene-sidecar-contract.md)。
 

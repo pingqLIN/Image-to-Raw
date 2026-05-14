@@ -4,16 +4,20 @@ This note records the project direction for moving `image2dng` from "convert an 
 
 ## Decision
 
-Build the minimal node-style core pipeline inside this repository first instead of installing ComfyUI as the first core dependency.
+Build the minimal node-style core pipeline inside this repository first instead of installing ComfyUI as the first core dependency. The ComfyUI / Stable Diffusion bridge now lives in a sibling project, while this core repository keeps the generic external scene-linear boundary.
 
 Rationale:
 
 - RAW/DNG semantics, XMP provenance, synthetic camera labeling, and validation contracts are the core responsibility of this project. They should stay testable, versioned, and regression-safe inside this repository.
 - The existing `convert()`, DNG writer, validator, and sensor-effect code already provide enough foundation to split the flow into graph artifacts.
-- ComfyUI is a strong visual orchestration and model ecosystem, but making it the first core dependency would couple RAW semantics, model workflow, and UI extension lifecycle too early.
+- ComfyUI is a strong visual orchestration and model ecosystem, but it should wrap the core pipeline from a separate bridge project so RAW semantics, model workflow, and UI extension lifecycle do not become coupled too early.
 - The first validation target is to emit DNG files with IFD0 JPEG previews, sidecar JPEG previews, validation JSON, and a graph manifest. That does not require a full diffusion runtime yet.
 
-ComfyUI remains the Phase 2 integration target. Its official documentation describes custom-node and CLI management paths, which fit a later wrapper around this repository's core pipeline:
+ComfyUI / Stable Diffusion integration lives in the sibling bridge project:
+
+- [image-to-raw-comfyui-sd-bridge](../../../../image-to-raw-comfyui-sd-bridge/README.md)
+
+ComfyUI documentation remains useful for future bridge-side custom-node and CLI integration:
 
 - <https://docs.comfy.org/development/core-concepts/custom-nodes>
 - <https://docs.comfy.org/comfy-cli/getting-started>
@@ -38,7 +42,7 @@ flowchart LR
 
 ## External Scene-Linear Producer Boundary
 
-External renderers, AI generators, simulation engines, and future ComfyUI nodes do not need to understand the DNG writer directly. They can hand off scene-linear TIFF/PNG files, then this repository owns the virtual camera step, sensor effects, DNG layout, sidecar previews, validation, and manifests.
+External renderers, AI generators, simulation engines, and ComfyUI nodes in the bridge project do not need to understand the DNG writer directly. They can hand off scene-linear TIFF/PNG files and manifests, then this repository owns the virtual camera step, sensor effects, DNG layout, sidecar previews, validation, and manifests.
 
 Minimal CLI:
 
@@ -48,18 +52,18 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
-The first ComfyUI integration point is an offline importer, not a custom node. This lets the project read ComfyUI output PNG `prompt` / `workflow` metadata, convert the image into a 16-bit TIFF handoff artifact, and write an external scene manifest:
+The ComfyUI / Stable Diffusion offline importer moved to the bridge project. Its CLI reads ComfyUI output PNG `prompt` / `workflow` metadata, converts the image into a 16-bit TIFF handoff artifact, and writes an external scene manifest:
 
 ```powershell
-uv run python scripts/import_comfyui_output.py `
+uv run image2dng-comfyui-import `
   path\to\ComfyUI_00002_.png `
   --output-dir demo-output/comfyui-import `
   --run-pipeline
 ```
 
-This path intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
+This path lives in `../image-to-raw-comfyui-sd-bridge/` and intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
 
-The importer writes `producer_metadata` and `producer_metadata_manifest` into the external scene manifest. The RAW-native external batch copies the metadata sidecar and records `producer_metadata_artifacts` in the batch manifest / sample index, keeping the ComfyUI workflow summary traceable to the output DNGs. Producer metadata is preserved for traceability only and does not modify raw sample values; deterministic pixel changes live only in the explicit opt-in semantic reaction path.
+The bridge importer writes `producer_metadata` and `producer_metadata_manifest` into the external scene manifest. The RAW-native external batch copies the metadata sidecar and records `producer_metadata_artifacts` in the batch manifest / sample index, keeping the ComfyUI workflow summary traceable to the output DNGs. Producer metadata is preserved for traceability only and does not modify raw sample values; deterministic pixel changes live only in the explicit opt-in semantic reaction path.
 
 For multiple images or per-image metadata, use an `image2dng.external_scene_linear_sources.v1` manifest:
 
@@ -128,5 +132,5 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 
 1. Continue validating the `preview-subifd` layout with representative samples in RAW tools; this is a format experiment, not a full Adobe compatibility claim.
 2. Build on the validated semantic sidecar contract and define how semantics, material, lighting, mask, and depth data enter photon/sensor-response mapping.
-3. After the DNG tag contract and compatibility evidence are stable, prototype a ComfyUI custom node that accepts prompt, scene-linear tensor, and semantic sidecar input and returns DNG path, sidecar JPEG path, and manifest.
-4. Add ComfyUI installation and smoke workflow docs after the custom node is stable.
+3. Prototype a ComfyUI custom node in the bridge project that accepts prompt, scene-linear tensor, and semantic sidecar input and returns DNG path, sidecar JPEG path, and manifest.
+4. Add ComfyUI installation and smoke workflow docs in the bridge project after the custom node is stable; the core repository should keep only the generic external manifest contract.

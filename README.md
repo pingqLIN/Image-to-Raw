@@ -70,7 +70,7 @@ The batch emits:
 - `manifests/raw-native-node-batch.json` as the node graph manifest;
 - `manifests/sample-index.json` as the sample index.
 
-The current decision is to build the minimal core pipeline inside this repository first. ComfyUI remains a strong candidate for a later visual orchestration layer, workflow UI, or custom-node integration, but it is not the first required dependency for the core RAW/DNG semantics.
+The current decision is to build the minimal core pipeline inside this repository first. ComfyUI / Stable Diffusion integration has been split into a sibling bridge project, while this core repository keeps the generic external scene-linear manifest and RAW/DNG semantics.
 
 External renderers, AI generators, and simulators can now enter through the scene-linear producer boundary:
 
@@ -100,35 +100,22 @@ Use a manifest when each image needs producer, prompt, lighting, or semantic sid
 }
 ```
 
-## Import ComfyUI outputs
+## ComfyUI / Stable Diffusion Bridge
 
-The first ComfyUI bridge is an offline importer. It does not require ComfyUI to be running and does not install a custom node. It reads ComfyUI-generated PNG/JPEG/TIFF files, extracts PNG `prompt` / `workflow` metadata when available, captures prompt, negative prompt, checkpoint, seed, dimensions, steps, CFG, sampler, and scheduler, converts the image into a 16-bit RGB TIFF handoff artifact, and writes an `image2dng.external_scene_linear_sources.v1` manifest.
+The ComfyUI / Stable Diffusion importer now lives in a sibling project:
 
-```powershell
-uv run python scripts/import_comfyui_output.py `
-  path\to\ComfyUI_00002_.png `
-  --output-dir demo-output/comfyui-import
-```
+[image-to-raw-comfyui-sd-bridge](../image-to-raw-comfyui-sd-bridge/README.md)
 
-To immediately generate synthetic DNG files, sidecar JPEG previews, and validation JSON:
+The old `scripts/import_comfyui_output.py` and `image2dng.comfyui_importer` interfaces moved to that bridge project. The new CLI is:
 
 ```powershell
-uv run python scripts/import_comfyui_output.py `
+uv run image2dng-comfyui-import `
   path\to\ComfyUI_00002_.png `
   --output-dir demo-output/comfyui-import `
   --run-pipeline
 ```
 
-If these DNG files need to be used as Adobe DNG Converter inputs, add
-`--dng-layout single-raw-ifd`. Adobe DNG Converter 18.3 recognizes the single
-raw IFD layout; with this project's default `preview-subifd` layout, it may exit
-without writing converted files.
-
-By default, import writes only the importer handoff manifest at `<output-dir>/manifests/comfyui-external-scenes.json`. With `--run-pipeline`, the RAW-native batch is written separately under `<output-dir>/raw-native-node-batch/`; its batch manifest is `manifests/raw-native-node-batch.json`, and its sample index is `manifests/sample-index.json`. The CLI prints all three paths separately so the importer manifest and batch manifest stay distinct.
-
-ComfyUI PNG outputs are usually display-referred, so the importer defaults to `--input-space srgb`. If an upstream workflow is known to emit scene-linear TIFF, pass `--input-space linear-rec709` explicitly. This bridge is not the ComfyUI custom-node integration; custom nodes remain a later layer after the DNG contract and compatibility evidence stabilize.
-
-The importer writes the ComfyUI summary as `producer_metadata` and records the metadata summary sidecar as `producer_metadata_manifest`. The later RAW-native batch copies that sidecar into the batch input area and preserves `producer_metadata` / `producer_metadata_artifacts` in both `raw-native-node-batch.json` and `sample-index.json` so the source workflow remains traceable. This is manifest/sidecar preservation only; the metadata is not embedded in `DNGPrivateData`.
+This core repository accepts `image2dng.external_scene_linear_sources.v1` manifests from the bridge or any other external producer, then owns the scene-linear input, semantic sidecar, DNG writer, validation, and RAW-native batch steps. ComfyUI workflow metadata still enters manifests through `producer_metadata` / `producer_metadata_manifest`, but it is no longer a built-in core package API.
 
 When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. By default this remains preservation + validation; when the manifest explicitly sets `apply_semantic_reaction: true`, the deterministic `region-exposure-mask-v1` prototype can use region masks and `exposure_bias_ev` to affect 16-bit scene-linear RGB values. This prototype is not a full physical sensor model. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
 

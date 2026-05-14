@@ -620,7 +620,10 @@ def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, 
         "schema": "image2dng.raw_native_node_batch.v1",
         "decision": {
             "core_pipeline": "built-in image2dng Python graph",
-            "comfyui_role": "optional visual orchestration layer after core semantics stabilize",
+            "external_generator_bridge": (
+                "external generators enter through scene-linear manifests; "
+                "ComfyUI and Stable Diffusion adapters live outside the core package"
+            ),
         },
         "output_dir": str(root),
         "graph": {
