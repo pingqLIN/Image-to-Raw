@@ -156,6 +156,45 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
     return result
 
 
+def inspect_adobe_converted_dng(
+    path: str | Path,
+    *,
+    run_smoke: bool = True,
+) -> ValidationResult:
+    target = Path(path)
+    result = ValidationResult(path=target)
+    if not target.exists():
+        result.errors.append(f"file does not exist: {target}")
+        return result
+
+    try:
+        with tifffile.TiffFile(target) as tif:
+            if not tif.pages:
+                result.errors.append("no TIFF/DNG pages found")
+                return result
+            page, raw_location = _find_raw_image_page_with_location(tif)
+            if page is None:
+                result.errors.append("no Adobe-converted raw image IFD found")
+                return result
+            _record_layout_summary(tif, page, raw_location, result)
+            _check_adobe_converted_identity(tif, page, result)
+            _check_adobe_converted_geometry(page, result)
+    except Exception as exc:  # noqa: BLE001
+        result.errors.append(f"failed to parse Adobe-converted DNG: {exc}")
+        return result
+
+    if not result.errors:
+        result.add_check(
+            "adobe-converted-artifact",
+            "passed",
+            "Adobe-converted DNG artifact inspection passed",
+        )
+
+    if run_smoke:
+        _run_external_smoke_tests(target, result)
+    return result
+
+
 def find_raw_image_page(tif: tifffile.TiffFile) -> tifffile.TiffPage | None:
     page, _location = _find_raw_image_page_with_location(tif)
     return page
@@ -404,6 +443,72 @@ def _check_makernote(page: tifffile.TiffPage, result: ValidationResult) -> None:
         result.errors.append("MakerNote tag must not be written for synthetic DNG")
 
 
+def _check_adobe_converted_identity(
+    tif: tifffile.TiffFile,
+    raw_page: tifffile.TiffPage,
+    result: ValidationResult,
+) -> None:
+    dng_version = _first_tag_value(tif, TAG_DNG_VERSION)
+    if dng_version is None:
+        result.errors.append("Adobe-converted artifact is missing DNGVersion")
+
+    camera_identity_tags = {
+        TAG_MAKE: "Make",
+        TAG_MODEL: "Model",
+        TAG_UNIQUE_CAMERA_MODEL: "UniqueCameraModel",
+    }
+    for code, name in camera_identity_tags.items():
+        if _first_tag_value(tif, code) is None:
+            result.errors.append(f"Adobe-converted artifact is missing {name}")
+
+    photometric = _tag_value(raw_page, TAG_PHOTOMETRIC)
+    if photometric is None:
+        result.errors.append("Adobe-converted raw IFD is missing PhotometricInterpretation")
+    elif int(photometric) not in {PHOTOMETRIC_LINEAR_RAW, PHOTOMETRIC_CFA}:
+        result.errors.append(
+            "Adobe-converted raw IFD must remain LinearRaw or CFA, "
+            f"got {photometric}"
+        )
+
+    raw_data_unique_id = _as_tuple(_first_tag_value(tif, TAG_RAW_DATA_UNIQUE_ID))
+    if raw_data_unique_id and len(raw_data_unique_id) != 16:
+        result.errors.append(
+            f"Adobe-converted RawDataUniqueID must contain 16 bytes, got {len(raw_data_unique_id)}"
+        )
+
+
+def _check_adobe_converted_geometry(
+    page: tifffile.TiffPage,
+    result: ValidationResult,
+) -> None:
+    width = _tag_value(page, TAG_IMAGE_WIDTH)
+    height = _tag_value(page, TAG_IMAGE_LENGTH)
+    bits = _as_tuple(_tag_value(page, TAG_BITS_PER_SAMPLE))
+    samples = _tag_value(page, TAG_SAMPLES_PER_PIXEL)
+    if width is None or height is None:
+        result.errors.append("Adobe-converted raw IFD is missing image dimensions")
+    elif int(width) <= 0 or int(height) <= 0:
+        result.errors.append(
+            f"Adobe-converted raw dimensions must be positive, got {width}x{height}"
+        )
+
+    if bits and any(int(bit) <= 0 for bit in bits):
+        result.errors.append(f"Adobe-converted BitsPerSample must be positive, got {bits}")
+    if samples is not None and int(samples) <= 0:
+        result.errors.append(f"Adobe-converted SamplesPerPixel must be positive, got {samples}")
+
+    compression = _tag_value(page, TAG_COMPRESSION)
+    if compression is not None and int(compression) != 1:
+        result.add_check(
+            "adobe-converted-compression",
+            "warning",
+            (
+                "Adobe-converted raw IFD is compressed; byte-count equality is not "
+                "part of artifact inspection"
+            ),
+        )
+
+
 def _run_external_smoke_tests(path: Path, result: ValidationResult) -> None:
     smoke_specs = [
         ("exiftool", ["exiftool", path.as_posix()]),
@@ -472,6 +577,14 @@ def _run_optional_command(name: str, command: list[str], result: ValidationResul
 def _tag_value(page: tifffile.TiffPage, code: int):
     tag = page.tags.get(code)
     return None if tag is None else tag.value
+
+
+def _first_tag_value(tif: tifffile.TiffFile, code: int):
+    for page in _iter_pages(tif):
+        value = _tag_value(page, code)
+        if value is not None:
+            return value
+    return None
 
 
 def _page_location(tif: tifffile.TiffFile, target: tifffile.TiffPage) -> str:

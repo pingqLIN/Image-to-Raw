@@ -60,6 +60,23 @@ Constraints:
 - Until a reproducible SDK path exists, Adobe DNG SDK entries in `compatibility-report.json` should remain `manual-only`.
 - Any SDK or Adobe-tool structural failure should become a blocking compatibility finding for the next Phase 6 pass.
 
+## Adobe DNG Converter Regression
+
+Adobe DNG Converter has a separate local regression script instead of being mixed into the generic optional RAW processor matrix:
+
+```powershell
+uv run python scripts/verify_adobe_dng_converter.py --dry-run
+uv run python scripts/verify_adobe_dng_converter.py --output-dir demo-output/adobe-dng-converter-verification
+```
+
+The script generates a deterministic `single-raw-ifd` fixture, validates the source DNG with the strict `image2dng` contract validator, discovers Adobe DNG Converter, runs the conversion, and checks that the converted output exists. The converted artifact is inspected with the Adobe-converted artifact layer rather than the strict writer contract.
+
+Validation layers are intentionally separate:
+
+- `image2dng` contract validation: strict checks for DNG tags, XMP provenance, raw geometry, and byte-count expectations on files directly written by this project.
+- external processor smoke validation: optional tool acceptance and output-artifact checks.
+- Adobe-converted artifact inspection: relaxed inspection for Adobe-rewritten DNG files, requiring parseable DNG structure, a raw IFD, camera identity, and basic geometry while allowing Adobe metadata/layout rewrites.
+
 ## Validator Contract
 
 Default output is human-readable. `image2dng validate --json` emits a structured report with:

@@ -36,6 +36,7 @@ from image2dng.semantic_scene import (
     validate_semantic_scene,
 )
 from image2dng.sensor_effects import SensorEffectModel
+from image2dng.validate import inspect_adobe_converted_dng
 
 __all__ = [
     "AIMetadataModel",
@@ -61,6 +62,7 @@ __all__ = [
     "ValidationError",
     "apply_region_exposure_reaction",
     "convert",
+    "inspect_adobe_converted_dng",
     "load_external_scene_manifest",
     "run_external_scene_linear_batch",
     "run_raw_native_batch",

@@ -50,6 +50,8 @@ class ProcessorCompatibilityResult:
         }
 
 
+ADOBE_DNG_CONVERTER_TOOL = "adobe-dng-converter"
+
 PROCESSOR_TOOL_SPECS = {
     "exiftool": ProcessorToolSpec(
         name="exiftool",
@@ -86,12 +88,30 @@ PROCESSOR_TOOL_SPECS = {
         install_hint="Manual Adobe DNG SDK validation remains outside the automated gate.",
         manual_only=True,
     ),
+    ADOBE_DNG_CONVERTER_TOOL: ProcessorToolSpec(
+        name=ADOBE_DNG_CONVERTER_TOOL,
+        version_command=None,
+        install_hint=(
+            "Install Adobe DNG Converter manually from Adobe, then rerun the "
+            "Adobe converter regression script."
+        ),
+        common_install_paths=(
+            Path("C:/Program Files/Adobe/Adobe DNG Converter/Adobe DNG Converter.exe"),
+            Path("C:/Program Files (x86)/Adobe/Adobe DNG Converter/Adobe DNG Converter.exe"),
+        ),
+    ),
 }
 
 
-def processor_tool_inventory(timeout_seconds: int = 60) -> dict[str, dict[str, object]]:
+def processor_tool_inventory(
+    timeout_seconds: int = 60,
+    *,
+    include_adobe_dng_converter: bool = False,
+) -> dict[str, dict[str, object]]:
     inventory = {}
     for name, spec in PROCESSOR_TOOL_SPECS.items():
+        if name == ADOBE_DNG_CONVERTER_TOOL and not include_adobe_dng_converter:
+            continue
         if spec.manual_only:
             inventory[name] = {
                 "available": False,
@@ -154,6 +174,37 @@ def run_processor_compatibility(
         _run_rawtherapee(source, root, timeout_seconds),
         _manual_only_result("adobe-dng-sdk", timeout_seconds),
     ]
+
+
+def run_adobe_dng_converter(
+    dng_path: str | Path,
+    output_dir: str | Path,
+    *,
+    converter_path: str | Path | None = None,
+    timeout_seconds: int = 60,
+) -> ProcessorCompatibilityResult:
+    source = Path(dng_path).resolve()
+    root = Path(output_dir).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    output = adobe_dng_converter_output_path(source, root)
+    return _run_processor_command(
+        tool=ADOBE_DNG_CONVERTER_TOOL,
+        source=source,
+        command=[
+            ADOBE_DNG_CONVERTER_TOOL,
+            "-c",
+            "-d",
+            str(root),
+            str(source),
+        ],
+        output_artifacts=[output],
+        executable_override=str(converter_path) if converter_path is not None else None,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def adobe_dng_converter_output_path(source: str | Path, output_dir: str | Path) -> Path:
+    return Path(output_dir) / Path(source).name
 
 
 def _run_exiftool(
@@ -229,8 +280,11 @@ def _run_processor_command(
     command: list[str],
     output_artifacts: list[Path],
     timeout_seconds: int,
+    executable_override: str | None = None,
 ) -> ProcessorCompatibilityResult:
-    executable, _discovery = resolve_processor_executable(tool)
+    executable = executable_override
+    if executable is None:
+        executable, _discovery = resolve_processor_executable(tool)
     resolved_version_command = _resolved_version_command(PROCESSOR_TOOL_SPECS[tool], executable)
     version = (
         _tool_version(resolved_version_command, timeout_seconds)

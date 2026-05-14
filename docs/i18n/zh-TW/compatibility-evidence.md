@@ -70,6 +70,23 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 - 沒有可重現 SDK 路徑前，`compatibility-report.json` 中的 Adobe DNG SDK entry 應維持 `manual-only`。
 - 若 SDK 或 Adobe tool 回報 DNG 結構問題，該結果應升級成下一輪 Phase 6 blocking compatibility finding。
 
+## Adobe DNG Converter regression
+
+Adobe DNG Converter 可用獨立腳本做本機回歸，不混入一般 optional RAW processor matrix：
+
+```powershell
+uv run python scripts/verify_adobe_dng_converter.py --dry-run
+uv run python scripts/verify_adobe_dng_converter.py --output-dir demo-output/adobe-dng-converter-verification
+```
+
+此腳本會產生 deterministic `single-raw-ifd` fixture，先以 `image2dng` contract validator 檢查本專案輸出的來源 DNG，再尋找 Adobe DNG Converter 並執行轉換。轉換後 artifact 以 Adobe-converted inspection 檢查，不要求完全符合本專案 writer contract。
+
+Validation 分層如下：
+
+- `image2dng` contract validation：針對本專案直接輸出的 DNG，嚴格檢查必要 DNG tag、XMP provenance、raw buffer 幾何與 byte count。
+- external processor smoke validation：針對 optional RAW tools，確認工具是否接受 DNG 並輸出 artifact。
+- Adobe-converted artifact inspection：針對 Adobe DNG Converter 改寫後的 DNG，只檢查可解析 DNG 結構、raw IFD、camera identity 與基本幾何；允許 Adobe 重新壓縮或重排 metadata。
+
 ## Fixture Set
 
 第一版固定產生：

@@ -25,15 +25,18 @@ from image2dng.dng_writer import (
     TAG_CFA_PATTERN,
     TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_DEFAULT_SCALE,
+    TAG_DNG_BACKWARD_VERSION,
+    TAG_DNG_VERSION,
     TAG_MAKE,
     TAG_MODEL,
     TAG_NEW_SUBFILE_TYPE,
+    TAG_ORIENTATION,
     TAG_RAW_DATA_UNIQUE_ID,
     TAG_UNIQUE_CAMERA_MODEL,
     TAG_XMP,
 )
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
-from image2dng.models import AIMetadataModel, CameraProfileModel
+from image2dng.models import PHOTOMETRIC_LINEAR_RAW, AIMetadataModel, CameraProfileModel
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
@@ -49,7 +52,12 @@ from image2dng.semantic_reaction import (
     semantic_reaction_model_registry,
 )
 from image2dng.semantic_scene import SEMANTIC_SCENE_SCHEMA, validate_semantic_scene
-from image2dng.validate import TAG_MAKER_NOTE, find_raw_image_page, validate_dng
+from image2dng.validate import (
+    TAG_MAKER_NOTE,
+    find_raw_image_page,
+    inspect_adobe_converted_dng,
+    validate_dng,
+)
 from image2dng.xmp import XMP_AI_NAMESPACE
 
 
@@ -1281,6 +1289,78 @@ def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeyp
     assert "\\" not in " ".join(payload["rawtherapee-cli"]["command"][1:])
 
 
+def test_adobe_converted_artifact_inspection_is_relaxed_for_rewritten_tags(tmp_path):
+    dng_path = tmp_path / "adobe-rewritten-like.dng"
+    _write_adobe_rewritten_like_dng(dng_path)
+
+    strict = validate_dng(dng_path, run_smoke=False)
+    adobe = inspect_adobe_converted_dng(dng_path, run_smoke=False)
+
+    assert strict.ok is False
+    assert any("missing required tag: DNGVersion" in error for error in strict.errors)
+    assert adobe.ok is True, adobe.errors
+    assert adobe.dng_layout == "preview-subifd"
+    assert adobe.raw_ifd_location == "IFD0/SubIFD0"
+    assert adobe.checks[-1].name == "adobe-converted-artifact"
+
+
+def test_adobe_dng_converter_verifier_dry_run_writes_report(tmp_path, monkeypatch):
+    module = _load_script_module("verify_adobe_dng_converter")
+    monkeypatch.setattr(module, "_resolve_converter", lambda _explicit: (None, None))
+    output_dir = tmp_path / "adobe-dry-run"
+
+    exit_code = module.main(["--output-dir", str(output_dir), "--dry-run"])
+
+    assert exit_code == 0
+    report = json.loads(
+        (output_dir / "reports" / "adobe-dng-converter-report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert report["schema"] == "image2dng.adobe_dng_converter_verification.v1"
+    assert report["dry_run"] is True
+    assert report["status"] == "dry-run"
+    assert report["source_contract_validation"]["ok"] is True
+    assert report["converter"]["available"] is False
+    assert report["converter_result"] is None
+    assert report["converted_artifact_inspection"] is None
+
+
+def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypatch):
+    module = _load_script_module("verify_adobe_dng_converter")
+    fake_converter = tmp_path / "Adobe DNG Converter.exe"
+    fake_converter.write_text("fake exe", encoding="utf-8")
+    monkeypatch.setattr(
+        module,
+        "_resolve_converter",
+        lambda _explicit: (str(fake_converter), "fake"),
+    )
+
+    def fake_adobe_run(command, **_kwargs):
+        output_dir = Path(command[command.index("-d") + 1])
+        source = Path(command[-1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / source.name).write_bytes(source.read_bytes())
+        return subprocess.CompletedProcess(command, 0, stdout="converted\n", stderr="")
+
+    monkeypatch.setattr("image2dng.compatibility.subprocess.run", fake_adobe_run)
+    output_dir = tmp_path / "adobe-run"
+
+    exit_code = module.main(["--output-dir", str(output_dir), "--timeout-seconds", "1"])
+
+    report = json.loads(
+        (output_dir / "reports" / "adobe-dng-converter-report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 0
+    assert report["ok"] is True
+    assert report["converter_result"]["result"] == "passed"
+    assert Path(report["converter_result"]["output_artifacts"][0]).exists()
+    assert report["converted_artifact_inspection"]["ok"] is True
+    assert report["errors"] == []
+
+
 def test_processor_inventory_discovers_darktable_common_install_path(tmp_path, monkeypatch):
     common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
     common_executable.parent.mkdir(parents=True)
@@ -1919,6 +1999,38 @@ def _write_test_dng(tmp_path, *, prompt_hash: str):
     return output_path
 
 
+def _write_adobe_rewritten_like_dng(path: Path) -> None:
+    raw = _gradient_image(12, 10)
+    preview = np.zeros((10, 12, 3), dtype=np.uint8)
+    root_tags = [
+        (TAG_NEW_SUBFILE_TYPE, "I", 1, 1, False),
+        (TAG_DNG_VERSION, "B", 4, (1, 4, 0, 0), False),
+        (TAG_DNG_BACKWARD_VERSION, "B", 4, (1, 1, 0, 0), False),
+        (TAG_MAKE, "s", 0, "Adobe rewritten fixture", False),
+        (TAG_MODEL, "s", 0, "Synthetic DNG", False),
+        (TAG_UNIQUE_CAMERA_MODEL, "s", 0, "Adobe rewritten synthetic fixture", False),
+        (TAG_ORIENTATION, "H", 1, 1, False),
+    ]
+    raw_tags = [
+        (TAG_NEW_SUBFILE_TYPE, "I", 1, 0, False),
+    ]
+    with tifffile.TiffWriter(path) as writer:
+        writer.write(
+            preview,
+            photometric="rgb",
+            metadata=None,
+            subifds=1,
+            extratags=root_tags,
+        )
+        writer.write(
+            raw,
+            photometric=PHOTOMETRIC_LINEAR_RAW,
+            metadata=None,
+            planarconfig="contig",
+            extratags=raw_tags,
+        )
+
+
 def _raw_data_unique_id(path: Path) -> tuple[int, ...]:
     with tifffile.TiffFile(path) as tif:
         return tuple(_raw_page(tif).tags[TAG_RAW_DATA_UNIQUE_ID].value)
@@ -2106,6 +2218,8 @@ def _create_fake_processor_output(command: list[str]) -> None:
         output = Path(command[2])
     elif tool == "rawtherapee-cli":
         output = Path(command[command.index("-o") + 1])
+    elif tool == "adobe dng converter":
+        output = Path(command[command.index("-d") + 1]) / Path(command[-1]).name
     else:
         return
     output.parent.mkdir(parents=True, exist_ok=True)

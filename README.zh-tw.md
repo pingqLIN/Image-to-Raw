@@ -130,6 +130,15 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 
 這個流程會產生 deterministic DNG fixtures、validation JSON、`compatibility-report.json` 與 `compatibility-summary.md`。Phase 6 report schema 為 `image2dng.compatibility_evidence.v2`，會記錄 RAW processor command、exit code、stdout/stderr tail、輸出 artifact 與 dry-run install hints。缺少 optional RAW tools 時會記錄 `skipped`，不會造成失敗；已安裝工具若執行或輸出失敗會記錄 `failed`；Adobe DNG SDK 目前維持 manual-only。
 
+Adobe DNG Converter regression 使用獨立本機腳本：
+
+```powershell
+uv run python scripts/verify_adobe_dng_converter.py --dry-run
+uv run python scripts/verify_adobe_dng_converter.py --output-dir demo-output/adobe-dng-converter-verification
+```
+
+此流程會分開三層驗證：本專案輸出來源 DNG 使用嚴格 `image2dng` contract validation；optional tools 使用 external processor smoke checks；Adobe DNG Converter 改寫後的檔案使用較寬鬆的 Adobe-converted artifact inspection。
+
 ## 產生 demo review bundle
 
 ```powershell
