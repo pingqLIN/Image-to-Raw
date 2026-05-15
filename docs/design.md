@@ -75,8 +75,10 @@ MVP 目標是把 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成合法、可�
 3. `linear-rec709`/`srgb` 直接視為 virtual camera native RGB。
 4. `acescg`/`xyz` 先轉到 XYZ，再轉到 virtual camera native RGB。
 5. `prophoto-rgb` 套用 ROMM-style 1.8 inverse transfer，再由 D50 ProPhoto RGB 經 Bradford adaptation 到 D65，最後轉到 virtual camera native RGB。
-5. 加入 black level offset，clip 到 white level。
-6. quantize 為 16-bit LinearRaw buffer。
+5. 若使用 `--highlight-headroom-ev` / `--exposure-bias-ev`，先對真正 scene-linear input (`linear-rec709`、`acescg`、`xyz`) 做 opt-in exposure placement；這只保存來源中已存在的 HDR values，不宣稱復原 display-referred 圖片失去的資訊。
+6. 加入 optional synthetic sensor effects。Exposure placement 必須在 sensor effects 前執行，避免 HDR values 在 sensor-effect clip 中先被壓到 `0..1`。
+7. 加入 black level offset，clip 到 white level。
+8. quantize 為 16-bit LinearRaw buffer。
 
 這個 MVP 不嘗試偽裝成真實相機檔案；它輸出的是 synthetic LinearRaw DNG。
 
@@ -191,6 +193,8 @@ MVP fields:
 - `xmpAI:cameraParametersAreSimulated="True"`
 - `xmpAI:simulatedISO`
 - `xmpAI:simulatedWhiteBalanceKelvin`
+- `xmpAI:highlightHeadroomEV` when opt-in exposure placement is enabled
+- `xmpAI:exposureBiasEV` when opt-in exposure placement is enabled
 
 Plaintext prompt is not written by default. The CLI only embeds it when the user explicitly passes `--prompt-plaintext`.
 

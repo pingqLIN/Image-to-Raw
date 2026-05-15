@@ -11,7 +11,12 @@ from image2dng.api import (
     ValidationError,
     convert,
 )
-from image2dng.models import AIMetadataModel, CameraProfileModel, CoreRawModel
+from image2dng.models import (
+    AIMetadataModel,
+    CameraProfileModel,
+    CoreRawModel,
+    ExposurePlacementModel,
+)
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
@@ -44,6 +49,7 @@ __all__ = [
     "ConversionResult",
     "CoreRawModel",
     "ExternalSceneLinearInput",
+    "ExposurePlacementModel",
     "GenerationScene",
     "HIGHLIGHT_CLIPPING_REACTION_MODEL",
     "Image2DNGError",

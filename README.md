@@ -190,6 +190,17 @@ Supported input spaces:
 - `xyz`: scene-linear CIE XYZ, converted into the virtual camera space.
 - `prophoto-rgb`: encoded ProPhoto RGB / ROMM-style 1.8 transfer, adapted from D50 to D65.
 
+For true scene-linear input spaces (`linear-rec709`, `acescg`, `xyz`), opt-in exposure placement can preserve highlight headroom that already exists in the source:
+
+```powershell
+uv run image2dng scene-linear.tif output.dng `
+  --input-space acescg `
+  --highlight-headroom-ev 2 `
+  --exposure-bias-ev 0
+```
+
+`--highlight-headroom-ev 2` maps scene value `4.0` to the RAW white point. It does not recover highlight detail that is absent from display-referred images, and it is not dynamic range recovery. The control is accepted only for `linear-rec709`, `acescg`, and `xyz`, and is applied before sensor effects so HDR values are not clipped before placement.
+
 Supported output modes:
 
 - `linearraw`: default three-channel 16-bit LinearRaw DNG.

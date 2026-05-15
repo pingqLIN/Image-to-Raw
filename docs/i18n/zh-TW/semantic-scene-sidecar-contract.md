@@ -113,6 +113,25 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 
 若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic `region-exposure-mask-v1` prototype。這個 prototype 會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation，並在 manifest 中記錄 `semantic_reaction` summary。它只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。它不是完整物理 sensor model，也不宣稱光譜或相機模擬正確性。
 
+external scene manifest 也可在 scene entry 上設定全域 exposure placement：
+
+```json
+{
+  "schema": "image2dng.external_scene_linear_sources.v1",
+  "scenes": [
+    {
+      "slug": "renderer-frame-001",
+      "path": "renderer-frame-001.tif",
+      "input_space": "acescg",
+      "highlight_headroom_ev": 2.0,
+      "exposure_bias_ev": 0.0
+    }
+  ]
+}
+```
+
+這個 placement 會在 RAW quantization 前、sensor effects 前套用。`highlight_headroom_ev = 2` 代表 scene value `4.0` 對應 RAW white point；它只保存 source scene-linear data 中已存在的 highlight values，不是 dynamic range recovery，也不會替 display-referred image 產生不存在的細節。非預設 placement 只接受 `linear-rec709`、`acescg`、`xyz`。
+
 對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。
 
 目前 reaction model matrix：

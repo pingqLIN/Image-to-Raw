@@ -83,6 +83,7 @@ Supported Bayer patterns:
 - XMP must include `xmpAI:cameraParametersAreSimulated="True"`.
 - `xmpAI:rawMode` records `linearraw` or `cfa`.
 - `xmpAI:cfaPattern` is written only for CFA outputs.
+- `xmpAI:highlightHeadroomEV` 與 `xmpAI:exposureBiasEV` 只會在明確啟用 exposure placement 時寫入。它們記錄模擬的 scene-linear white placement，不宣稱恢復未捕捉到的動態範圍。
 - Plaintext prompts are not written by default; only `prompt_hash` is written unless the user explicitly opts in.
 - MakerNote must be absent.
 - Real camera/lens impersonation is out of scope.

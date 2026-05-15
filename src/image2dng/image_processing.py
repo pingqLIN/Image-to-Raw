@@ -7,7 +7,7 @@ import numpy as np
 import png
 import tifffile
 
-from image2dng.models import CfaPattern, CoreRawModel
+from image2dng.models import CfaPattern, CoreRawModel, ExposurePlacementModel
 from image2dng.sensor_effects import SensorEffectModel, apply_sensor_effects
 
 InputSpace = Literal["srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"]
@@ -131,8 +131,13 @@ def build_linearraw_buffer(
     black_level: int = 512,
     white_level: int = 65535,
     sensor_effects: SensorEffectModel | None = None,
+    exposure_placement: ExposurePlacementModel | None = None,
 ) -> tuple[np.ndarray, CoreRawModel]:
     camera_native, width, height = build_camera_native(input_path, input_space)
+    camera_native = apply_exposure_placement(
+        camera_native,
+        exposure_placement or ExposurePlacementModel(),
+    )
     camera_native = apply_sensor_effects(camera_native, sensor_effects or SensorEffectModel())
     core = CoreRawModel.for_linearraw(
         width=width,
@@ -152,8 +157,13 @@ def build_cfa_buffer(
     black_level: int = 512,
     white_level: int = 65535,
     sensor_effects: SensorEffectModel | None = None,
+    exposure_placement: ExposurePlacementModel | None = None,
 ) -> tuple[np.ndarray, CoreRawModel]:
     camera_native, width, height = build_camera_native(input_path, input_space)
+    camera_native = apply_exposure_placement(
+        camera_native,
+        exposure_placement or ExposurePlacementModel(),
+    )
     camera_native = apply_sensor_effects(camera_native, sensor_effects or SensorEffectModel())
     linear_core = CoreRawModel.for_linearraw(
         width=width,
@@ -195,6 +205,15 @@ def quantize_linearraw(camera_native: np.ndarray, core: CoreRawModel) -> np.ndar
     white = np.asarray(core.white_level, dtype=np.float64)
     scaled = black + clipped * (white - black)
     return np.rint(np.clip(scaled, black, white)).astype(np.uint16)
+
+
+def apply_exposure_placement(
+    camera_native: np.ndarray,
+    placement: ExposurePlacementModel,
+) -> np.ndarray:
+    if not placement.enabled:
+        return camera_native
+    return camera_native * placement.scale
 
 
 def mosaic_cfa(linear_rgb: np.ndarray, cfa_pattern: CfaPattern) -> np.ndarray:

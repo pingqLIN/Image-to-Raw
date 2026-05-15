@@ -8,7 +8,7 @@ import numpy as np
 
 from image2dng.dng_writer import DngLayout, write_dng
 from image2dng.image_processing import InputSpace, build_cfa_buffer, build_linearraw_buffer
-from image2dng.models import AIMetadataModel, CameraProfileModel, CfaPattern
+from image2dng.models import AIMetadataModel, CameraProfileModel, CfaPattern, ExposurePlacementModel
 from image2dng.sensor_effects import SensorEffectModel
 
 OutputMode = Literal["linearraw", "cfa"]
@@ -58,6 +58,8 @@ def convert(
     read_noise: float = 0.0,
     row_noise: float = 0.0,
     sensor_effect_seed: int | None = None,
+    highlight_headroom_ev: float = 0.0,
+    exposure_bias_ev: float = 0.0,
     prompt_hash: str | None = None,
     prompt_plaintext: str | None = None,
     scene_description: str = "",
@@ -86,6 +88,11 @@ def convert(
             row_noise=row_noise,
             seed=sensor_effect_seed,
         )
+        exposure_placement = ExposurePlacementModel(
+            highlight_headroom_ev=highlight_headroom_ev,
+            exposure_bias_ev=exposure_bias_ev,
+        )
+        exposure_placement.validate_input_space(input_space)
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc
 
@@ -96,12 +103,14 @@ def convert(
                 input_space,
                 cfa_pattern=cfa_pattern,
                 sensor_effects=sensor_effects,
+                exposure_placement=exposure_placement,
             )
         else:
             raw_buffer, core = build_linearraw_buffer(
                 input_path,
                 input_space,
                 sensor_effects=sensor_effects,
+                exposure_placement=exposure_placement,
             )
     except ValueError as exc:
         raise UnsupportedInputError(str(exc)) from exc
@@ -125,6 +134,10 @@ def convert(
             read_noise=read_noise if read_noise > 0 else None,
             row_noise=row_noise if row_noise > 0 else None,
             sensor_effect_seed=sensor_effect_seed if sensor_effects.enabled else None,
+            highlight_headroom_ev=(
+                highlight_headroom_ev if exposure_placement.enabled else None
+            ),
+            exposure_bias_ev=exposure_bias_ev if exposure_placement.enabled else None,
         )
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc

@@ -37,6 +37,10 @@ def build_xmp_packet(ai: AIMetadataModel) -> bytes:
         attrs["xmpAI:rowNoise"] = f"{ai.row_noise:g}"
     if ai.sensor_effect_seed is not None:
         attrs["xmpAI:sensorEffectSeed"] = str(ai.sensor_effect_seed)
+    if ai.highlight_headroom_ev is not None:
+        attrs["xmpAI:highlightHeadroomEV"] = f"{ai.highlight_headroom_ev:g}"
+    if ai.exposure_bias_ev is not None:
+        attrs["xmpAI:exposureBiasEV"] = f"{ai.exposure_bias_ev:g}"
     if ai.prompt_plaintext is not None:
         attrs["xmpAI:promptPlaintext"] = ai.prompt_plaintext
 

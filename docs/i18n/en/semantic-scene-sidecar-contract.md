@@ -113,6 +113,25 @@ By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sid
 
 When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable the deterministic `region-exposure-mask-v1` prototype. This prototype reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, applies EV modulation to 16-bit scene-linear RGB values inside the mask, and records a `semantic_reaction` summary in the manifests. It only supports linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. It is not a full physical sensor model and does not claim spectral or camera-simulation accuracy.
 
+An external scene manifest can also set global exposure placement on a scene entry:
+
+```json
+{
+  "schema": "image2dng.external_scene_linear_sources.v1",
+  "scenes": [
+    {
+      "slug": "renderer-frame-001",
+      "path": "renderer-frame-001.tif",
+      "input_space": "acescg",
+      "highlight_headroom_ev": 2.0,
+      "exposure_bias_ev": 0.0
+    }
+  ]
+}
+```
+
+This placement is applied before RAW quantization and before sensor effects. `highlight_headroom_ev = 2` maps scene value `4.0` to the RAW white point. It preserves highlight values that already exist in source scene-linear data; it is not dynamic range recovery and does not invent detail for display-referred images. Non-default placement is accepted only for `linear-rec709`, `acescg`, and `xyz`.
+
 For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input.
 
 Current reaction model matrix:

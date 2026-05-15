@@ -13,7 +13,7 @@ import png
 import tifffile
 from PIL import Image
 
-from image2dng import OutputExistsError, convert
+from image2dng import OutputExistsError, SensorEffectModel, convert
 from image2dng.cli import main
 from image2dng.compatibility import (
     PROCESSOR_TOOL_SPECS,
@@ -36,7 +36,12 @@ from image2dng.dng_writer import (
     TAG_XMP,
 )
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
-from image2dng.models import PHOTOMETRIC_LINEAR_RAW, AIMetadataModel, CameraProfileModel
+from image2dng.models import (
+    PHOTOMETRIC_LINEAR_RAW,
+    AIMetadataModel,
+    CameraProfileModel,
+    ExposurePlacementModel,
+)
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
@@ -120,6 +125,57 @@ def test_generate_16bit_ramp_dng(tmp_path):
 
     result = validate_dng(output_path, run_smoke=False)
     assert result.ok, result.errors
+
+
+def test_highlight_headroom_preserves_float_linearraw_values(tmp_path):
+    input_path = tmp_path / "hdr-linear.tif"
+    source = _hdr_strip_values([1.0, 2.0, 4.0, 8.0])
+    tifffile.imwrite(input_path, source, photometric="rgb")
+
+    default_raw, _ = build_linearraw_buffer(input_path, "linear-rec709")
+    headroom_raw, _ = build_linearraw_buffer(
+        input_path,
+        "linear-rec709",
+        exposure_placement=ExposurePlacementModel(highlight_headroom_ev=2.0),
+    )
+
+    assert default_raw[0, :, 0].tolist() == [65535, 65535, 65535, 65535]
+    assert 16000 < int(headroom_raw[0, 0, 0]) < 17000
+    assert 33000 < int(headroom_raw[0, 1, 0]) < 34000
+    assert int(headroom_raw[0, 2, 0]) == 65535
+    assert int(headroom_raw[0, 3, 0]) == 65535
+
+
+def test_highlight_headroom_preserves_float_cfa_values(tmp_path):
+    input_path = tmp_path / "hdr-cfa.tif"
+    source = np.tile(_hdr_strip_values([1.0, 2.0, 4.0, 8.0]), (2, 1, 1))
+    tifffile.imwrite(input_path, source, photometric="rgb")
+
+    cfa, _ = build_cfa_buffer(
+        input_path,
+        "linear-rec709",
+        cfa_pattern="rggb",
+        exposure_placement=ExposurePlacementModel(highlight_headroom_ev=2.0),
+    )
+
+    assert 16000 < int(cfa[0, 0]) < 17000
+    assert 33000 < int(cfa[0, 1]) < 34000
+    assert int(cfa[0, 2]) == 65535
+    assert int(cfa[0, 3]) == 65535
+
+
+def test_highlight_headroom_runs_before_sensor_effects(tmp_path):
+    input_path = tmp_path / "hdr-before-sensor-effects.tif"
+    tifffile.imwrite(input_path, _hdr_strip_values([4.0]), photometric="rgb")
+
+    raw, _ = build_linearraw_buffer(
+        input_path,
+        "linear-rec709",
+        exposure_placement=ExposurePlacementModel(highlight_headroom_ev=2.0),
+        sensor_effects=SensorEffectModel(read_noise=0.000001, seed=42),
+    )
+
+    assert int(raw[0, 0, 0]) > 65000
 
 
 def test_generate_16bit_png_dng(tmp_path):
@@ -338,6 +394,78 @@ def test_public_convert_api_generates_cfa_dng(tmp_path):
         xmp = page.tags[TAG_XMP].value.decode("utf-8")
     assert 'xmpAI:rawMode="cfa"' in xmp
     assert 'xmpAI:cfaPattern="rggb"' in xmp
+
+
+def test_public_convert_records_exposure_placement_only_when_opted_in(tmp_path):
+    input_path = tmp_path / "api-headroom-input.tif"
+    default_output = tmp_path / "api-default.dng"
+    headroom_output = tmp_path / "api-headroom.dng"
+    tifffile.imwrite(input_path, _hdr_strip_values([1.0, 4.0]), photometric="rgb")
+
+    default_result = convert(
+        input_path=input_path,
+        output_path=default_output,
+        input_space="linear-rec709",
+        prompt_hash="sha256:api-headroom",
+    )
+    explicit_default_result = convert(
+        input_path=input_path,
+        output_path=tmp_path / "api-explicit-default.dng",
+        input_space="linear-rec709",
+        highlight_headroom_ev=0.0,
+        exposure_bias_ev=0.0,
+        prompt_hash="sha256:api-headroom",
+    )
+    headroom_result = convert(
+        input_path=input_path,
+        output_path=headroom_output,
+        input_space="linear-rec709",
+        highlight_headroom_ev=2.0,
+        exposure_bias_ev=0.0,
+        prompt_hash="sha256:api-headroom",
+    )
+
+    assert default_result.raw_data_unique_id == explicit_default_result.raw_data_unique_id
+    assert default_result.raw_data_unique_id != headroom_result.raw_data_unique_id
+    with tifffile.TiffFile(default_output) as tif:
+        default_xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
+    with tifffile.TiffFile(headroom_output) as tif:
+        headroom_xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
+    assert "xmpAI:highlightHeadroomEV" not in default_xmp
+    assert "xmpAI:exposureBiasEV" not in default_xmp
+    assert 'xmpAI:highlightHeadroomEV="2"' in headroom_xmp
+    assert 'xmpAI:exposureBiasEV="0"' in headroom_xmp
+
+
+def test_cli_rejects_invalid_exposure_placement(tmp_path, capsys):
+    input_path = tmp_path / "invalid-headroom.tif"
+    output_path = tmp_path / "invalid-headroom.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    negative_exit = main(
+        [str(input_path), str(output_path), "--highlight-headroom-ev", "-1"]
+    )
+    nan_exit = main(
+        [str(input_path), str(output_path), "--highlight-headroom-ev", "nan"]
+    )
+    encoded_exit = main(
+        [
+            str(input_path),
+            str(output_path),
+            "--input-space",
+            "srgb",
+            "--highlight-headroom-ev",
+            "1",
+        ]
+    )
+
+    stderr = capsys.readouterr().err
+    assert negative_exit == 3
+    assert nan_exit == 3
+    assert encoded_exit == 3
+    assert "highlight_headroom_ev must be non-negative" in stderr
+    assert "highlight_headroom_ev must be finite" in stderr
+    assert "exposure placement requires true scene-linear input_space" in stderr
 
 
 def test_raw_native_pipeline_generates_dng_jpeg_and_manifest(tmp_path):
@@ -874,6 +1002,143 @@ def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
     assert sample["semantic_contract"] == SEMANTIC_SCENE_SCHEMA
     assert sample["semantic_to_raw_status"] == "preserved-not-applied"
     assert sample["semantic_validation"]["ok"] is True
+    assert "exposure_placement" not in scene_manifest
+    assert "exposure_placement" not in sample
+
+
+def test_external_scene_linear_batch_records_exposure_placement(tmp_path):
+    source_path = tmp_path / "external-hdr-scene.tif"
+    tifffile.imwrite(source_path, _hdr_strip_values([1.0, 4.0]), photometric="rgb")
+
+    default_result = run_external_scene_linear_batch(
+        tmp_path / "external-default-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-hdr-scene",
+                path=source_path,
+                input_space="linear-rec709",
+                description="external HDR scene-linear producer test",
+                producer="unit-test-renderer",
+            )
+        ],
+        dng_layout="single-raw-ifd",
+    )
+    result = run_external_scene_linear_batch(
+        tmp_path / "external-headroom-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-hdr-scene",
+                path=source_path,
+                input_space="linear-rec709",
+                description="external HDR scene-linear producer test",
+                producer="unit-test-renderer",
+                highlight_headroom_ev=2.0,
+            )
+        ],
+        dng_layout="single-raw-ifd",
+    )
+
+    default_manifest = json.loads(
+        default_result.manifest_path.read_text(encoding="utf-8")
+    )
+    default_scene_manifest = default_manifest["scenes"][0]
+    default_sample_index = json.loads(
+        default_result.sample_index_path.read_text(encoding="utf-8")
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    scene_manifest = manifest["scenes"][0]
+    sample_index = json.loads(result.sample_index_path.read_text(encoding="utf-8"))
+    linear_node = next(
+        node
+        for node in scene_manifest["nodes"]
+        if node["type"] == "VirtualCameraLinearRawNode"
+    )
+    assert "exposure_placement" not in default_scene_manifest
+    assert "exposure_placement" not in default_sample_index["samples"][0]
+    assert scene_manifest["exposure_placement"] == {
+        "highlight_headroom_ev": 2.0,
+        "exposure_bias_ev": 0.0,
+    }
+    assert sample_index["samples"][0]["exposure_placement"] == {
+        "highlight_headroom_ev": 2.0,
+        "exposure_bias_ev": 0.0,
+    }
+    assert default_scene_manifest["prompt_hash"] != scene_manifest["prompt_hash"]
+    assert (
+        default_scene_manifest["raw_data_unique_ids"]["linearraw"]
+        != scene_manifest["raw_data_unique_ids"]["linearraw"]
+    )
+    assert (
+        default_scene_manifest["raw_data_unique_ids"]["cfa"]
+        != scene_manifest["raw_data_unique_ids"]["cfa"]
+    )
+    assert linear_node["parameters"]["highlight_headroom_ev"] == 2.0
+    assert linear_node["parameters"]["exposure_bias_ev"] == 0.0
+    with tifffile.TiffFile(scene_manifest["outputs"]["linearraw_dng"]) as tif:
+        raw = _raw_page(tif).asarray()
+    assert 16000 < int(raw[0, 0, 0]) < 17000
+    assert int(raw[0, 1, 0]) == 65535
+
+
+def test_external_scene_manifest_rejects_non_finite_exposure_placement(tmp_path):
+    source_path = tmp_path / "external-scene.tif"
+    manifest_path = tmp_path / "external-scenes.json"
+    tifffile.imwrite(source_path, _gradient_image(4, 4), photometric="rgb")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "image2dng.external_scene_linear_sources.v1",
+                "scenes": [
+                    {
+                        "slug": "bad-headroom",
+                        "path": source_path.name,
+                        "highlight_headroom_ev": float("nan"),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        load_external_scene_manifest(manifest_path)
+    except ValueError as exc:
+        assert "highlight_headroom_ev must be finite" in str(exc)
+    else:
+        raise AssertionError("expected non-finite headroom to fail")
+
+
+def test_generate_raw_native_batch_scene_linear_headroom_cli(tmp_path):
+    module = _load_script_module("generate_raw_native_batch")
+    source_path = tmp_path / "script-hdr-scene.tif"
+    output_dir = tmp_path / "script-batch"
+    tifffile.imwrite(source_path, _hdr_strip_values([1.0, 4.0]), photometric="rgb")
+
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--scene-linear",
+            str(source_path),
+            "--dng-layout",
+            "single-raw-ifd",
+            "--highlight-headroom-ev",
+            "2",
+        ]
+    )
+
+    manifest = json.loads(
+        (output_dir / "manifests" / "raw-native-node-batch.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    scene_manifest = manifest["scenes"][0]
+    assert exit_code == 0
+    assert scene_manifest["exposure_placement"]["highlight_headroom_ev"] == 2.0
+    with tifffile.TiffFile(scene_manifest["outputs"]["linearraw_dng"]) as tif:
+        raw = _raw_page(tif).asarray()
+    assert 16000 < int(raw[0, 0, 0]) < 17000
+    assert int(raw[0, 1, 0]) == 65535
 
 
 def test_external_scene_linear_batch_preserves_semantic_physics_sidecar(tmp_path):
@@ -2405,6 +2670,11 @@ def _gradient_image(width: int, height: int) -> np.ndarray:
     green = np.tile(y[:, np.newaxis], (1, width))
     blue = ((red.astype(np.uint32) + green.astype(np.uint32)) // 2).astype(np.uint16)
     return np.stack([red, green, blue], axis=2)
+
+
+def _hdr_strip_values(values: list[float]) -> np.ndarray:
+    strip = np.asarray(values, dtype=np.float32)[np.newaxis, :, np.newaxis]
+    return np.repeat(strip, 3, axis=2)
 
 
 def _write_semantic_scene(
