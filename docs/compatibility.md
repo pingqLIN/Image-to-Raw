@@ -35,7 +35,7 @@ The setup audit is a dry-run package for humans or external reviewers. It detect
 - `setup-runbook.md`: human-readable post-approval install and rerun guide.
 - `external-review-prompt.md`: prompt for external review of recommended smoke targets.
 
-The setup audit never installs or upgrades RAW processor tools. Package search version hints are recorded only when the local package-manager output contains an exact package identity match. On Windows, Darktable is resolved from `PATH` first and then from the standard install path `C:\Program Files\darktable\bin\darktable-cli.exe`; the audit report records the discovery source so reviewers can tell whether a temporary `PATH` override was needed. If a tool is approved and installed later, rerun the setup audit, compatibility evidence, and review bundle generators so the pre-install decision and post-install evidence are clearly separated.
+The setup audit never installs or upgrades RAW processor tools. Package search version hints are recorded only when the local package-manager output contains an exact package identity match. On Windows, Darktable and RawTherapee are resolved from `PATH` first and then from their standard install paths: `C:\Program Files\darktable\bin\darktable-cli.exe` and `C:\Program Files\RawTherapee\5.12\rawtherapee-cli.exe`; the audit report records the discovery source so reviewers can tell whether a temporary `PATH` override was needed. If a tool is approved and installed later, rerun the setup audit, compatibility evidence, and review bundle generators so the pre-install decision and post-install evidence are clearly separated.
 
 ## Adobe DNG SDK Manual Validation
 

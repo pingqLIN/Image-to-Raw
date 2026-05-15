@@ -1604,6 +1604,36 @@ def test_processor_inventory_discovers_darktable_common_install_path(tmp_path, m
     assert inventory["darktable-cli"]["version"] == "fake-tool 1.0"
 
 
+def test_processor_inventory_discovers_rawtherapee_common_install_path(
+    tmp_path, monkeypatch
+):
+    common_executable = tmp_path / "RawTherapee" / "5.12" / "rawtherapee-cli.exe"
+    common_executable.parent.mkdir(parents=True)
+    common_executable.write_text("fake exe", encoding="utf-8")
+    monkeypatch.setattr("image2dng.compatibility.shutil.which", lambda _command: None)
+    monkeypatch.setattr(
+        "image2dng.compatibility.subprocess.run",
+        _fake_processor_run(create_outputs=False, return_code=0),
+    )
+    monkeypatch.setitem(
+        PROCESSOR_TOOL_SPECS,
+        "rawtherapee-cli",
+        ProcessorToolSpec(
+            name="rawtherapee-cli",
+            version_command=["rawtherapee-cli", "--version"],
+            install_hint="fake rawtherapee hint",
+            common_install_paths=(common_executable,),
+        ),
+    )
+
+    inventory = processor_tool_inventory(timeout_seconds=1)
+
+    assert inventory["rawtherapee-cli"]["available"] is True
+    assert inventory["rawtherapee-cli"]["executable"] == str(common_executable)
+    assert inventory["rawtherapee-cli"]["discovery"] == "common-install-path"
+    assert inventory["rawtherapee-cli"]["version"] == "fake-tool 1.0"
+
+
 def test_real_raw_sample_audit_writes_local_research_reports(tmp_path, monkeypatch):
     module = _load_script_module("audit_real_raw_sample")
     sample_dir = tmp_path / "samples"

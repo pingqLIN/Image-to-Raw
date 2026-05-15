@@ -79,7 +79,12 @@ PROCESSOR_TOOL_SPECS = {
         name="rawtherapee-cli",
         version_command=["rawtherapee-cli", "--version"],
         install_hint=(
-            "Install RawTherapee manually and ensure rawtherapee-cli is on PATH, then rerun."
+            "Install RawTherapee manually. The evidence adapter checks PATH and the "
+            "standard Windows install path."
+        ),
+        common_install_paths=(
+            Path("C:/Program Files/RawTherapee/5.12/rawtherapee-cli.exe"),
+            Path("C:/Program Files (x86)/RawTherapee/5.12/rawtherapee-cli.exe"),
         ),
     ),
     "adobe-dng-sdk": ProcessorToolSpec(
