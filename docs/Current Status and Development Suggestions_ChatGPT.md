@@ -1,5 +1,7 @@
 # Image-to-DNG RAW Generator - Current Public Status
 
+Traditional Chinese source manuscript: [docs/i18n/zh-TW/current-public-status.md](i18n/zh-TW/current-public-status.md)
+
 This document records the current engineering baseline for public exchange. It avoids internal planning notes, timelines, and unpublished priority lists.
 
 ## Current Capabilities

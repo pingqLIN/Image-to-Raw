@@ -1,5 +1,7 @@
 # Compatibility Evidence 流程
 
+English public baseline: [docs/compatibility.md](../../compatibility.md)
+
 本文件是 compatibility evidence 的 Traditional Chinese source manuscript，已更新至 Phase 6 RAW processor evidence policy。
 
 ## 目的

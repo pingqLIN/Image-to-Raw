@@ -1,5 +1,7 @@
 # Compatibility Evidence
 
+Traditional Chinese source manuscript: [docs/i18n/zh-TW/compatibility-evidence.md](i18n/zh-TW/compatibility-evidence.md)
+
 This project validates generated DNG files structurally and records RAW processor compatibility evidence when optional local tools are available on `PATH`.
 
 The current DNG tag contract is documented in [docs/i18n/en/dng-tag-contract.md](i18n/en/dng-tag-contract.md). Compatibility evidence should be interpreted against that contract: missing optional tools are environment state, while missing required tags are structural failures.
@@ -7,8 +9,6 @@ The current DNG tag contract is documented in [docs/i18n/en/dng-tag-contract.md]
 Missing optional tools are recorded as `skipped`, not as failures. Available tools that fail to run or fail to emit their expected export artifact are recorded as `failed`. CI must not require locally installed RAW processors unless a reproducible install path is added later. The evidence generator reports install hints as dry-run guidance only and never installs tools.
 
 This product includes DNG technology under license by Adobe.
-
-Traditional Chinese source manuscript: [docs/i18n/zh-TW/compatibility-evidence.md](i18n/zh-TW/compatibility-evidence.md).
 
 ## Generate Compatibility Evidence
 

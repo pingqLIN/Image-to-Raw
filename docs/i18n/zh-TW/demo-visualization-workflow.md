@@ -1,5 +1,7 @@
 # DEMO 視覺化流程與樣張任務設計
 
+English public baseline: [docs/demo.md](../../demo.md)
+
 本文件定義 `image2dng` 每個開發階段都應產出的可視化 demo。目標不是只產生 DNG，而是讓每個功能階段都有「可看、可比、可驗證」的影像證據。
 
 ## 素材池

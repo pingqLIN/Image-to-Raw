@@ -1,5 +1,7 @@
 # Architecture Demo
 
+Traditional Chinese source manuscript: [docs/i18n/zh-TW/demo-visualization-workflow.md](i18n/zh-TW/demo-visualization-workflow.md)
+
 This demo shows the intended application interface for current image2dng phases:
 
 1. A rendered or scene-linear RGB image enters the color pipeline.

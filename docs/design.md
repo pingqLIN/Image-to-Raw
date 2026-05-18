@@ -1,42 +1,44 @@
 # Image-to-DNG RAW Generator Design
 
+Traditional Chinese source manuscript: [docs/i18n/zh-TW/design-overview.md](i18n/zh-TW/design-overview.md)
+
 ## Research background
 
-這個專案目前偏工程實作與格式設計，不以重現某一篇論文的方法為目標。不過有三份外部資料很適合當作研究背景，幫助界定問題空間：
+This project currently leans more toward engineering implementation and format design than reproducing any single paper. Three external references are still especially useful for framing the problem space:
 
 1. **RawGen: Learning Camera Raw Image Generation**  
    <https://arxiv.org/abs/2604.00093>  
-   這篇論文把 `text-to-raw` 與 `sRGB-to-raw inversion` 明確定義成值得研究的問題，說明「從既有影像或生成流程回到 camera-centric linear representation」本身就是一個活躍題目。對本專案而言，它主要用來支持問題定義；目前 MVP 不以複製其 diffusion 方法為目標。
+   This paper treats both `text-to-raw` and `sRGB-to-raw inversion` as worthwhile research problems, which supports the idea that moving from existing images or generation pipelines back toward a camera-centric linear representation is an active topic. For this project, it primarily supports the problem definition; the current MVP does not aim to reproduce its diffusion method.
 
 2. **DxO Linear DNG background**  
    <https://www.dxo.com/technology/linear-dng/>  
-   DxO 的 Linear DNG 說明不是學術論文，但很有價值，因為它反映了真實攝影工作流中 Linear DNG 的定位：檔案可以已經過部分線性處理，仍保留相當程度的 RAW 編修彈性。這支持本專案選擇先做 `LinearRaw` MVP，而不是一開始就追求 CFA 偽原始資料。不過 DxO 的場景是由真實相機 RAW 經過處理後導出 Linear DNG，與本專案從 rendered RGB 或 scene-linear 影像生成 synthetic DNG 的目標不同。
+   DxO's Linear DNG explanation is not a research paper, but it is still useful because it reflects how Linear DNG functions in a real photography workflow: a file can already contain some linear processing and still preserve meaningful RAW editing flexibility. That supports this project's decision to start with a `LinearRaw` MVP rather than jumping directly to a faux-CFA path. DxO's scenario is still different from this project, because DxO exports Linear DNG from real camera RAW files while this project starts from rendered RGB or scene-linear imagery.
 
 3. **Linear DNG overview (Kronometric)**  
    <https://kronometric.org/phot/processing/DNG/Linear%20DNG.htm>  
-   這份資料較早，但對概念釐清很有幫助。它說明 Linear DNG 不一定承載傳統意義上的未處理感光資料，也可以承載線性化後的多通道影像資料。對本專案而言，這有助於確認「合法、可解析、誠實標示的 synthetic LinearRaw DNG」在格式概念上是站得住腳的。
+   This reference is older, but still helpful for concept clarification. It explains that Linear DNG does not have to carry only traditional unprocessed sensor data; it can also carry linearized multi-channel image data. For this project, that helps validate the format-level idea of an honest, parseable synthetic LinearRaw DNG.
 
-綜合來看，這三份資料支持的不是同一件事：
+Taken together, these references support different aspects of the project:
 
-- RawGen 支持「這個問題值得研究」；
-- DxO 支持「Linear DNG 是實際工作流中有意義的交付形式」；
-- Kronometric 支持「Linear DNG 在格式概念上可以容納非傳統相機 RAW 的線性影像表示」。
+- RawGen supports the claim that the problem itself is worth studying.
+- DxO supports the claim that Linear DNG is a meaningful delivery format in real workflows.
+- Kronometric supports the claim that Linear DNG can conceptually hold a non-traditional linear image representation.
 
-因此設計路線維持：
+That keeps the design direction grounded in a few rules:
 
-- 先把 DNG/TIFF container correctness 做穩；
-- 先把 synthetic provenance 與 simulated camera metadata 寫誠實；
-- 先以 `LinearRaw` 作為可互通的 MVP；
-- CFA 必須是明確 opt-in 的 simulated mode；
-- noise、depth、semantic mask，以及更接近研究型 inverse-ISP / raw-generation 的方向，不屬於 LinearRaw MVP。
+- stabilize DNG/TIFF container correctness first;
+- write synthetic provenance and simulated camera metadata honestly;
+- use `LinearRaw` as the interoperable MVP first;
+- keep CFA as an explicit opt-in simulated mode;
+- leave noise, depth, semantic masks, and more research-oriented inverse-ISP / raw-generation paths outside the core LinearRaw MVP.
 
 ## RAW-native node pipeline direction
 
-專案正在從單次 conversion 擴展成 RAW-native generation pipeline。在這個模型中，DNG 是主要生成 artifact，JPEG/PNG 則是從 generated RAW buffer render 出來的 preview 或交付副產品。
+The project is expanding from one-shot conversion into a RAW-native generation pipeline. In this model, DNG is the primary generated artifact, while JPEG/PNG outputs are previews or delivery renders produced from the generated RAW buffer.
 
-目前實作選擇先把第一版 node graph 放在本 repo 內，而不是把 ComfyUI 作為第一個核心 runtime。這能讓 DNG semantics、XMP provenance、validation、synthetic camera rules 都留在已測試的核心程式碼旁邊。ComfyUI / Stable Diffusion bridge 已分割到 sibling project `../image-to-raw-comfyui-sd-bridge/`；它負責 workflow metadata、SD checkpoint/sampler/scheduler 等外部生成器語意，並包覆 `image2dng` 核心 pipeline，而不是取代核心。
+The current implementation keeps the first node graph inside this repository instead of making ComfyUI the first core runtime dependency. That keeps DNG semantics, XMP provenance, validation, and synthetic camera rules next to the tested core code. The ComfyUI / Stable Diffusion bridge has been split into the sibling project `../image-to-raw-comfyui-sd-bridge/`; it owns workflow metadata, checkpoint/sampler/scheduler semantics, and wraps the `image2dng` core pipeline rather than replacing it.
 
-目前最小 graph：
+Current minimal graph:
 
 ```mermaid
 flowchart LR
@@ -50,17 +52,17 @@ flowchart LR
   F --> G["Graph manifest"]
 ```
 
-第一個可執行 batch：
+First runnable batch:
 
 ```powershell
 uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
 ```
 
-這會產生 scene-linear TIFF intermediates、LinearRaw DNG、simulated CFA DNG、JPEG previews、validation JSON 與 graph manifest。詳見 [docs/i18n/zh-TW/raw-native-node-pipeline.md](i18n/zh-TW/raw-native-node-pipeline.md) 與 [docs/i18n/en/raw-native-node-pipeline.md](i18n/en/raw-native-node-pipeline.md)。
+This emits scene-linear TIFF intermediates, LinearRaw DNG files, simulated CFA DNG files, JPEG previews, validation JSON, and a graph manifest. See [docs/i18n/en/raw-native-node-pipeline.md](i18n/en/raw-native-node-pipeline.md) and [docs/i18n/zh-TW/raw-native-node-pipeline.md](i18n/zh-TW/raw-native-node-pipeline.md).
 
 ## LinearRaw MVP scope
 
-MVP 目標是把 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成合法、可解析、誠實標示來源的 DNG。主影像 IFD 使用：
+The MVP goal is to convert 16-bit TIFF/PNG or scene-linear RGB images into valid, parseable, honestly labeled DNG files. The main image IFD uses:
 
 - `PhotometricInterpretation = LinearRaw`
 - `SamplesPerPixel = 3`
@@ -68,28 +70,28 @@ MVP 目標是把 16-bit TIFF/PNG 或 scene-linear RGB 影像轉成合法、可�
 - `Compression = 1` uncompressed
 - `UniqueCameraModel = "Synthetic Camera v1"`
 
-輸入流程：
+Input flow:
 
-1. 讀取 RGB 或 grayscale 16-bit TIFF/PNG。
-2. `srgb` 輸入套用 inverse sRGB OETF，其它 input space 視為 scene-linear。
-3. `linear-rec709`/`srgb` 直接視為 virtual camera native RGB。
-4. `acescg`/`xyz` 先轉到 XYZ，再轉到 virtual camera native RGB。
-5. `prophoto-rgb` 套用 ROMM-style 1.8 inverse transfer，再由 D50 ProPhoto RGB 經 Bradford adaptation 到 D65，最後轉到 virtual camera native RGB。
-5. 加入 black level offset，clip 到 white level。
-6. quantize 為 16-bit LinearRaw buffer。
+1. Read RGB or grayscale 16-bit TIFF/PNG.
+2. Apply the inverse sRGB OETF for `srgb`; treat the other input spaces as scene-linear.
+3. Treat `linear-rec709` and `srgb` as the virtual camera native RGB space.
+4. Convert `acescg` and `xyz` through XYZ into the virtual camera native RGB space.
+5. Apply the ROMM-style 1.8 inverse transfer for `prophoto-rgb`, adapt from D50 to D65 with Bradford, then convert into the virtual camera native RGB space.
+6. Add the black-level offset and clip to white level.
+7. Quantize into a 16-bit LinearRaw buffer.
 
-這個 MVP 不嘗試偽裝成真實相機檔案；它輸出的是 synthetic LinearRaw DNG。
+This MVP does not attempt to impersonate a real camera file. It produces a synthetic LinearRaw DNG.
 
-## 為何不先做 CFA
+## Why not start with CFA
 
-CFA DNG 需要決定 Bayer pattern、CFA plane color、去馬賽克前的 aliasing 行為、黑邊/遮蔽像素、固定樣式噪聲、shot/read noise、white balance 與 color matrix 的一致性。若先從 rendered RGB 反推 CFA，容易產生看似 RAW 但語意不誠實、也不穩定的檔案。
+CFA DNG needs decisions about Bayer pattern, CFA plane color, pre-demosaic aliasing behavior, black borders or masked pixels, fixed-pattern noise, shot/read noise, white balance, and color-matrix consistency. If the project starts by reverse-engineering CFA from rendered RGB, it too easily creates files that look RAW-like without being semantically honest or stable.
 
-LinearRaw 先保證：
+LinearRaw first guarantees a few important things:
 
-- DNG/TIFF container 可被解析。
-- RAW 軟體能看到線性主影像與基本 profile。
-- AI metadata 不影響主影像可讀性。
-- 不需要在概念驗證階段承諾 CFA sensor simulation。
+- the DNG/TIFF container is parseable;
+- RAW software can inspect the linear main image and basic profile;
+- AI metadata does not interfere with main-image readability;
+- the proof-of-concept phase does not have to overclaim about CFA sensor simulation.
 
 ## Simulated CFA mode
 
@@ -124,9 +126,9 @@ These effects are applied in virtual camera RGB before quantization or CFA mosai
 
 ## DNG tag layout
 
-目前預設 layout 是 `preview-subifd`：IFD0 寫入 JPEG-compressed RGB preview，`SubIFDs` 指向主 raw image IFD。Raw SubIFD 保留可獨立讀取的 raw image data 與完整 DNG metadata。需要相容性回歸時，仍可用 `single-raw-ifd` 寫出舊版單一主 raw IFD。
+The default layout is currently `preview-subifd`: IFD0 stores a JPEG-compressed RGB preview and `SubIFDs` points at the main raw image IFD. The raw SubIFD retains independently readable raw image data and full DNG metadata. When compatibility regression work needs it, the older `single-raw-ifd` layout is still available.
 
-IFD0 preview：
+IFD0 preview:
 
 | Tag | Value |
 | --- | --- |
@@ -139,7 +141,7 @@ IFD0 preview：
 | `Make` / `Model` | `image2dng` / `Synthetic Camera v1` |
 | `XMP` | custom AI provenance packet |
 
-Raw SubIFD：
+Raw SubIFD:
 
 | Tag | Value |
 | --- | --- |
@@ -150,7 +152,7 @@ Raw SubIFD：
 | `Model` | `Synthetic Camera v1` |
 | `UniqueCameraModel` | `Synthetic Camera v1` |
 | `Orientation` | `1` |
-| `ImageWidth` / `ImageLength` | 由輸入影像決定 |
+| `ImageWidth` / `ImageLength` | determined by the input image |
 | `BitsPerSample` | `16,16,16` |
 | `SamplesPerPixel` | `3` |
 | `Compression` | `1` |
@@ -169,7 +171,7 @@ Raw SubIFD：
 | `Software` | `image2dng 0.1.0` |
 | `XMP` | custom AI provenance packet |
 
-MakerNote is intentionally not written.
+MakerNote is intentionally omitted.
 
 ## XMP AI metadata schema
 
@@ -201,9 +203,9 @@ Plaintext prompt is not written by default. The CLI only embeds it when the user
 - required DNG tags are present;
 - `PhotometricInterpretation` is LinearRaw;
 - XMP parses as XML;
-- synthetic provenance and simulated camera flag exist;
-- black/white levels are sane;
+- synthetic provenance and the simulated camera flag exist;
+- black and white levels are sane;
 - image dimensions match the decoded buffer;
-- raw data byte count matches dimensions;
+- raw-data byte count matches dimensions;
 - MakerNote is absent;
 - optional local smoke tools run when available.
