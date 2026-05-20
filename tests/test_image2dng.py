@@ -2080,6 +2080,95 @@ def test_raw_processor_setup_audit_records_search_version_hints(tmp_path, monkey
     assert report["errors"] == []
 
 
+def test_discover_adobe_dng_sdk_reports_missing_as_skipped(tmp_path, monkeypatch):
+    module = _load_script_module("discover_adobe_dng_sdk")
+    monkeypatch.delenv("ADOBE_DNG_SDK_ROOT", raising=False)
+    monkeypatch.delenv("DNG_SDK_ROOT", raising=False)
+    monkeypatch.delenv("DNG_VALIDATE", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    output_dir = tmp_path / "sdk-discovery"
+
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads((output_dir / "discovery-report.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["schema"] == "image2dng.adobe_dng_sdk_discovery.v1"
+    assert report["result"] == "skipped"
+    assert report["selected_validator"] is None
+    assert (
+        report["policy"]["downloads_or_installs"]
+        == "allowed only when --download-if-missing is explicit"
+    )
+
+
+def test_discover_adobe_dng_sdk_accepts_explicit_validator(tmp_path, monkeypatch):
+    module = _load_script_module("discover_adobe_dng_sdk")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("placeholder", encoding="utf-8")
+    monkeypatch.setenv("DNG_VALIDATE", str(validator))
+    monkeypatch.delenv("ADOBE_DNG_SDK_ROOT", raising=False)
+    monkeypatch.delenv("DNG_SDK_ROOT", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    output_dir = tmp_path / "sdk-discovery"
+
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads((output_dir / "discovery-report.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["result"] == "available"
+    assert report["selected_validator"] == str(validator)
+
+
+
+def test_discover_adobe_dng_sdk_downloads_official_zip_when_explicit(tmp_path, monkeypatch):
+    module = _load_script_module("discover_adobe_dng_sdk")
+    monkeypatch.delenv("ADOBE_DNG_SDK_ROOT", raising=False)
+    monkeypatch.delenv("DNG_SDK_ROOT", raising=False)
+    monkeypatch.delenv("DNG_VALIDATE", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    def fake_download_file(url, download_dir, *, timeout_seconds):
+        assert url == "https://www.adobe.com/go/dng_sdk"
+        download_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = download_dir / "dng_sdk.zip"
+        with module.zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("sdk/bin/dng_validate.exe", "placeholder")
+        return archive_path
+
+    monkeypatch.setattr(module, "_download_file", fake_download_file)
+    output_dir = tmp_path / "sdk-discovery"
+
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--download-if-missing",
+            "--extract-if-downloaded",
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads((output_dir / "discovery-report.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["result"] == "available"
+    assert report["download"]["requested"] is True
+    assert report["download"]["source_url"] == "https://www.adobe.com/go/dng_sdk"
+    assert report["policy"]["official_source_page"] == "https://helpx.adobe.com/camera-raw/digital-negative.html"
+    assert report["selected_validator"].endswith("dng_validate.exe")
+
+
 def test_raw_processor_setup_audit_ignores_non_exact_version_hints(tmp_path, monkeypatch):
     module = _load_script_module("audit_raw_processor_setup")
     monkeypatch.setattr(module.shutil, "which", lambda command: f"C:/fake/{command}.exe")
