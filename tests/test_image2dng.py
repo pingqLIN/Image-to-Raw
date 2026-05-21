@@ -1752,6 +1752,10 @@ def test_adobe_local_resource_audit_reports_missing_required_resources(tmp_path)
         "dng-converter-resource",
         "dng-sdk-archive",
     ]
+    assert report["blocking_findings"] == [
+        "missing required resource kind: dng-converter-resource",
+        "missing required resource kind: dng-sdk-archive",
+    ]
 
 
 def test_adobe_local_resource_audit_recognizes_spaced_converter_name(tmp_path):
@@ -1799,6 +1803,25 @@ def test_adobe_local_resource_audit_preserves_any_valid_sdk_archive(tmp_path):
 
     assert report["ok"] is True
     assert report["readiness"]["dng_sdk_validate_project_detected"] is True
+
+
+def test_adobe_local_resource_audit_rejects_unreadable_sdk_archive(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "AdobeDNGConverter_x64_18_3_1.exe").write_bytes(b"fake installer")
+    (adobe_dir / "DNG_Spec_1_7_1_0.pdf").write_bytes(b"fake dng spec")
+    (adobe_dir / "dng_sdk_corrupt.zip").write_bytes(b"not a zip archive")
+
+    report = module.build_report(adobe_dir)
+
+    assert report["ok"] is False
+    assert report["missing_required_kinds"] == []
+    assert report["blocking_findings"] == [
+        "no readable DNG SDK archive with dng_validate project detected"
+    ]
+    assert report["readiness"]["dng_sdk_archive"] is True
+    assert report["readiness"]["dng_sdk_validate_project_detected"] is False
 
 
 def test_adobe_local_resource_audit_ignores_converter_text_file(tmp_path):
