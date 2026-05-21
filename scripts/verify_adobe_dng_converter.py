@@ -14,6 +14,7 @@ from image2dng import __version__, convert
 from image2dng.compatibility import (
     ADOBE_DNG_CONVERTER_TOOL,
     adobe_dng_converter_output_path,
+    adobe_dng_converter_resource_state,
     resolve_processor_executable,
     run_adobe_dng_converter,
 )
@@ -38,6 +39,12 @@ def main(argv: list[str] | None = None) -> int:
         help="explicit path to Adobe DNG Converter.exe",
     )
     parser.add_argument(
+        "--adobe-dir",
+        type=Path,
+        default=Path("Adobe"),
+        help="local Adobe resource cache used only for resource-state reporting",
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=int,
         default=120,
@@ -58,6 +65,10 @@ def main(argv: list[str] | None = None) -> int:
         directory.mkdir(parents=True, exist_ok=True)
 
     converter, discovery = _resolve_converter(args.converter)
+    resource_state = adobe_dng_converter_resource_state(
+        converter_path=args.converter,
+        adobe_dir=args.adobe_dir,
+    )
     input_path = inputs_dir / "adobe-single-raw-ifd-fixture.tif"
     source_dng = source_dir / "adobe-single-raw-ifd-fixture.dng"
     converted_dng = adobe_dng_converter_output_path(source_dng, converted_dir)
@@ -133,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             "available": converter is not None,
             "executable": converter,
             "discovery": discovery,
+            "resource_state": resource_state,
         },
         "command": command,
         "artifacts": {

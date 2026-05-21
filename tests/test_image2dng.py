@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,7 @@ from image2dng.cli import main
 from image2dng.compatibility import (
     PROCESSOR_TOOL_SPECS,
     ProcessorToolSpec,
+    adobe_dng_converter_resource_state,
     processor_tool_inventory,
     run_processor_compatibility,
 )
@@ -1491,9 +1493,27 @@ def test_adobe_converted_artifact_inspection_is_relaxed_for_rewritten_tags(tmp_p
 def test_adobe_dng_converter_verifier_dry_run_writes_report(tmp_path, monkeypatch):
     module = _load_script_module("verify_adobe_dng_converter")
     monkeypatch.setattr(module, "_resolve_converter", lambda _explicit: (None, None))
+    monkeypatch.setattr(
+        module,
+        "adobe_dng_converter_resource_state",
+        lambda **_kwargs: {
+            "state": "missing",
+            "source": None,
+            "executable": None,
+            "resource_path": None,
+        },
+    )
     output_dir = tmp_path / "adobe-dry-run"
 
-    exit_code = module.main(["--output-dir", str(output_dir), "--dry-run"])
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--adobe-dir",
+            str(tmp_path / "missing-adobe"),
+            "--dry-run",
+        ]
+    )
 
     assert exit_code == 0
     report = json.loads(
@@ -1506,6 +1526,7 @@ def test_adobe_dng_converter_verifier_dry_run_writes_report(tmp_path, monkeypatc
     assert report["status"] == "dry-run"
     assert report["source_contract_validation"]["ok"] is True
     assert report["converter"]["available"] is False
+    assert report["converter"]["resource_state"]["state"] == "missing"
     assert report["converter_result"] is None
     assert report["converted_artifact_inspection"] is None
 
@@ -1521,7 +1542,15 @@ def test_adobe_dng_converter_verifier_dry_run_fails_invalid_source(tmp_path, mon
     monkeypatch.setattr(module, "validate_dng", lambda *_args, **_kwargs: FakeValidation())
     output_dir = tmp_path / "adobe-dry-run-invalid-source"
 
-    exit_code = module.main(["--output-dir", str(output_dir), "--dry-run"])
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--adobe-dir",
+            str(tmp_path / "missing-adobe"),
+            "--dry-run",
+        ]
+    )
 
     report = json.loads(
         (output_dir / "reports" / "adobe-dng-converter-report.json").read_text(
@@ -1558,7 +1587,16 @@ def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypa
     previous_output.parent.mkdir(parents=True)
     previous_output.write_bytes(b"previous converted artifact")
 
-    exit_code = module.main(["--output-dir", str(output_dir), "--timeout-seconds", "1"])
+    exit_code = module.main(
+        [
+            "--output-dir",
+            str(output_dir),
+            "--converter",
+            str(fake_converter),
+            "--timeout-seconds",
+            "1",
+        ]
+    )
 
     report = json.loads(
         (output_dir / "reports" / "adobe-dng-converter-report.json").read_text(
@@ -1568,12 +1606,281 @@ def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypa
     assert exit_code == 0
     assert report["ok"] is True
     assert report["converter_result"]["result"] == "passed"
+    assert report["converter"]["resource_state"]["state"] == "installed-executable"
+    assert report["converter"]["resource_state"]["source"] == "explicit"
     moved_existing = Path(report["artifacts"]["moved_existing_converted_dng"])
     assert moved_existing.exists()
     assert moved_existing.read_bytes() == b"previous converted artifact"
     assert Path(report["converter_result"]["output_artifacts"][0]).exists()
     assert report["converted_artifact_inspection"]["ok"] is True
     assert report["errors"] == []
+
+
+def test_adobe_dng_converter_resource_state_reports_local_installer_resource(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "image2dng.compatibility.resolve_processor_executable",
+        lambda _tool: (None, None),
+    )
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    resource = adobe_dir / "AdobeDNGConverter_x64_18_3_1.exe"
+    resource.write_bytes(b"fake installer")
+
+    state = adobe_dng_converter_resource_state(adobe_dir=adobe_dir)
+
+    assert state["state"] == "resource-present-not-installed"
+    assert state["source"] == "adobe-dir"
+    assert state["executable"] is None
+    assert state["resource_path"] == str(resource.resolve())
+
+
+def test_adobe_local_resource_audit_writes_readiness_report(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "AdobeDNGConverter_x64_18_3_1.exe").write_bytes(
+        b"fake converter installer resource"
+    )
+    (adobe_dir / "DNG_Spec_1_7_1_0.pdf").write_bytes(b"fake dng spec")
+    (adobe_dir / "TIFF6.pdf").write_bytes(b"fake tiff spec")
+    _write_zip(
+        adobe_dir / "dng_sdk_1_7_1_2573_20260512.zip",
+        {
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate.sln": "solution",
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate/dng_validate.vcxproj": (
+                "project"
+            ),
+        },
+    )
+    _write_zip(
+        adobe_dir / "ACR_and_Lightroom_Profile_SDK.zip",
+        {"ACR_and_Lightroom_Profile_SDK/Adobe_Color_example.DNG": "dng"},
+    )
+    output_dir = tmp_path / "audit-output"
+
+    exit_code = module.main(
+        [
+            "--adobe-dir",
+            str(adobe_dir),
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads(
+        (output_dir / "adobe-local-resource-report.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 0
+    assert report["schema"] == "image2dng.adobe_local_resource_audit.v1"
+    assert report["ok"] is True
+    assert report["policy"]["installer_execution"] == "not-attempted"
+    assert report["policy"]["archive_extraction"] == "not-attempted"
+    assert report["policy"]["sdk_build"] == "manual-only"
+    assert report["readiness"] == {
+        "dng_converter_installer_or_resource": True,
+        "dng_converter_installed_executable": False,
+        "dng_converter_resource_state": "resource-present-not-installed",
+        "dng_sdk_archive": True,
+        "dng_sdk_validate_project_detected": True,
+        "dng_specification": True,
+        "tiff_reference": True,
+        "profile_sdk_or_tools": True,
+    }
+    assert report["missing_required_kinds"] == []
+    assert (output_dir / "adobe-local-resource-summary.md").exists()
+
+
+def test_adobe_local_resource_audit_refuses_tracked_output(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    output_dir = tmp_path / "tracked-output"
+
+    exit_code = module.main(
+        [
+            "--adobe-dir",
+            str(adobe_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_adobe_local_resource_audit_reports_missing_required_resources(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "DNG_Spec_1_7_1_0.pdf").write_bytes(b"fake dng spec")
+    output_dir = tmp_path / "audit-output"
+
+    exit_code = module.main(
+        [
+            "--adobe-dir",
+            str(adobe_dir),
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads(
+        (output_dir / "adobe-local-resource-report.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 1
+    assert report["ok"] is False
+    assert report["missing_required_kinds"] == [
+        "dng-converter-resource",
+        "dng-sdk-archive",
+    ]
+
+
+def test_adobe_local_resource_audit_recognizes_spaced_converter_name(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "Adobe DNG Converter.exe").write_bytes(b"fake installed converter")
+    (adobe_dir / "DNG_Spec_1_7_1_0.pdf").write_bytes(b"fake dng spec")
+    _write_zip(
+        adobe_dir / "dng_sdk_1_7_1.zip",
+        {
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate.sln": "solution",
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate/dng_validate.vcxproj": (
+                "project"
+            ),
+        },
+    )
+
+    report = module.build_report(adobe_dir)
+
+    assert report["ok"] is True
+    assert report["readiness"]["dng_converter_resource_state"] == "installed-executable"
+    assert report["readiness"]["dng_converter_installed_executable"] is True
+    assert report["missing_required_kinds"] == []
+
+
+def test_adobe_local_resource_audit_preserves_any_valid_sdk_archive(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "AdobeDNGConverter_x64_18_3_1.exe").write_bytes(b"fake installer")
+    (adobe_dir / "DNG_Spec_1_7_1_0.pdf").write_bytes(b"fake dng spec")
+    _write_zip(
+        adobe_dir / "dng_sdk_1_7_1_valid.zip",
+        {
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate.sln": "solution",
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate/dng_validate.vcxproj": (
+                "project"
+            ),
+        },
+    )
+    _write_zip(adobe_dir / "dng_sdk_1_7_1_without_validate.zip", {"README.txt": "docs"})
+
+    report = module.build_report(adobe_dir)
+
+    assert report["ok"] is True
+    assert report["readiness"]["dng_sdk_validate_project_detected"] is True
+
+
+def test_prepare_adobe_dng_sdk_manual_validation_writes_plan(tmp_path):
+    module = _load_script_module("prepare_adobe_dng_sdk_manual_validation")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    _write_zip(
+        adobe_dir / "dng_sdk_1_7_1.zip",
+        {
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate.sln": "solution",
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate/dng_validate.vcxproj": (
+                "project"
+            ),
+        },
+    )
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng fixture")
+    output_dir = tmp_path / "sdk-plan"
+
+    exit_code = module.main(
+        [
+            "--adobe-dir",
+            str(adobe_dir),
+            "--fixture-dir",
+            str(fixture_dir),
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads(
+        (output_dir / "adobe-dng-sdk-manual-validation-plan.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 0
+    assert report["schema"] == "image2dng.adobe_dng_sdk_manual_validation_plan.v1"
+    assert report["ok"] is True
+    assert report["policy"] == {
+        "archive_extraction": "not-attempted",
+        "ci_gate": False,
+        "sdk_build": "manual-only",
+        "sdk_execution": "not-attempted",
+    }
+    assert report["selected_sdk_archive"]["name"] == "dng_sdk_1_7_1.zip"
+    assert report["representative_fixtures"][0]["dng_count"] == 1
+    assert all(step["manual_only"] is True for step in report["manual_steps"])
+    assert (output_dir / "adobe-dng-sdk-manual-validation-plan.md").exists()
+
+
+def test_prepare_adobe_dng_sdk_manual_validation_refuses_tracked_output(tmp_path):
+    module = _load_script_module("prepare_adobe_dng_sdk_manual_validation")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    output_dir = tmp_path / "tracked-output"
+
+    exit_code = module.main(
+        [
+            "--adobe-dir",
+            str(adobe_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_prepare_adobe_dng_sdk_manual_validation_reports_missing_sdk(tmp_path):
+    module = _load_script_module("prepare_adobe_dng_sdk_manual_validation")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    output_dir = tmp_path / "sdk-plan"
+
+    exit_code = module.main(
+        [
+            "--adobe-dir",
+            str(adobe_dir),
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    report = json.loads(
+        (output_dir / "adobe-dng-sdk-manual-validation-plan.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 1
+    assert report["ok"] is False
+    assert report["status"] == "missing-sdk-validate-project"
+    assert report["selected_sdk_archive"] is None
 
 
 def test_processor_inventory_discovers_darktable_common_install_path(tmp_path, monkeypatch):
@@ -2542,6 +2849,12 @@ def _write_gray_png(path: Path, image: np.ndarray) -> None:
             handle,
             image.tolist(),
         )
+
+
+def _write_zip(path: Path, entries: dict[str, str]) -> None:
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, content in entries.items():
+            archive.writestr(name, content)
 
 
 def _write_png(path, image: np.ndarray) -> None:

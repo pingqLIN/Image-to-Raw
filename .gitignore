@@ -8,6 +8,7 @@ build/
 dist/
 data/
 demo-output/
+Adobe/
 docs/local/
 *.dng
 *.arw

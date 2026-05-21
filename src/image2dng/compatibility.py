@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Literal
 
 ProcessorResult = Literal["passed", "skipped", "failed", "manual-only"]
+ConverterResourceState = Literal[
+    "installed-executable",
+    "resource-present-not-installed",
+    "missing",
+]
 
 
 @dataclass(frozen=True)
@@ -51,6 +56,7 @@ class ProcessorCompatibilityResult:
 
 
 ADOBE_DNG_CONVERTER_TOOL = "adobe-dng-converter"
+ADOBE_DNG_CONVERTER_INSTALLED_FILENAMES = ("adobe dng converter.exe",)
 
 PROCESSOR_TOOL_SPECS = {
     "exiftool": ProcessorToolSpec(
@@ -206,6 +212,51 @@ def run_adobe_dng_converter(
         executable_override=str(converter_path) if converter_path is not None else None,
         timeout_seconds=timeout_seconds,
     )
+
+
+def adobe_dng_converter_resource_state(
+    *,
+    converter_path: str | Path | None = None,
+    adobe_dir: str | Path | None = Path("Adobe"),
+) -> dict[str, object]:
+    if converter_path is not None:
+        path = Path(converter_path)
+        return {
+            "state": "installed-executable" if path.exists() else "missing",
+            "source": "explicit" if path.exists() else "explicit-missing",
+            "executable": str(path.resolve()) if path.exists() else None,
+            "resource_path": None,
+        }
+
+    executable, discovery = resolve_processor_executable(ADOBE_DNG_CONVERTER_TOOL)
+    if executable is not None:
+        return {
+            "state": "installed-executable",
+            "source": discovery,
+            "executable": executable,
+            "resource_path": None,
+        }
+
+    resource_path = _find_local_adobe_converter_resource(adobe_dir)
+    if resource_path is None:
+        return {
+            "state": "missing",
+            "source": None,
+            "executable": None,
+            "resource_path": None,
+        }
+
+    state: ConverterResourceState = (
+        "installed-executable"
+        if resource_path.name.lower() in ADOBE_DNG_CONVERTER_INSTALLED_FILENAMES
+        else "resource-present-not-installed"
+    )
+    return {
+        "state": state,
+        "source": "adobe-dir",
+        "executable": str(resource_path.resolve()) if state == "installed-executable" else None,
+        "resource_path": str(resource_path.resolve()),
+    }
 
 
 def adobe_dng_converter_output_path(source: str | Path, output_dir: str | Path) -> Path:
@@ -422,6 +473,22 @@ def _tail(text: str, *, max_lines: int = 20) -> list[str]:
 
 def _last_line(lines: list[str]) -> str:
     return lines[-1] if lines else ""
+
+
+def _find_local_adobe_converter_resource(adobe_dir: str | Path | None) -> Path | None:
+    if adobe_dir is None:
+        return None
+    root = Path(adobe_dir)
+    if not root.is_dir():
+        return None
+    for candidate in sorted(root.iterdir(), key=lambda path: path.name.lower()):
+        if not candidate.is_file():
+            continue
+        lowered = candidate.name.lower()
+        compact = lowered.replace(" ", "").replace("_", "")
+        if lowered in ADOBE_DNG_CONVERTER_INSTALLED_FILENAMES or "dngconverter" in compact:
+            return candidate
+    return None
 
 
 def _processor_path(path: Path) -> str:
