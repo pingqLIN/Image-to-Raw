@@ -21,6 +21,7 @@ REQUIRED_KINDS = {
 INSTALLED_CONVERTER_FILENAMES = {
     "adobe dng converter.exe",
 }
+CONVERTER_RESOURCE_EXTENSIONS = {".exe", ".msi"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,11 +81,12 @@ def build_report(adobe_dir: Path, *, zip_entry_limit: int = 40) -> dict[str, Any
     present_kinds = sorted({resource["kind"] for resource in resources})
     missing_required = sorted(REQUIRED_KINDS.difference(present_kinds))
     zip_findings = _zip_findings(resources)
+    blocking_findings = _blocking_findings(missing_required, zip_findings)
     converter_state = _converter_resource_state(resources)
     return {
         "schema": REPORT_SCHEMA,
         "generated_at": datetime.now(UTC).isoformat(),
-        "ok": root.is_dir() and not missing_required,
+        "ok": root.is_dir() and not blocking_findings,
         "local_only": True,
         "adobe_dir": _display_path(root),
         "adobe_dir_exists": root.exists(),
@@ -106,6 +108,7 @@ def build_report(adobe_dir: Path, *, zip_entry_limit: int = 40) -> dict[str, Any
         "required_kinds": sorted(REQUIRED_KINDS),
         "present_kinds": present_kinds,
         "missing_required_kinds": missing_required,
+        "blocking_findings": blocking_findings,
         "readiness": {
             "dng_converter_installer_or_resource": "dng-converter-resource" in present_kinds,
             "dng_converter_resource_state": converter_state,
@@ -159,10 +162,11 @@ def _resource_records(root: Path, *, zip_entry_limit: int) -> list[dict[str, Any
 
 def _classify_resource(name: str) -> str:
     lowered = name.lower()
+    suffix = Path(name).suffix.lower()
     compact = lowered.replace(" ", "").replace("_", "")
     if lowered in INSTALLED_CONVERTER_FILENAMES:
         return "dng-converter-resource"
-    if "dngconverter" in compact:
+    if suffix in CONVERTER_RESOURCE_EXTENSIONS and "dngconverter" in compact:
         return "dng-converter-resource"
     if lowered.startswith("dng_sdk") and lowered.endswith(".zip"):
         return "dng-sdk-archive"
@@ -231,6 +235,18 @@ def _zip_findings(resources: list[dict[str, Any]]) -> dict[str, bool]:
     return {"dng_sdk_validate_project_detected": dng_sdk_validate_project_detected}
 
 
+def _blocking_findings(
+    missing_required: list[str], zip_findings: dict[str, bool]
+) -> list[str]:
+    findings = [f"missing required resource kind: {kind}" for kind in missing_required]
+    if (
+        "dng-sdk-archive" not in missing_required
+        and not zip_findings["dng_sdk_validate_project_detected"]
+    ):
+        findings.append("no readable DNG SDK archive with dng_validate project detected")
+    return findings
+
+
 def _converter_resource_state(resources: list[dict[str, Any]]) -> str:
     converter_resources = [
         resource for resource in resources if resource.get("kind") == "dng-converter-resource"
@@ -264,6 +280,12 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     missing = report["missing_required_kinds"]
     if missing:
         lines.extend(f"- `{kind}`" for kind in missing)
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Blocking Findings", ""])
+    blocking_findings = report["blocking_findings"]
+    if blocking_findings:
+        lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Resources", ""])

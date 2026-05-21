@@ -57,6 +57,7 @@ class ProcessorCompatibilityResult:
 
 ADOBE_DNG_CONVERTER_TOOL = "adobe-dng-converter"
 ADOBE_DNG_CONVERTER_INSTALLED_FILENAMES = ("adobe dng converter.exe",)
+ADOBE_DNG_CONVERTER_RESOURCE_EXTENSIONS = {".exe", ".msi"}
 
 PROCESSOR_TOOL_SPECS = {
     "exiftool": ProcessorToolSpec(
@@ -486,7 +487,11 @@ def _find_local_adobe_converter_resource(adobe_dir: str | Path | None) -> Path |
             continue
         lowered = candidate.name.lower()
         compact = lowered.replace(" ", "").replace("_", "")
-        if lowered in ADOBE_DNG_CONVERTER_INSTALLED_FILENAMES or "dngconverter" in compact:
+        if lowered in ADOBE_DNG_CONVERTER_INSTALLED_FILENAMES:
+            return candidate
+        if candidate.suffix.lower() in ADOBE_DNG_CONVERTER_RESOURCE_EXTENSIONS and (
+            "dngconverter" in compact
+        ):
             return candidate
     return None
 

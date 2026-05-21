@@ -1636,6 +1636,20 @@ def test_adobe_dng_converter_resource_state_reports_local_installer_resource(
     assert state["resource_path"] == str(resource.resolve())
 
 
+def test_adobe_dng_converter_resource_state_ignores_matching_text_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "image2dng.compatibility.resolve_processor_executable",
+        lambda _tool: (None, None),
+    )
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "DNGConverter-release-notes.txt").write_text("not a converter", encoding="utf-8")
+
+    state = adobe_dng_converter_resource_state(adobe_dir=adobe_dir)
+
+    assert state["state"] == "missing"
+
+
 def test_adobe_local_resource_audit_writes_readiness_report(tmp_path):
     module = _load_script_module("audit_adobe_local_resources")
     adobe_dir = tmp_path / "Adobe"
@@ -1785,6 +1799,28 @@ def test_adobe_local_resource_audit_preserves_any_valid_sdk_archive(tmp_path):
 
     assert report["ok"] is True
     assert report["readiness"]["dng_sdk_validate_project_detected"] is True
+
+
+def test_adobe_local_resource_audit_ignores_converter_text_file(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    (adobe_dir / "DNGConverter-release-notes.txt").write_text("not a converter", encoding="utf-8")
+    (adobe_dir / "DNG_Spec_1_7_1_0.pdf").write_bytes(b"fake dng spec")
+    _write_zip(
+        adobe_dir / "dng_sdk_1_7_1.zip",
+        {
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate.sln": "solution",
+            "dng_sdk_1_7_1/dng_sdk/projects/win/dng_validate/dng_validate.vcxproj": (
+                "project"
+            ),
+        },
+    )
+
+    report = module.build_report(adobe_dir)
+
+    assert report["readiness"]["dng_converter_resource_state"] == "missing"
+    assert "dng-converter-resource" in report["missing_required_kinds"]
 
 
 def test_prepare_adobe_dng_sdk_manual_validation_writes_plan(tmp_path):
