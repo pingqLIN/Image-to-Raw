@@ -55,6 +55,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if not _sample_id_is_safe(args.sample_id):
+        print(
+            "Refusing sample id with path components. Use a plain file stem such as "
+            "'a0001-jmac_DSC1459'.",
+            flush=True,
+        )
+        return 2
+
     dng_path = args.fivek_dir / f"{args.sample_id}.dng"
     tiff_path = args.fivek_dir / f"{args.sample_id}.tif"
     missing = [str(path) for path in (dng_path, tiff_path) if not path.exists()]
@@ -310,6 +318,19 @@ def _sample_record(path: Path) -> dict[str, Any]:
 
 def _relative_path(path: Path, base: Path) -> str:
     return path.relative_to(base).as_posix()
+
+
+def _sample_id_is_safe(sample_id: str) -> bool:
+    if not sample_id:
+        return False
+    sample_path = Path(sample_id)
+    return (
+        not sample_path.is_absolute()
+        and sample_path.name == sample_id
+        and ".." not in sample_path.parts
+        and "/" not in sample_id
+        and "\\" not in sample_id
+    )
 
 
 def _sha256_file(path: Path) -> str:
