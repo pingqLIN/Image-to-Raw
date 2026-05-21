@@ -2194,6 +2194,44 @@ def test_semantic_physics_manifest_builder_records_invalid_sidecar(tmp_path):
     )
 
 
+def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path):
+    module = _load_script_module("generate_fivek_semantic_physics_sample")
+    fivek_dir = tmp_path / "fivek-smoke"
+    fivek_dir.mkdir()
+    sample_id = "sample-001"
+    (fivek_dir / f"{sample_id}.dng").write_bytes(b"fake local dng bytes")
+    rgb = _gradient_image(18, 12)
+    tifffile.imwrite(fivek_dir / f"{sample_id}.tif", rgb, photometric="rgb")
+    output_dir = tmp_path / "semantic-physics-dataset"
+
+    exit_code = module.main(
+        [
+            "--fivek-dir",
+            str(fivek_dir),
+            "--sample-id",
+            sample_id,
+            "--output-dir",
+            str(output_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    sidecar = json.loads((output_dir / f"{sample_id}.semantic.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert manifest["schema"] == "image2dng.semantic_physics_dataset_manifest.v1"
+    assert manifest["all_validations_ok"] is True
+    assert manifest["samples"][0]["semantic_physics_fields"] == {
+        "capture_physics": True,
+        "camera_response": True,
+        "region_raw_statistics_count": 1,
+    }
+    assert (output_dir / "assets" / f"{sample_id}-neutral-preview.jpg").exists()
+    assert (output_dir / "assets" / f"{sample_id}-center-mask.png").exists()
+    assert sidecar["producer"]["source_dng_sha256"].startswith("sha256:")
+    assert sidecar["regions"][0]["raw_statistics"]["clipped_pixel_ratio"] >= 0
+
+
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:darktable-common-path")
     common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
