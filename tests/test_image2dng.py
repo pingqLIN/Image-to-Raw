@@ -7,10 +7,12 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import png
+import pytest
 import tifffile
 from PIL import Image
 
@@ -1942,6 +1944,547 @@ def test_prepare_adobe_dng_sdk_manual_validation_reports_missing_sdk(tmp_path):
     assert report["selected_sdk_archive"] is None
 
 
+def test_run_adobe_dng_sdk_validation_writes_passing_batch_report(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "Adobe DNG Validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    fixture_dir = tmp_path / "fixtures with space"
+    nested_dir = fixture_dir / "nested"
+    nested_dir.mkdir(parents=True)
+    sample = nested_dir / "sample image.dng"
+    sample.write_bytes(b"fake dng")
+    runner = _FakeDngValidateRunner()
+
+    report = module.build_report(
+        validator=validator,
+        fixture_roots=(fixture_dir, fixture_dir),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=5,
+        allow_empty=False,
+        runner=runner,
+    )
+
+    assert report["schema"] == "image2dng.adobe_dng_sdk_validation_report.v1"
+    assert report["ok"] is True
+    assert report["validator"]["version_probe"]["version_text"] == "1.7.1 (2573) (64-bit)"
+    assert report["summary"] == {
+        "failed": 0,
+        "marker_blocked": 0,
+        "passed": 1,
+        "selected": 1,
+        "skipped": 0,
+        "timeout": 0,
+    }
+    assert report["results"][0]["command"] == [str(validator.resolve()), str(sample.resolve())]
+    assert report["results"][0]["sha256"] == _sha256_test_file(sample)
+    assert report["results"][0]["status"] == "passed"
+    assert report["error_markers"] == []
+
+
+def test_run_adobe_dng_sdk_validation_records_failure_timeout_and_markers(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "bad.dng").write_bytes(b"bad")
+    (fixture_dir / "hang.dng").write_bytes(b"hang")
+    runner = _FakeDngValidateRunner(fail_names={"bad.dng"}, timeout_names={"hang.dng"})
+
+    report = module.build_report(
+        validator=validator,
+        fixture_roots=(fixture_dir,),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=0.1,
+        allow_empty=False,
+        runner=runner,
+    )
+
+    assert report["ok"] is False
+    assert report["summary"] == {
+        "failed": 1,
+        "marker_blocked": 0,
+        "passed": 0,
+        "selected": 2,
+        "skipped": 0,
+        "timeout": 1,
+    }
+    assert "1 DNG fixture validation(s) failed" in report["blocking_findings"]
+    assert "1 DNG fixture validation(s) timed out" in report["blocking_findings"]
+    marker_fixtures = {record["fixture"] for record in report["error_markers"]}
+    assert any("bad.dng" in fixture for fixture in marker_fixtures)
+    assert any("hang.dng" in fixture for fixture in marker_fixtures)
+
+
+def test_run_adobe_dng_sdk_validation_reports_missing_validator_and_empty_fixtures(
+    tmp_path,
+):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    runner = _FakeDngValidateRunner()
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+
+    assert report["ok"] is False
+    assert "validator executable missing" in report["blocking_findings"]
+    assert (
+        "validator version probe did not detect dng_validate version text"
+        in report["blocking_findings"]
+    )
+    assert "no DNG fixtures selected" in report["blocking_findings"]
+
+
+def test_run_adobe_dng_sdk_validation_blocks_version_probe_timeout_with_version_text(
+    tmp_path,
+):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng")
+
+    report = module.build_report(
+        validator=validator,
+        fixture_roots=(fixture_dir,),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=0.1,
+        allow_empty=False,
+        runner=_FakeDngValidateRunner(version_timeout=True),
+    )
+
+    assert report["ok"] is False
+    assert report["validator"]["version_probe"]["timeout"] is True
+    assert report["validator"]["version_probe"]["version_text"] == "1.7.1 (2573) (64-bit)"
+    assert "validator version probe timed out" in report["blocking_findings"]
+
+
+def test_run_adobe_dng_sdk_validation_blocks_version_probe_without_version_text(
+    tmp_path,
+):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng")
+
+    report = module.build_report(
+        validator=validator,
+        fixture_roots=(fixture_dir,),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=_FakeDngValidateRunner(version_exit_code=1, version_stdout="Usage only\n"),
+    )
+
+    assert report["ok"] is False
+    assert report["validator"]["version_probe"]["version_text"] is None
+    assert (
+        "validator version probe did not detect dng_validate version text"
+        in report["blocking_findings"]
+    )
+
+
+def test_run_adobe_dng_sdk_validation_blocks_marker_with_zero_exit(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng")
+
+    report = module.build_report(
+        validator=validator,
+        fixture_roots=(fixture_dir,),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=_FakeDngValidateRunner(marker_pass_names={"sample.dng"}),
+    )
+
+    assert report["ok"] is False
+    assert report["results"][0]["status"] == "marker-blocked"
+    assert report["error_markers"] == [
+        {
+            "fixture": str((fixture_dir / "sample.dng").resolve()),
+            "markers": ["error"],
+            "status": "marker-blocked",
+        }
+    ]
+    assert report["summary"]["marker_blocked"] == 1
+    assert "1 DNG fixture validation(s) emitted error markers" in report["blocking_findings"]
+
+
+def test_run_adobe_dng_sdk_validation_markers_ignore_benign_success_text():
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+
+    assert (
+        module._markers(
+            'Validating "C:/fixtures/invalid-name-error-case.dng"...\n'
+            'Validating "C:/fixtures/corrupt-exception-validation-failed-case.dng"...\n'
+            "Validation complete\n"
+            "No errors found\n"
+            "0 errors\n",
+            "",
+        )
+        == []
+    )
+    assert module._markers("ERROR: corrupt image\n", "") == ["error", "corrupt"]
+
+
+def test_run_adobe_dng_sdk_validation_fixture_discovery_skips_symlink_escape(
+    tmp_path,
+):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    fixture_dir = tmp_path / "fixtures"
+    outside_dir = tmp_path / "outside"
+    fixture_dir.mkdir()
+    outside_dir.mkdir()
+    inside = fixture_dir / "inside.dng"
+    outside = outside_dir / "outside.dng"
+    inside.write_bytes(b"inside")
+    outside.write_bytes(b"outside")
+    escaped = fixture_dir / "escaped.dng"
+    try:
+        escaped.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation is not available in this environment")
+
+    discovered = module._discover_fixtures((fixture_dir,))
+
+    assert inside.resolve() in discovered
+    assert outside.resolve() not in discovered
+
+
+def test_run_adobe_dng_sdk_validation_fixture_discovery_skips_in_root_symlink(
+    tmp_path,
+):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    real_dng = fixture_dir / "real.dng"
+    real_dng.write_bytes(b"real")
+    linked_dng = fixture_dir / "linked.dng"
+    try:
+        linked_dng.symlink_to(real_dng)
+    except OSError:
+        pytest.skip("symlink creation is not available in this environment")
+
+    discovered = module._discover_fixtures((fixture_dir,))
+
+    assert discovered == [real_dng.resolve()]
+
+
+def test_run_adobe_dng_sdk_validation_allows_empty_when_explicit(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+
+    report = module.build_report(
+        validator=validator,
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=True,
+        runner=_FakeDngValidateRunner(),
+    )
+
+    assert report["ok"] is True
+    assert report["summary"]["selected"] == 0
+    assert report["results"] == []
+
+
+def test_run_adobe_dng_sdk_validation_refuses_unsafe_output_dirs(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    repo_root = tmp_path / "repo"
+    adobe_dir = repo_root / "Adobe"
+    fixture_dir = repo_root / "fixtures"
+    adobe_dir.mkdir(parents=True)
+    fixture_dir.mkdir()
+
+    assert module._output_dir_refusal_reason(
+        repo_root / "tracked-report",
+        repo_root=repo_root,
+        fixture_roots=(fixture_dir,),
+        allow_outside_demo_output=False,
+    ).startswith("Refusing to write Adobe DNG SDK validation report outside demo-output/")
+    assert module._output_dir_refusal_reason(
+        adobe_dir / "report",
+        repo_root=repo_root,
+        fixture_roots=(fixture_dir,),
+        allow_outside_demo_output=True,
+    ) == "Refusing to write Adobe DNG SDK validation report inside Adobe/."
+    assert module._output_dir_refusal_reason(
+        fixture_dir / "report",
+        repo_root=repo_root,
+        fixture_roots=(fixture_dir,),
+        allow_outside_demo_output=True,
+    ) == "Refusing to write Adobe DNG SDK validation report inside a fixture directory."
+    assert module._output_dir_refusal_reason(
+        repo_root / "tracked-report",
+        repo_root=repo_root,
+        fixture_roots=(fixture_dir,),
+        allow_outside_demo_output=True,
+    ).startswith("Refusing to write Adobe DNG SDK validation report inside a tracked repo area")
+    assert (
+        module._output_dir_refusal_reason(
+            repo_root / "demo-output" / "adobe-dng-sdk-validation",
+            repo_root=repo_root,
+            fixture_roots=(fixture_dir,),
+            allow_outside_demo_output=False,
+        )
+        is None
+    )
+
+
+def test_run_adobe_dng_sdk_validation_main_writes_reports(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    validator = tmp_path / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng")
+    output_dir = tmp_path / "reports"
+    original_run = module.subprocess.run
+    module.subprocess.run = _FakeDngValidateRunner()
+    try:
+        exit_code = module.main(
+            [
+                "--validator",
+                str(validator),
+                "--fixture-dir",
+                str(fixture_dir),
+                "--output-dir",
+                str(output_dir),
+                "--allow-output-outside-demo-output",
+            ]
+        )
+    finally:
+        module.subprocess.run = original_run
+
+    report = json.loads(
+        (output_dir / "adobe-dng-sdk-validation-report.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 0
+    assert report["ok"] is True
+    assert (output_dir / "adobe-dng-sdk-validation-report.md").exists()
+
+
+def test_verify_adobe_validation_stack_writes_passing_report(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    output_dir = repo_root / "demo-output" / "adobe-validation-stack"
+    runner = _FakeAdobeValidationStackRunner()
+
+    report = module.build_report(
+        output_dir=output_dir,
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=runner,
+    )
+
+    assert report["schema"] == "image2dng.adobe_validation_stack_report.v1"
+    assert report["ok"] is True
+    assert report["summary"] == {
+        "blocking_finding_count": 0,
+        "failed": 0,
+        "passed": 4,
+        "step_count": 4,
+    }
+    project_step = _stack_step(report, "project-dng-fixtures")
+    assert project_step["command"][-2:] == ["--dng-layout", "single-raw-ifd"]
+    inspection = project_step["project_fixture_inspection"]
+    assert inspection["schema"] == "image2dng.raw_native_node_batch.v1"
+    assert inspection["sample_index_schema"] == "image2dng.raw_native_sample_index.v1"
+    assert inspection["all_validations_ok"] is True
+    assert inspection["dng_count"] == 2
+    assert inspection["fixture_roots"]
+    sdk_step = _stack_step(report, "adobe-dng-sdk-validation")
+    sdk_command = sdk_step["command"]
+    assert isinstance(sdk_command, list)
+    sdk_fixture_dirs = [
+        Path(sdk_command[index + 1])
+        for index, value in enumerate(sdk_command)
+        if value == "--fixture-dir"
+    ]
+    sdk_fixture_dirs = [path.resolve() for path in sdk_fixture_dirs]
+    assert (
+        output_dir / "project-dng-fixtures" / "raw-native-node-batch" / "raw"
+    ).resolve() in sdk_fixture_dirs
+    assert (
+        output_dir / "adobe-dng-converter-verification" / "source-dng"
+    ).resolve() in sdk_fixture_dirs
+    assert (
+        output_dir / "adobe-dng-converter-verification" / "converted"
+    ).resolve() in sdk_fixture_dirs
+    assert all(
+        "--allow-output-outside-demo-output" not in step["command"] for step in report["steps"]
+    )
+
+
+def test_verify_adobe_validation_stack_dry_run_converter_is_not_readiness(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=True,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+
+    assert report["ok"] is False
+    assert (
+        "Adobe DNG Converter dry-run mode does not prove full Adobe readiness"
+        in report["blocking_findings"]
+    )
+    converter_step = _stack_step(report, "adobe-dng-converter")
+    assert converter_step["child_report"]["dry_run"] is True
+
+
+def test_verify_adobe_validation_stack_rejects_stale_child_report(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(
+            stale_report_names={"adobe-dng-sdk-validation"}
+        ),
+    )
+
+    assert report["ok"] is False
+    sdk_step = _stack_step(report, "adobe-dng-sdk-validation")
+    assert "child report generated_at predates the child step start time" in sdk_step[
+        "blocking_findings"
+    ]
+
+
+def test_verify_adobe_validation_stack_rejects_future_dated_child_report(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(
+            future_report_names={"adobe-dng-converter"}
+        ),
+    )
+
+    assert report["ok"] is False
+    converter_step = _stack_step(report, "adobe-dng-converter")
+    assert "child report generated_at is after the child step finish time" in converter_step[
+        "blocking_findings"
+    ]
+
+
+def test_verify_adobe_validation_stack_reports_missing_child_report(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(no_report_names={"adobe-dng-converter"}),
+    )
+
+    assert report["ok"] is False
+    converter_step = _stack_step(report, "adobe-dng-converter")
+    assert converter_step["exit_code"] == 1
+    assert any(
+        finding.startswith("child report missing:")
+        for finding in converter_step["blocking_findings"]
+    )
+
+
+def test_verify_adobe_validation_stack_refuses_unsafe_output_dirs(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir(parents=True)
+    demo_output = repo_root / "demo-output" / "adobe-validation-stack"
+
+    assert module._output_dir_refusal_reason(
+        adobe_dir / "report",
+        repo_root=repo_root,
+    ) == "Refusing to write Adobe Validation Stack report inside Adobe/."
+    assert module._output_dir_refusal_reason(
+        repo_root / "reports",
+        repo_root=repo_root,
+    ) == "Refusing to write Adobe Validation Stack report outside demo-output/."
+    assert module._output_dir_refusal_reason(
+        repo_root / "scripts" / "report",
+        repo_root=repo_root,
+    ) == "Refusing to write Adobe Validation Stack report outside demo-output/."
+    assert module._output_dir_refusal_reason(
+        repo_root
+        / "demo-output"
+        / "review-bundle-phase6"
+        / "artifacts"
+        / "representative-dng"
+        / "report",
+        repo_root=repo_root,
+    ) == "Refusing to write Adobe Validation Stack report inside a fixture directory."
+    assert module._output_dir_refusal_reason(demo_output, repo_root=repo_root) is None
+
+
 def test_processor_inventory_discovers_darktable_common_install_path(tmp_path, monkeypatch):
     common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
     common_executable.parent.mkdir(parents=True)
@@ -2975,6 +3518,280 @@ def _write_zip(path: Path, entries: dict[str, str]) -> None:
     with zipfile.ZipFile(path, "w") as archive:
         for name, content in entries.items():
             archive.writestr(name, content)
+
+
+class _FakeDngValidateRunner:
+    def __init__(
+        self,
+        *,
+        fail_names: set[str] | None = None,
+        timeout_names: set[str] | None = None,
+        marker_pass_names: set[str] | None = None,
+        version_exit_code: int = 1,
+        version_stdout: str | None = None,
+        version_timeout: bool = False,
+    ) -> None:
+        self.fail_names = fail_names or set()
+        self.timeout_names = timeout_names or set()
+        self.marker_pass_names = marker_pass_names or set()
+        self.version_exit_code = version_exit_code
+        self.version_stdout = version_stdout
+        self.version_timeout = version_timeout
+
+    def __call__(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        capture_output: bool,
+        text: bool,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert cwd.exists()
+        assert capture_output is True
+        assert text is True
+        assert check is False
+        if len(command) == 1:
+            stdout = (
+                self.version_stdout
+                if self.version_stdout is not None
+                else (
+                    "dng_validate, version 1.7.1 (2573) (64-bit)\n"
+                    "Usage: dng_validate.exe [options] file1 file2 ...\n"
+                )
+            )
+            if self.version_timeout:
+                raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr="")
+            return subprocess.CompletedProcess(
+                command,
+                self.version_exit_code,
+                stdout=stdout,
+                stderr="",
+            )
+        fixture = Path(command[-1])
+        if fixture.name in self.timeout_names:
+            raise subprocess.TimeoutExpired(
+                command,
+                timeout,
+                output="fatal timeout while validating",
+                stderr="",
+            )
+        if fixture.name in self.fail_names:
+            return subprocess.CompletedProcess(
+                command,
+                7,
+                stdout=f'Validating "{fixture}"...\nERROR: corrupt image\n',
+                stderr="validation failed",
+            )
+        if fixture.name in self.marker_pass_names:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f'Validating "{fixture}"...\nValidation complete\nERROR marker\n',
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f'Validating "{fixture}"...\nValidation complete\n',
+            stderr="",
+        )
+
+
+def _sha256_test_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
+
+
+class _FakeAdobeValidationStackRunner:
+    def __init__(
+        self,
+        *,
+        stale_report_names: set[str] | None = None,
+        future_report_names: set[str] | None = None,
+        no_report_names: set[str] | None = None,
+    ) -> None:
+        self.stale_report_names = stale_report_names or set()
+        self.future_report_names = future_report_names or set()
+        self.no_report_names = no_report_names or set()
+
+    def __call__(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        capture_output: bool,
+        text: bool,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert cwd.exists()
+        assert timeout > 0
+        assert capture_output is True
+        assert text is True
+        assert check is False
+        script_name = Path(command[1]).name
+        if script_name == "audit_adobe_local_resources.py":
+            return self._write_resource_audit(command)
+        if script_name == "generate_raw_native_batch.py":
+            return self._write_project_fixtures(command)
+        if script_name == "verify_adobe_dng_converter.py":
+            return self._write_converter_report(command)
+        if script_name == "run_adobe_dng_sdk_validation.py":
+            return self._write_sdk_report(command)
+        return subprocess.CompletedProcess(command, 9, stdout="", stderr="unexpected command")
+
+    def _generated_at(self, name: str) -> str:
+        if name in self.stale_report_names:
+            return "2000-01-01T00:00:00+00:00"
+        if name in self.future_report_names:
+            return "2999-01-01T00:00:00+00:00"
+        return datetime.now(UTC).isoformat()
+
+    def _write_resource_audit(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        name = "resource-audit"
+        output_dir = _command_path(command, "--output-dir")
+        if name not in self.no_report_names:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "adobe-local-resource-report.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "image2dng.adobe_local_resource_audit.v1",
+                        "generated_at": self._generated_at(name),
+                        "ok": True,
+                        "blocking_findings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="resource audit\n", stderr="")
+
+    def _write_project_fixtures(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        output_dir = _command_path(command, "--output-dir")
+        raw_dir = output_dir / "raw"
+        manifest_dir = output_dir / "manifests"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        linear_dng = raw_dir / "sample-linearraw.dng"
+        cfa_dng = raw_dir / "sample-cfa-rggb.dng"
+        linear_dng.write_bytes(b"linear dng")
+        cfa_dng.write_bytes(b"cfa dng")
+        manifest = {
+            "schema": "image2dng.raw_native_node_batch.v1",
+            "scenes": [
+                {
+                    "slug": "sample",
+                    "outputs": {
+                        "linearraw_dng": str(linear_dng),
+                        "cfa_dng": str(cfa_dng),
+                    },
+                    "validations": {
+                        "linearraw": {"ok": True},
+                        "cfa": {"ok": True},
+                    },
+                }
+            ],
+        }
+        sample_index = {
+            "schema": "image2dng.raw_native_sample_index.v1",
+            "scene_count": 1,
+            "all_validations_ok": True,
+        }
+        (manifest_dir / "raw-native-node-batch.json").write_text(
+            json.dumps(manifest),
+            encoding="utf-8",
+        )
+        (manifest_dir / "sample-index.json").write_text(
+            json.dumps(sample_index),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="project fixtures\n", stderr="")
+
+    def _write_converter_report(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        name = "adobe-dng-converter"
+        output_dir = _command_path(command, "--output-dir")
+        source_dir = output_dir / "source-dng"
+        converted_dir = output_dir / "converted"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        converted_dir.mkdir(parents=True, exist_ok=True)
+        source_dng = source_dir / "adobe-single-raw-ifd-fixture.dng"
+        converted_dng = converted_dir / "adobe-single-raw-ifd-fixture.dng"
+        source_dng.write_bytes(b"source dng")
+        dry_run = "--dry-run" in command
+        if not dry_run:
+            converted_dng.write_bytes(b"converted dng")
+        if name in self.no_report_names:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="no report\n")
+        report_dir = output_dir / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "adobe-dng-converter-report.json").write_text(
+            json.dumps(
+                {
+                    "schema": "image2dng.adobe_dng_converter_verification.v1",
+                    "generated_at": self._generated_at(name),
+                    "ok": True,
+                    "dry_run": dry_run,
+                    "status": "dry-run" if dry_run else "passed",
+                    "artifacts": {
+                        "source_dng": str(source_dng),
+                        "converted_dng": str(converted_dng),
+                    },
+                    "errors": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="converter\n", stderr="")
+
+    def _write_sdk_report(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        name = "adobe-dng-sdk-validation"
+        output_dir = _command_path(command, "--output-dir")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        fixture_dirs = [
+            Path(command[index + 1])
+            for index, value in enumerate(command)
+            if value == "--fixture-dir"
+        ]
+        selected = sum(len(list(path.glob("*.dng"))) for path in fixture_dirs if path.exists())
+        if name not in self.no_report_names:
+            (output_dir / "adobe-dng-sdk-validation-report.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "image2dng.adobe_dng_sdk_validation_report.v1",
+                        "generated_at": self._generated_at(name),
+                        "ok": True,
+                        "summary": {
+                            "selected": selected,
+                            "passed": selected,
+                            "failed": 0,
+                            "marker_blocked": 0,
+                            "timeout": 0,
+                            "skipped": 0,
+                        },
+                        "blocking_findings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="sdk\n", stderr="")
+
+
+def _command_path(command: list[str], flag: str) -> Path:
+    return Path(command[command.index(flag) + 1])
+
+
+def _stack_step(report: dict[str, object], name: str) -> dict[str, object]:
+    steps = report["steps"]
+    assert isinstance(steps, list)
+    for step in steps:
+        assert isinstance(step, dict)
+        if step["name"] == name:
+            return step
+    raise AssertionError(f"missing stack step: {name}")
 
 
 def _write_png(path, image: np.ndarray) -> None:
