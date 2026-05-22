@@ -218,6 +218,23 @@ def test_compatibility_docs_keep_setup_audit_safety_boundary():
     assert "scripts/verify_adobe_validation_stack.py" in zh_tw
 
 
+def test_dng_tag_contract_keeps_adobe_sdk_local_evidence_boundary():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "docs" / "i18n" / "en" / "dng-tag-contract.md").read_text(
+        encoding="utf-8"
+    )
+    zh_tw = (repo_root / "docs" / "i18n" / "zh-TW" / "dng-tag-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "generic compatibility matrix" in english
+    assert "dedicated local scripts can produce local SDK sidecar evidence" in english
+    assert "without a reproducible local validation path" not in english
+    assert "generic compatibility matrix" in zh_tw
+    assert "dedicated local scripts 可產出本機 SDK sidecar evidence" in zh_tw
+    assert "沒有可重現的本機驗證路徑前" not in zh_tw
+
+
 def test_current_public_status_mentions_review_bundle_failure_diagnostics():
     repo_root = Path(__file__).resolve().parents[1]
     english = (repo_root / "docs" / "current-public-status.md").read_text(encoding="utf-8")
@@ -4839,13 +4856,13 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
     assert any(
         question
         == (
-            "Should Adobe DNG SDK remain manual-only without a reproducible "
-            "local SDK validation path?"
+            "Should Adobe DNG SDK remain manual-only in the generic compatibility "
+            "matrix while dedicated local SDK scripts produce sidecar evidence?"
         )
         for question in report["review_questions"]
     )
-    assert "until a reproducible local SDK path exists" not in json.dumps(report)
-    assert "until a reproducible local SDK path exists" not in prompt
+    assert "without a reproducible local SDK validation path" not in json.dumps(report)
+    assert "without a reproducible local SDK validation path" not in prompt
 
 
 def test_raw_processor_setup_audit_rejects_malformed_runbook_tool_state(tmp_path):

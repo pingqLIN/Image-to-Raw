@@ -160,8 +160,8 @@ def _build_report(
                 "may be harder to source?"
             ),
             (
-                "Should Adobe DNG SDK remain manual-only without a reproducible "
-                "local SDK validation path?"
+                "Should Adobe DNG SDK remain manual-only in the generic compatibility "
+                "matrix while dedicated local SDK scripts produce sidecar evidence?"
             ),
         ],
         "rerun_commands": [

@@ -95,4 +95,4 @@ Optional smoke tools are compatibility evidence, not mandatory gates:
 
 - available tools that parse/export successfully are recorded as `passed`;
 - missing tools are recorded as `skipped`;
-- Adobe DNG SDK 目前維持 `manual-only`；沒有可重現的本機驗證路徑前，不作為自動 gate。
+- Adobe DNG SDK 在 generic compatibility matrix 中維持 `manual-only`，不作為自動 gate；dedicated local scripts 可產出本機 SDK sidecar evidence。
