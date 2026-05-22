@@ -5043,6 +5043,28 @@ def test_development_baseline_rejects_malformed_report_accessors():
         module._errors({"errors": "none"})
 
 
+def test_development_baseline_rejects_malformed_step_records():
+    module = _load_script_module("verify_development_baseline")
+
+    with pytest.raises(TypeError, match="step status must be passed or failed"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {"name": "pytest", "status": "skipped", "exit_code": 0},
+        )
+
+    with pytest.raises(TypeError, match="step name must be a non-empty string"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {"name": "", "status": "failed", "exit_code": 1},
+        )
+
+    with pytest.raises(TypeError, match="step exit_code must be an integer"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {"name": "pytest", "status": "failed", "exit_code": False},
+        )
+
+
 def test_development_baseline_rejects_external_batch_artifact_paths(tmp_path):
     module = _load_script_module("verify_development_baseline")
     repo_root = tmp_path / "repo"

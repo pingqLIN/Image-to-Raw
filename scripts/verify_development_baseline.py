@@ -85,7 +85,7 @@ def main() -> int:
         _append_error(report, str(exc))
 
     report["ok"] = not _errors(report) and all(
-        step["status"] == "passed" for step in _steps(report)
+        _step_status(step) == "passed" for step in _steps(report)
     )
     _write_report(output_dir, report)
     return 0 if report["ok"] else 1
@@ -200,8 +200,11 @@ def _venv_script(venv: Path, name: str) -> Path:
 
 def _append_step(report: dict[str, object], step: dict[str, object]) -> None:
     _steps(report).append(step)
-    if step["status"] == "failed":
-        _append_error(report, f"{step['name']} failed with exit code {step['exit_code']}")
+    if _step_status(step) == "failed":
+        _append_error(
+            report,
+            f"{_step_name(step)} failed with exit code {_step_exit_code(step)}",
+        )
 
 
 def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
@@ -464,6 +467,27 @@ def _errors(report: dict[str, object]) -> list[object]:
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
     return errors
+
+
+def _step_status(step: dict[str, object]) -> StepStatus:
+    status = step["status"]
+    if status not in ("passed", "failed"):
+        raise TypeError("step status must be passed or failed")
+    return status
+
+
+def _step_name(step: dict[str, object]) -> str:
+    name = step["name"]
+    if not isinstance(name, str) or not name:
+        raise TypeError("step name must be a non-empty string")
+    return name
+
+
+def _step_exit_code(step: dict[str, object]) -> int:
+    exit_code = step["exit_code"]
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        return exit_code
+    raise TypeError("step exit_code must be an integer")
 
 
 def _tail(text: str, *, max_lines: int = 40) -> list[str]:
