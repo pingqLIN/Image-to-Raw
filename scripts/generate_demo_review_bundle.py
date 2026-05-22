@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         _append_error(report, str(exc))
 
-    report["ok"] = not report["errors"]
+    report["ok"] = not _errors(report)
     _write_outputs(paths.output_dir, report)
     return 0 if report["ok"] else 1
 
@@ -213,7 +213,7 @@ def _collect_bundle(*, paths: BundlePaths, repo_root: Path, report: dict[str, An
         f"missing compatibility summary: {compatibility_summary_path}",
     )
 
-    source_reports = report["source_reports"]
+    source_reports = _source_reports(report)
     source_reports["visual_manifest"] = _copy_artifact(
         paths=paths,
         report=report,
@@ -432,7 +432,7 @@ def _collect_compatibility_representatives(
 
 
 def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
-    artifacts = report["artifacts"]
+    artifacts = _artifacts(report)
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for artifact in artifacts:
         by_kind.setdefault(artifact["kind"], []).append(artifact)
@@ -484,7 +484,7 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
         )
 
     lines.extend(["", "## Reports And Manifests", ""])
-    for key, value in report["source_reports"].items():
+    for key, value in _source_reports(report).items():
         lines.append(f"- `{key}`: [{value}]({value})")
 
     lines.extend(
@@ -502,22 +502,22 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
     )
 
     lines.extend(["", "## Command Results", ""])
-    for command in report["commands"]:
+    for command in _commands(report):
         lines.append(
             f"- `{command['name']}`: `{command['status']}` "
             f"(exit `{command['exit_code']}`, {command['duration_seconds']}s)"
         )
 
-    if report["errors"]:
+    if _errors(report):
         lines.extend(["", "## Errors", ""])
-        for error in report["errors"]:
+        for error in _errors(report):
             lines.append(f"- {error}")
 
     (output_dir / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_outputs(output_dir: Path, report: dict[str, Any]) -> None:
-    report["ok"] = not report["errors"] and not _has_command_failure(report)
+    report["ok"] = not _errors(report) and not _has_command_failure(report)
     _write_index(output_dir, report)
     _append_existing_artifact(
         output_dir=output_dir,
@@ -564,7 +564,7 @@ def _copy_artifact(
     }
     if group is not None:
         record["group"] = group
-    report["artifacts"].append(record)
+    _artifacts(report).append(record)
     return record
 
 
@@ -577,9 +577,9 @@ def _append_existing_artifact(
     name: str,
 ) -> None:
     bundle_path = _relative_posix(source, output_dir)
-    if any(artifact.get("bundle_path") == bundle_path for artifact in report["artifacts"]):
+    if any(artifact.get("bundle_path") == bundle_path for artifact in _artifacts(report)):
         return
-    report["artifacts"].append(
+    _artifacts(report).append(
         {
             "kind": kind,
             "category": _category_for_kind(kind),
@@ -594,9 +594,9 @@ def _append_existing_artifact(
 
 
 def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
-    for artifact in report["artifacts"]:
+    for artifact in _artifacts(report):
         _validate_relative_existing_path(output_dir, _string(artifact, "bundle_path"))
-    for value in report["source_reports"].values():
+    for value in _source_reports(report).values():
         _validate_relative_existing_path(output_dir, str(value))
 
 
@@ -637,7 +637,7 @@ def _record_callable_command(
         _append_error(report, f"{name} failed: {error}")
     elif exit_code != 0:
         _append_error(report, f"{name} failed with exit code {exit_code}")
-    report["commands"].append(record)
+    _commands(report).append(record)
 
 
 def _record_subprocess_command(
@@ -661,7 +661,7 @@ def _record_subprocess_command(
     }
     if completed.returncode != 0:
         _append_error(report, f"{name} failed with exit code {completed.returncode}")
-    report["commands"].append(record)
+    _commands(report).append(record)
 
 
 def _run_raw_native(output_dir: Path) -> int:
@@ -820,11 +820,43 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _append_error(report: dict[str, Any], message: str) -> None:
-    report["errors"].append(message)
+    _errors(report).append(message)
 
 
 def _has_command_failure(report: dict[str, Any]) -> bool:
-    return any(command["status"] != "passed" for command in report["commands"])
+    return any(command["status"] != "passed" for command in _commands(report))
+
+
+def _commands(report: dict[str, Any]) -> list[dict[str, Any]]:
+    commands = report["commands"]
+    if not isinstance(commands, list):
+        raise TypeError("report commands must be a list")
+    if not all(isinstance(command, dict) for command in commands):
+        raise TypeError("report commands must contain objects")
+    return commands
+
+
+def _artifacts(report: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts = report["artifacts"]
+    if not isinstance(artifacts, list):
+        raise TypeError("report artifacts must be a list")
+    if not all(isinstance(artifact, dict) for artifact in artifacts):
+        raise TypeError("report artifacts must contain objects")
+    return artifacts
+
+
+def _source_reports(report: dict[str, Any]) -> dict[str, Any]:
+    source_reports = report["source_reports"]
+    if not isinstance(source_reports, dict):
+        raise TypeError("report source_reports must be an object")
+    return source_reports
+
+
+def _errors(report: dict[str, Any]) -> list[Any]:
+    errors = report["errors"]
+    if not isinstance(errors, list):
+        raise TypeError("report errors must be a list")
+    return errors
 
 
 def _tail(text: str, *, max_lines: int = 40) -> list[str]:
