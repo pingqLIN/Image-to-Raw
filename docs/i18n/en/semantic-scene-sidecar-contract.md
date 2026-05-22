@@ -2,7 +2,7 @@
 
 `image2dng.semantic_scene.v1` is the semantic sidecar contract for external renderers, AI generators, simulation engines, and ComfyUI nodes in bridge projects that hand scene-linear images to this project.
 
-The v1 goal is semantic preservation and validation. It lets the RAW-native pipeline preserve traceable scene, material, light, region, mask/depth asset, and sensor response hint data. It does not convert semantic information into raw sample values yet, and it does not write the sidecar into `DNGPrivateData`.
+The default v1 goal is semantic preservation and validation. It lets the RAW-native pipeline preserve traceable scene, material, light, region, mask/depth asset, and sensor response hint data. The default path does not convert semantic information into raw sample values; only manifests that explicitly opt in with `apply_semantic_reaction: true` run the deterministic helpers listed below. The sidecar is still not written into `DNGPrivateData`.
 
 ## Minimal Shape
 
@@ -109,7 +109,7 @@ When `semantic_manifest` is present, the pipeline:
 - records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation` in `raw-native-node-batch.json`;
 - records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation` in `sample-index.json`.
 
-By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation yet.
+By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation.
 
 When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable the deterministic `semantic-reaction-chain-v1`. The first current child helper is `region-exposure-mask-v1`: it reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, applies EV modulation to 16-bit scene-linear RGB values inside the mask, and records a `semantic_reaction` summary in the manifests. The reaction chain only supports linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. It is not a full physical sensor model and does not claim spectral or camera-simulation accuracy.
 

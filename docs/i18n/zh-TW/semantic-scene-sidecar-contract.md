@@ -2,7 +2,7 @@
 
 `image2dng.semantic_scene.v1` 是外部 renderer、AI generator、simulation engine 或 bridge project 中的 ComfyUI node 交付 scene-linear 影像時可附帶的語意 sidecar contract。
 
-v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 scene、material、light、region、mask/depth asset 與 sensor response hints。它目前不把語意資訊轉成 raw sample values，也不把 sidecar 寫入 `DNGPrivateData`。
+v1 的預設目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 scene、material、light、region、mask/depth asset 與 sensor response hints。預設路徑不把語意資訊轉成 raw sample values；只有 manifest 明確 opt in `apply_semantic_reaction: true` 時，才會套用下方列出的 deterministic helper。sidecar 仍不寫入 `DNGPrivateData`。
 
 ## 最小結構
 
