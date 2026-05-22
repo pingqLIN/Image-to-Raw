@@ -495,14 +495,14 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
     artifacts = _artifacts(report)
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for artifact in artifacts:
-        by_kind.setdefault(artifact["kind"], []).append(artifact)
+        by_kind.setdefault(_artifact_kind(artifact), []).append(artifact)
 
     lines = [
         "# image2dng Demo Review Bundle",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- Generated at: `{report['generated_at']}`",
-        f"- Overall ok: `{report['ok']}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- Generated at: `{_generated_at(report)}`",
+        f"- Overall ok: `{_report_ok(report)}`",
         "",
         "## Review Entry Points",
         "",
@@ -525,22 +525,24 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
         "",
     ]
     for artifact in by_kind.get("contact-sheet", []):
-        path = artifact["bundle_path"]
-        lines.append(f"![{artifact['name']}]({path})")
+        path = _artifact_bundle_path(artifact)
+        lines.append(f"![{_artifact_name(artifact)}]({path})")
         lines.append("")
 
     lines.extend(["## Representative DNG Files", ""])
     for artifact in by_kind.get("representative-dng", []):
+        path = _artifact_bundle_path(artifact)
         lines.append(
-            f"- `{artifact['name']}`: "
-            f"[{artifact['bundle_path']}]({artifact['bundle_path']})"
+            f"- `{_artifact_name(artifact)}`: "
+            f"[{path}]({path})"
         )
 
     lines.extend(["", "## Validation JSON", ""])
     for artifact in by_kind.get("validation-json", []):
+        path = _artifact_bundle_path(artifact)
         lines.append(
-            f"- `{artifact['name']}`: "
-            f"[{artifact['bundle_path']}]({artifact['bundle_path']})"
+            f"- `{_artifact_name(artifact)}`: "
+            f"[{path}]({path})"
         )
 
     lines.extend(["", "## Reports And Manifests", ""])
@@ -555,7 +557,7 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
             "```powershell",
             (
                 "uv run python scripts/generate_demo_review_bundle.py "
-                f"--output-dir {_powershell_quote(report['output_dir'])}"
+                f"--output-dir {_powershell_quote(_output_dir(report))}"
             ),
             "```",
         ]
@@ -564,8 +566,8 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
     lines.extend(["", "## Command Results", ""])
     for command in _commands(report):
         lines.append(
-            f"- `{command['name']}`: `{command['status']}` "
-            f"(exit `{command['exit_code']}`, {command['duration_seconds']}s)"
+            f"- `{_command_name(command)}`: `{_command_status(command)}` "
+            f"(exit `{_command_exit_code(command)}`, {_command_duration_seconds(command)}s)"
         )
 
     if _errors(report):
@@ -941,6 +943,34 @@ def _has_command_failure(report: dict[str, Any]) -> bool:
     return any(_command_status(command) != "passed" for command in _commands(report))
 
 
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _generated_at(report: dict[str, Any]) -> str:
+    generated_at = report["generated_at"]
+    if not isinstance(generated_at, str):
+        raise TypeError("report generated_at must be a string")
+    return generated_at
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _output_dir(report: dict[str, Any]) -> str:
+    output_dir = report["output_dir"]
+    if not isinstance(output_dir, str):
+        raise TypeError("report output_dir must be a string")
+    return output_dir
+
+
 def _commands(report: dict[str, Any]) -> list[dict[str, Any]]:
     commands = report["commands"]
     if not isinstance(commands, list):
@@ -950,11 +980,34 @@ def _commands(report: dict[str, Any]) -> list[dict[str, Any]]:
     return commands
 
 
+def _command_name(command: dict[str, Any]) -> str:
+    name = command["name"]
+    if not isinstance(name, str):
+        raise TypeError("command name must be a string")
+    return name
+
+
 def _command_status(command: dict[str, Any]) -> str:
     status = command["status"]
     if not isinstance(status, str):
         raise TypeError("command status must be a string")
     return status
+
+
+def _command_exit_code(command: dict[str, Any]) -> int | None:
+    exit_code = command["exit_code"]
+    if isinstance(exit_code, bool):
+        raise TypeError("command exit_code must be an integer or null")
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("command exit_code must be an integer or null")
+
+
+def _command_duration_seconds(command: dict[str, Any]) -> float | int:
+    duration = command["duration_seconds"]
+    if isinstance(duration, bool) or not isinstance(duration, int | float):
+        raise TypeError("command duration_seconds must be numeric")
+    return duration
 
 
 def _artifacts(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -964,6 +1017,27 @@ def _artifacts(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not all(isinstance(artifact, dict) for artifact in artifacts):
         raise TypeError("report artifacts must contain objects")
     return artifacts
+
+
+def _artifact_kind(artifact: dict[str, Any]) -> str:
+    kind = artifact["kind"]
+    if not isinstance(kind, str):
+        raise TypeError("artifact kind must be a string")
+    return kind
+
+
+def _artifact_name(artifact: dict[str, Any]) -> str:
+    name = artifact["name"]
+    if not isinstance(name, str):
+        raise TypeError("artifact name must be a string")
+    return name
+
+
+def _artifact_bundle_path(artifact: dict[str, Any]) -> str:
+    bundle_path = artifact["bundle_path"]
+    if not isinstance(bundle_path, str):
+        raise TypeError("artifact bundle_path must be a string")
+    return bundle_path
 
 
 def _source_reports(report: dict[str, Any]) -> dict[str, Any]:

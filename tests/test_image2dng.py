@@ -4373,6 +4373,67 @@ def test_demo_review_bundle_rejects_malformed_command_status():
 
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
+    report = {
+        "schema": "image2dng.demo_review_bundle.v1",
+        "generated_at": "2026-05-23T00:00:00Z",
+        "ok": True,
+        "output_dir": "demo-output/review-bundle",
+        "commands": [
+            {
+                "name": "baseline",
+                "status": "passed",
+                "exit_code": 0,
+                "duration_seconds": 0.1,
+            }
+        ],
+        "artifacts": [
+            {
+                "kind": "contact-sheet",
+                "name": "sheet",
+                "bundle_path": "artifacts/contact-sheets/sheet.png",
+            }
+        ],
+        "source_reports": {},
+        "errors": [],
+    }
+
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._write_index(Path.cwd(), report | {"schema": 1})
+
+    with pytest.raises(TypeError, match="report generated_at must be a string"):
+        module._write_index(Path.cwd(), report | {"generated_at": []})
+
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._write_index(Path.cwd(), report | {"ok": "true"})
+
+    with pytest.raises(TypeError, match="report output_dir must be a string"):
+        module._write_index(Path.cwd(), report | {"output_dir": False})
+
+    malformed = report | {"commands": [report["commands"][0] | {"name": []}]}
+    with pytest.raises(TypeError, match="command name must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"commands": [report["commands"][0] | {"exit_code": True}]}
+    with pytest.raises(TypeError, match="command exit_code must be an integer or null"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {
+        "commands": [report["commands"][0] | {"duration_seconds": "slow"}]
+    }
+    with pytest.raises(TypeError, match="command duration_seconds must be numeric"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"kind": False}]}
+    with pytest.raises(TypeError, match="artifact kind must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"name": []}]}
+    with pytest.raises(TypeError, match="artifact name must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"bundle_path": 7}]}
+    with pytest.raises(TypeError, match="artifact bundle_path must be a string"):
+        module._write_index(Path.cwd(), malformed)
 
     with pytest.raises(TypeError, match="report commands must contain objects"):
         module._commands({"commands": ["not-a-command"]})
