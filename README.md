@@ -142,7 +142,7 @@ This verification flow runs `pytest`, `ruff check`, `uv build`, RAW-native batch
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 ```
 
-This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Phase 6 reports use `image2dng.compatibility_evidence.v2` and record RAW processor commands, exit codes, stdout/stderr tails, output artifacts, and dry-run install hints. Missing optional RAW tools are recorded as `skipped` instead of failures; installed tools that fail to run or fail to emit their export artifact are recorded as `failed`; Adobe DNG SDK remains `manual-only`.
+This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Phase 6 reports use `image2dng.compatibility_evidence.v2` and record fixture DNG/validation JSON byte counts and SHA-256 checksums, RAW processor commands, exit codes, stdout/stderr tails, output artifacts, and dry-run install hints. Missing optional RAW tools are recorded as `skipped` instead of failures; installed tools that fail to run or fail to emit their export artifact are recorded as `failed`; Adobe DNG SDK remains `manual-only`.
 
 For Adobe DNG Converter regression, use the dedicated local script:
 

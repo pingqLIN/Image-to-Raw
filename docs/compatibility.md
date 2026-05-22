@@ -128,7 +128,7 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 - environment: platform, Python version, and `image2dng` version;
 - tool inventory: availability, executable path, version command, version, timeout policy, and dry-run install hint;
 - install policy: no automatic installation, missing tool policy, and available tool failure policy;
-- fixtures: input path, DNG path, DNG layout, raw IFD location, IFD0 preview flag, validation JSON path, structural validation status, and processor result records;
+- fixtures: input path, DNG path, DNG byte count, DNG SHA-256, DNG layout, raw IFD location, IFD0 preview flag, validation JSON path, validation JSON byte count, validation JSON SHA-256, structural validation status, and processor result records;
 - matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, output artifacts, and missing output artifacts.
 
 Adobe DNG SDK remains `manual-only` without a reproducible local SDK validation path.

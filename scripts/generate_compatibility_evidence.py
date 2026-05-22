@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 from dataclasses import dataclass
@@ -208,10 +209,14 @@ def _generate_fixture(
         "sensor_effects": spec.sensor_effects,
         "input": str(input_path),
         "dng": str(dng_path),
+        "dng_bytes": dng_path.stat().st_size,
+        "dng_sha256": _sha256_file(dng_path),
         "dng_layout": validation["dng_layout"],
         "raw_ifd_location": validation["raw_ifd_location"],
         "ifd0_preview": validation["ifd0_preview"],
         "validation_json": str(validation_path),
+        "validation_json_bytes": validation_path.stat().st_size,
+        "validation_json_sha256": _sha256_file(validation_path),
         "validation_ok": _validation_ok(validation),
         "structural_validation": validation,
         "processor_output_dir": str(fixture_processor_dir),
@@ -424,6 +429,14 @@ def _errors(report: dict[str, Any]) -> list[Any]:
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
     return errors
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
 
 
 if __name__ == "__main__":

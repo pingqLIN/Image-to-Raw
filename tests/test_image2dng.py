@@ -1773,7 +1773,21 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     assert {fixture["ifd0_preview"] for fixture in report["fixtures"]} == {True}
     assert all(Path(fixture["dng"]).exists() for fixture in report["fixtures"])
     assert all(Path(fixture["validation_json"]).exists() for fixture in report["fixtures"])
+    assert all(fixture["dng_bytes"] > 0 for fixture in report["fixtures"])
+    assert all(fixture["dng_sha256"].startswith("sha256:") for fixture in report["fixtures"])
+    assert all(fixture["validation_json_bytes"] > 0 for fixture in report["fixtures"])
+    assert all(
+        fixture["validation_json_sha256"].startswith("sha256:")
+        for fixture in report["fixtures"]
+    )
     assert all("processor_results" in fixture for fixture in report["fixtures"])
+    first_fixture = report["fixtures"][0]
+    first_dng = Path(first_fixture["dng"])
+    first_validation = Path(first_fixture["validation_json"])
+    assert first_fixture["dng_bytes"] == first_dng.stat().st_size
+    assert first_fixture["dng_sha256"] == _sha256_test_file(first_dng)
+    assert first_fixture["validation_json_bytes"] == first_validation.stat().st_size
+    assert first_fixture["validation_json_sha256"] == _sha256_test_file(first_validation)
 
     optional_tools = {"exiftool", "dcraw", "darktable-cli", "rawtherapee-cli"}
     optional_entries = [entry for entry in report["matrix"] if entry["tool"] in optional_tools]
