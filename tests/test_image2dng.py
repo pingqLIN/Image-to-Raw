@@ -3324,6 +3324,30 @@ def test_generate_fivek_semantic_physics_sample_rejects_path_like_sample_id(tmp_
     assert not (tmp_path / "outside.semantic.json").exists()
 
 
+def test_generate_fivek_semantic_physics_sample_refuses_tracked_output(tmp_path):
+    module = _load_script_module("generate_fivek_semantic_physics_sample")
+    fivek_dir = tmp_path / "fivek-smoke"
+    fivek_dir.mkdir()
+    sample_id = "sample-001"
+    (fivek_dir / f"{sample_id}.dng").write_bytes(b"fake local dng bytes")
+    tifffile.imwrite(fivek_dir / f"{sample_id}.tif", _gradient_image(18, 12))
+    output_dir = tmp_path / "tracked-semantic-physics"
+
+    exit_code = module.main(
+        [
+            "--fivek-dir",
+            str(fivek_dir),
+            "--sample-id",
+            sample_id,
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:darktable-common-path")
     common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
