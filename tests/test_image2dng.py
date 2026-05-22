@@ -212,6 +212,19 @@ def test_compatibility_docs_keep_setup_audit_safety_boundary():
     assert "fixture integrity 表" in zh_tw
 
 
+def test_current_public_status_mentions_review_bundle_failure_diagnostics():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "docs" / "current-public-status.md").read_text(encoding="utf-8")
+    zh_tw = (
+        repo_root / "docs" / "i18n" / "zh-TW" / "current-public-status.md"
+    ).read_text(encoding="utf-8")
+
+    assert "source reports and manifests are preserved as diagnostic evidence" in english
+    assert "source report diagnostic preservation on command failure" in english
+    assert "source reports / manifests 作為診斷 evidence" in zh_tw
+    assert "command failure 時的 source report diagnostic preservation" in zh_tw
+
+
 def test_repo_agent_instructions_keep_zh_tw_source_pair():
     repo_root = Path(__file__).resolve().parents[1]
     english = (repo_root / "AGENTS.md").read_text(encoding="utf-8")

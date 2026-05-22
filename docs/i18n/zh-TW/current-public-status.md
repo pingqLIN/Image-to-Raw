@@ -13,7 +13,7 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 - 提供 RAW-native node batch，可產生 DNG、sidecar JPEG preview、validation JSON、graph manifest 與 sample index。
 - 驗證並保存 `image2dng.semantic_scene.v1` semantic sidecar；明確 opt-in 時可套用 deterministic semantic reaction helpers。
 - 產生 compatibility evidence matrix，記錄 optional RAW processor 狀態、命令、輸出 artifact 與 failure evidence。
-- 產生 local-only review bundle，彙整 contact sheets、代表性 DNG、validation JSON、manifest 與 reproducibility command。
+- 產生 local-only review bundle，彙整 contact sheets、代表性 DNG、validation JSON、manifest 與 reproducibility command；若上游命令失敗，仍保留已產生的 source reports / manifests 作為診斷 evidence。
 - 在 XMP 中嵌入 AI provenance、raw mode、simulated camera parameters 與已啟用的 sensor-effect 設定。
 - 以 structural checks、mode-aware tag checks、XMP checks 與 optional local smoke tools 驗證產出的 DNG。
 - 同時提供 CLI 與 public Python `convert()` API。
@@ -54,4 +54,4 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 - 對 LinearRaw、CFA 與 CFA with sensor effects 進行 demo sample generation 與 validation
 - RAW-native node batch generation、sample index validation 與 semantic sidecar preservation/reaction checks
 - Compatibility evidence generation，包含 missing optional tools 與 failed processor output artifact reporting
-- Review bundle generation，包含 bundle-relative artifact manifest 與 checksums
+- Review bundle generation，包含 bundle-relative artifact manifest、checksums，以及 command failure 時的 source report diagnostic preservation

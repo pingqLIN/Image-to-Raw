@@ -13,7 +13,7 @@ This document records the current engineering baseline for public exchange. It a
 - Generate RAW-native node batches with DNGs, sidecar JPEG previews, validation JSON, graph manifests, and sample indexes.
 - Validate and preserve `image2dng.semantic_scene.v1` semantic sidecars; explicit opt-in can apply deterministic semantic reaction helpers.
 - Generate compatibility evidence matrices that record optional RAW processor state, commands, output artifacts, and failure evidence.
-- Generate local-only review bundles with contact sheets, representative DNGs, validation JSON, manifests, and reproducibility commands.
+- Generate local-only review bundles with contact sheets, representative DNGs, validation JSON, manifests, and reproducibility commands; if an upstream command fails, already generated source reports and manifests are preserved as diagnostic evidence.
 - Embed AI provenance, selected raw mode, simulated camera parameters, and enabled sensor-effect settings in XMP.
 - Validate generated DNG files with structural checks, mode-aware tag checks, XMP checks, and optional local smoke tools.
 - Use either the CLI or the public Python `convert()` API.
@@ -54,4 +54,4 @@ The current high-signal checks are:
 - demo sample generation and validation for LinearRaw, CFA, and CFA with sensor effects
 - RAW-native node batch generation, sample index validation, and semantic sidecar preservation/reaction checks
 - compatibility evidence generation, including missing optional tools and failed processor output artifact reporting
-- review bundle generation, including bundle-relative artifact manifest and checksums
+- review bundle generation, including bundle-relative artifact manifest, checksums, and source report diagnostic preservation on command failure
