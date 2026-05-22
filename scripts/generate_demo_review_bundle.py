@@ -595,17 +595,28 @@ def _append_existing_artifact(
 
 def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
     for artifact in _artifacts(report):
-        _validate_relative_existing_path(output_dir, _string(artifact, "bundle_path"))
+        artifact_path = _validate_relative_existing_path(
+            output_dir,
+            _string(artifact, "bundle_path"),
+        )
+        if artifact.get("path") != artifact["bundle_path"]:
+            raise ValueError("artifact path must match bundle_path")
+        if artifact.get("bytes") != artifact_path.stat().st_size:
+            raise ValueError(f"artifact byte count mismatch: {artifact['bundle_path']}")
+        if artifact.get("sha256") != _sha256(artifact_path):
+            raise ValueError(f"artifact sha256 mismatch: {artifact['bundle_path']}")
     for value in _source_reports(report).values():
         _validate_relative_existing_path(output_dir, str(value))
 
 
-def _validate_relative_existing_path(output_dir: Path, value: str) -> None:
+def _validate_relative_existing_path(output_dir: Path, value: str) -> Path:
     path = Path(value)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"bundle path must be relative and local: {value}")
-    if not (output_dir / path).exists():
+    resolved = output_dir / path
+    if not resolved.exists():
         raise ValueError(f"bundle path missing: {value}")
+    return resolved
 
 
 def _record_callable_command(

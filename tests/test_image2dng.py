@@ -3356,6 +3356,57 @@ def test_demo_review_bundle_rejects_malformed_command_status():
         module._has_command_failure({"commands": [{"status": False}]})
 
 
+def test_demo_review_bundle_rejects_stale_artifact_integrity(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("current report", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {},
+    }
+
+    module._validate_bundle_report(output_dir, report)
+    report["artifacts"][0]["bytes"] += 1
+    with pytest.raises(ValueError, match="artifact byte count mismatch"):
+        module._validate_bundle_report(output_dir, report)
+
+    report["artifacts"][0]["bytes"] = artifact_path.stat().st_size
+    report["artifacts"][0]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="artifact sha256 mismatch"):
+        module._validate_bundle_report(output_dir, report)
+
+
+def test_demo_review_bundle_rejects_artifact_path_alias(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("current report", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/alias.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {},
+    }
+
+    with pytest.raises(ValueError, match="artifact path must match bundle_path"):
+        module._validate_bundle_report(output_dir, report)
+
+
 def test_demo_review_bundle_skip_baseline_help_is_gate_oriented(capsys):
     module = _load_script_module("generate_demo_review_bundle")
 
