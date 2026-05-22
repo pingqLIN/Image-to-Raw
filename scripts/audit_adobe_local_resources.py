@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import zipfile
@@ -153,6 +154,7 @@ def _resource_records(root: Path, *, zip_entry_limit: int) -> list[dict[str, Any
             "path": _display_path(path),
             "kind": _classify_resource(path.name),
             "size_bytes": path.stat().st_size,
+            "sha256": _sha256_file(path),
         }
         if path.suffix.lower() == ".zip":
             record["zip"] = _zip_summary(path, entry_limit=zip_entry_limit)
@@ -327,6 +329,14 @@ def _output_dir_is_allowed(output_dir: Path) -> bool:
     demo_output = (repo_root / "demo-output").resolve()
     resolved = output_dir.resolve()
     return resolved == demo_output or demo_output in resolved.parents
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
 
 
 if __name__ == "__main__":

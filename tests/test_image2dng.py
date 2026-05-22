@@ -2097,6 +2097,18 @@ def test_adobe_local_resource_audit_writes_readiness_report(tmp_path):
         "profile_sdk_or_tools": True,
     }
     assert report["missing_required_kinds"] == []
+    resource_hashes = {
+        resource["name"]: resource["sha256"] for resource in report["resources"]
+    }
+    assert resource_hashes["AdobeDNGConverter_x64_18_3_1.exe"] == _sha256_test_file(
+        adobe_dir / "AdobeDNGConverter_x64_18_3_1.exe"
+    )
+    assert resource_hashes["DNG_Spec_1_7_1_0.pdf"] == _sha256_test_file(
+        adobe_dir / "DNG_Spec_1_7_1_0.pdf"
+    )
+    assert resource_hashes["dng_sdk_1_7_1_2573_20260512.zip"] == _sha256_test_file(
+        adobe_dir / "dng_sdk_1_7_1_2573_20260512.zip"
+    )
     assert (output_dir / "adobe-local-resource-summary.md").exists()
 
 
