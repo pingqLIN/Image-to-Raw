@@ -46,7 +46,6 @@ from image2dng.models import PHOTOMETRIC_LINEAR_RAW, AIMetadataModel, CameraProf
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
-    _validation_ok,
     _validation_summary,
     load_external_scene_manifest,
     run_external_scene_linear_batch,
@@ -602,13 +601,53 @@ def test_raw_native_validation_summary_requires_contract_keys():
             }
         )
     with pytest.raises(ValueError, match="validation report ok must be a boolean"):
-        _validation_ok(
+        _validation_summary(
             {
                 "ok": "yes",
                 "dng_layout": "preview-subifd",
                 "raw_ifd_location": "IFD0/SubIFD0",
                 "errors": [],
                 "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report dng_layout must be a string"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": [],
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report raw_ifd_location must be a string"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": False,
+                "errors": [],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report errors must be a string list"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": ["ok", 7],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report warnings must be a string list"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+                "warnings": "none",
             }
         )
 

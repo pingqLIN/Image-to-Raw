@@ -745,14 +745,39 @@ def _validation_summary(report: dict[str, Any]) -> dict[str, Any]:
     missing = [key for key in required_keys if key not in report]
     if missing:
         raise ValueError(f"validation report missing keys: {', '.join(missing)}")
-    return {key: report[key] for key in required_keys}
+    return {
+        "ok": _validation_report_ok(report),
+        "dng_layout": _validation_report_string(report, "dng_layout"),
+        "raw_ifd_location": _validation_report_string(report, "raw_ifd_location"),
+        "errors": _validation_report_string_list(report, "errors"),
+        "warnings": _validation_report_string_list(report, "warnings"),
+    }
 
 
 def _validation_ok(report: dict[str, Any]) -> bool:
-    ok = _validation_summary(report)["ok"]
+    ok = _validation_report_ok(report)
+    return ok
+
+
+def _validation_report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
     if not isinstance(ok, bool):
         raise ValueError("validation report ok must be a boolean")
     return ok
+
+
+def _validation_report_string(report: dict[str, Any], key: str) -> str:
+    value = report[key]
+    if not isinstance(value, str):
+        raise ValueError(f"validation report {key} must be a string")
+    return value
+
+
+def _validation_report_string_list(report: dict[str, Any], key: str) -> list[str]:
+    value = report[key]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"validation report {key} must be a string list")
+    return value
 
 
 def _external_scene_from_manifest_item(
