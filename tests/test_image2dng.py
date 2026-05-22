@@ -1521,6 +1521,11 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     }
     assert len(report["fixtures"]) >= 11
     assert all(fixture["validation_ok"] is True for fixture in report["fixtures"])
+    assert {fixture["dng_layout"] for fixture in report["fixtures"]} == {"preview-subifd"}
+    assert {fixture["raw_ifd_location"] for fixture in report["fixtures"]} == {
+        "IFD0/SubIFD0"
+    }
+    assert {fixture["ifd0_preview"] for fixture in report["fixtures"]} == {True}
     assert all(Path(fixture["dng"]).exists() for fixture in report["fixtures"])
     assert all(Path(fixture["validation_json"]).exists() for fixture in report["fixtures"])
     assert all("processor_results" in fixture for fixture in report["fixtures"])
@@ -1537,6 +1542,8 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     assert {entry["result"] for entry in adobe_entries} == {"manual-only"}
     summary = summary_path.read_text(encoding="utf-8")
     assert "| Fixture | Tool | Result | Evidence | Notes |" in summary
+    assert "layout=preview-subifd" in summary
+    assert "raw_ifd_location=IFD0/SubIFD0" in summary
     assert "adobe-dng-sdk" in summary
     assert "Auto install: `False`" in summary
 

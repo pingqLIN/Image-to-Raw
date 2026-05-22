@@ -208,6 +208,9 @@ def _generate_fixture(
         "sensor_effects": spec.sensor_effects,
         "input": str(input_path),
         "dng": str(dng_path),
+        "dng_layout": validation["dng_layout"],
+        "raw_ifd_location": validation["raw_ifd_location"],
+        "ifd0_preview": validation["ifd0_preview"],
         "validation_json": str(validation_path),
         "validation_ok": validation["ok"],
         "structural_validation": validation,
@@ -323,10 +326,17 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         ]
     )
     for entry in report["matrix"]:
+        fixture = _fixture_by_slug(report, str(entry["fixture"]))
+        notes = entry["notes"]
+        if fixture is not None and entry["tool"] == "image2dng validate":
+            notes = (
+                f"{notes}; layout={fixture['dng_layout']}; "
+                f"raw_ifd_location={fixture['raw_ifd_location']}"
+            )
         lines.append(
             "| "
             f"`{entry['fixture']}` | `{entry['tool']}` | `{entry['result']}` | "
-            f"`{entry['evidence']}` | {entry['notes']} |"
+            f"`{entry['evidence']}` | {notes} |"
         )
     lines.extend(
         [
@@ -344,6 +354,13 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     )
     lines.append("")
     return "\n".join(lines)
+
+
+def _fixture_by_slug(report: dict[str, Any], slug: str) -> dict[str, Any] | None:
+    for fixture in report["fixtures"]:
+        if fixture["slug"] == slug:
+            return fixture
+    return None
 
 
 if __name__ == "__main__":
