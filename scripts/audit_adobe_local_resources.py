@@ -341,7 +341,10 @@ def _display_path(path: Path) -> str:
 
 def _readiness(report: dict[str, Any]) -> dict[str, Any]:
     readiness = report["readiness"]
-    if not isinstance(readiness, dict):
+    if not isinstance(readiness, dict) or not all(
+        isinstance(key, str) and isinstance(value, (bool, str))
+        for key, value in readiness.items()
+    ):
         raise TypeError("report readiness must be an object")
     return readiness
 

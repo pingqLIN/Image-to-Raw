@@ -2443,6 +2443,16 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
         module._summary_markdown(report)
 
     report = module.build_report(adobe_dir)
+    report["readiness"] = {"dng_sdk_archive": []}
+    with pytest.raises(TypeError, match="report readiness must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["readiness"] = {False: True}
+    with pytest.raises(TypeError, match="report readiness must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
     report["missing_required_kinds"] = ["dng-sdk-archive", 7]
     with pytest.raises(
         TypeError,
