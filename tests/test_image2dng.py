@@ -3768,6 +3768,19 @@ def test_development_baseline_validation_artifact_rejects_failed_json(tmp_path):
         module._validation_artifact_record("linearraw_validation", validation_path)
 
 
+def test_development_baseline_validation_artifact_rejects_malformed_metadata(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    validation_path = tmp_path / "sample-validation.json"
+
+    validation_path.write_text(json.dumps({"ok": "yes", "errors": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="validation JSON ok must be a boolean"):
+        module._validation_artifact_record("linearraw_validation", validation_path)
+
+    validation_path.write_text(json.dumps({"ok": True, "errors": "none"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="validation JSON errors must be a list"):
+        module._validation_artifact_record("linearraw_validation", validation_path)
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"
