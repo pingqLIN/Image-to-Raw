@@ -279,19 +279,19 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     for key in sorted(readiness):
         lines.append(f"- `{key}`: `{str(readiness[key]).lower()}`")
     lines.extend(["", "## Missing Required Kinds", ""])
-    missing = report["missing_required_kinds"]
+    missing = _missing_required_kinds(report)
     if missing:
         lines.extend(f"- `{kind}`" for kind in missing)
     else:
         lines.append("- none")
     lines.extend(["", "## Blocking Findings", ""])
-    blocking_findings = report["blocking_findings"]
+    blocking_findings = _blocking_findings_record(report)
     if blocking_findings:
         lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Resources", ""])
-    for resource in report["resources"]:
+    for resource in _resources(report):
         lines.append(
             f"- `{resource['name']}`: `{resource['kind']}`, "
             f"{resource['size_bytes']} bytes, `{resource['sha256']}`"
@@ -323,6 +323,27 @@ def _policy(report: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(policy, dict):
         raise TypeError("report policy must be an object")
     return policy
+
+
+def _missing_required_kinds(report: dict[str, Any]) -> list[str]:
+    missing = report["missing_required_kinds"]
+    if not isinstance(missing, list) or not all(isinstance(kind, str) for kind in missing):
+        raise TypeError("report missing_required_kinds must be a string list")
+    return missing
+
+
+def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
+    findings = report["blocking_findings"]
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("report blocking_findings must be a string list")
+    return findings
+
+
+def _resources(report: dict[str, Any]) -> list[dict[str, Any]]:
+    resources = report["resources"]
+    if not isinstance(resources, list) or not all(isinstance(item, dict) for item in resources):
+        raise TypeError("report resources must be an object list")
+    return resources
 
 
 def _output_dir_is_allowed(output_dir: Path) -> bool:

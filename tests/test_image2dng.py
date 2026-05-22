@@ -2195,6 +2195,30 @@ def test_adobe_local_resource_audit_reports_missing_required_resources(tmp_path)
     ]
 
 
+def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    report = module.build_report(adobe_dir)
+
+    report["missing_required_kinds"] = ["dng-sdk-archive", 7]
+    with pytest.raises(
+        TypeError,
+        match="report missing_required_kinds must be a string list",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["blocking_findings"] = "missing"
+    with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"] = ["not-a-resource"]
+    with pytest.raises(TypeError, match="report resources must be an object list"):
+        module._summary_markdown(report)
+
+
 def test_adobe_local_resource_audit_recognizes_spaced_converter_name(tmp_path):
     module = _load_script_module("audit_adobe_local_resources")
     adobe_dir = tmp_path / "Adobe"
