@@ -106,7 +106,18 @@ def _run_step(name: str, command: list[str], cwd: Path) -> dict[str, object]:
 
 
 def _run_wheel_smoke_step(*, output_dir: Path, repo_root: Path) -> dict[str, object]:
-    wheel = _latest_wheel(repo_root)
+    try:
+        wheel = _latest_wheel(repo_root)
+    except FileNotFoundError as exc:
+        return {
+            "name": "wheel-install-smoke",
+            "command": [],
+            "exit_code": 1,
+            "duration_seconds": 0.0,
+            "status": "failed",
+            "stdout_tail": [],
+            "stderr_tail": [str(exc)],
+        }
     venv = output_dir / "wheel-smoke-venv"
     if venv.exists():
         shutil.rmtree(venv)

@@ -3466,6 +3466,22 @@ def test_development_baseline_wheel_smoke_uses_built_wheel(tmp_path, monkeypatch
     assert str(wheel) in calls[1]
 
 
+def test_development_baseline_wheel_smoke_reports_missing_wheel(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    (repo_root / "dist").mkdir(parents=True)
+
+    step = module._run_wheel_smoke_step(
+        output_dir=tmp_path / "baseline-output",
+        repo_root=repo_root,
+    )
+
+    assert step["name"] == "wheel-install-smoke"
+    assert step["status"] == "failed"
+    assert step["exit_code"] == 1
+    assert step["stderr_tail"] == ["no built image2dng wheel found under dist/"]
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"
