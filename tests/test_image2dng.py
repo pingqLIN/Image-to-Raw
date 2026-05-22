@@ -2195,6 +2195,19 @@ def test_adobe_dng_converter_verifier_dry_run_fails_invalid_source(tmp_path, mon
     assert report["errors"] == ["source image2dng contract validation failed"]
 
 
+def test_adobe_dng_converter_verifier_rejects_malformed_validation_ok():
+    module = _load_script_module("verify_adobe_dng_converter")
+
+    with pytest.raises(TypeError, match="source contract validation ok must be a boolean"):
+        module._report_ok({"ok": "yes"}, "source contract validation")
+
+    with pytest.raises(
+        TypeError,
+        match="Adobe-converted artifact inspection ok must be a boolean",
+    ):
+        module._report_ok({"ok": None}, "Adobe-converted artifact inspection")
+
+
 def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypatch):
     module = _load_script_module("verify_adobe_dng_converter")
     fake_converter = tmp_path / "Adobe DNG Converter.exe"

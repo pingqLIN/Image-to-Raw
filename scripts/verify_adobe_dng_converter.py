@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     moved_existing_converted_dng: str | None = None
     errors: list[str] = []
 
-    if not source_validation["ok"]:
+    if not _report_ok(source_validation, "source contract validation"):
         errors.append("source image2dng contract validation failed")
 
     if args.dry_run:
@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
             converted_dng,
             run_smoke=False,
         ).to_dict()
-        if not converted_inspection["ok"]:
+        if not _report_ok(converted_inspection, "Adobe-converted artifact inspection"):
             errors.append("Adobe-converted artifact inspection failed")
         status = "passed" if not errors else "failed"
 
@@ -179,6 +179,13 @@ def _resolve_converter(explicit: Path | None) -> tuple[str | None, str | None]:
             return str(explicit.resolve()), "explicit"
         return None, "explicit-missing"
     return resolve_processor_executable(ADOBE_DNG_CONVERTER_TOOL)
+
+
+def _report_ok(report: dict[str, Any], label: str) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError(f"{label} ok must be a boolean")
+    return ok
 
 
 def _fixture_image(size: int = 64) -> np.ndarray:
