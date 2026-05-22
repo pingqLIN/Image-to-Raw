@@ -111,7 +111,7 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 
 預設 `semantic_to_raw_status` 為 `preserved-not-applied`，表示 sidecar 已保存並驗證，但未參與 raw buffer 生成。
 
-若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic `region-exposure-mask-v1` prototype。這個 prototype 會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation，並在 manifest 中記錄 `semantic_reaction` summary。它只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。它不是完整物理 sensor model，也不宣稱光譜或相機模擬正確性。
+若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic `semantic-reaction-chain-v1`。目前第一個 child helper 是 `region-exposure-mask-v1`：它會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation，並在 manifest 中記錄 `semantic_reaction` summary。reaction chain 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。它不是完整物理 sensor model，也不宣稱光譜或相機模擬正確性。
 
 `highlight-clipping-policy-v1` 會把 `sensor_response_hints.clipping_policy` 中的 `preserve-highlights` / `soft-rolloff` 轉成 deterministic highlight shoulder mapping。當 `apply_semantic_reaction: true` 時，pipeline 會在 `region-exposure-mask-v1` 後接著套用此 helper；若兩者都有實際修改，manifest 會以 `semantic-reaction-chain-v1` 記錄 composition。這仍只是 deterministic raw value mapping，避免把 highlight policy 誤說成 camera tone curve、ISO response，或真實 sensor highlight recovery。
 
