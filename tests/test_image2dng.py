@@ -2831,6 +2831,48 @@ def test_verify_adobe_validation_stack_reports_missing_child_report(tmp_path):
     )
 
 
+def test_verify_adobe_validation_stack_rejects_external_project_fixture_paths(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    batch_dir = repo_root / "demo-output" / "adobe-validation-stack" / "project-fixtures"
+    manifest_dir = batch_dir / "manifests"
+    external_dir = tmp_path / "external-fixtures"
+    manifest_dir.mkdir(parents=True)
+    external_dir.mkdir()
+    external_dng = external_dir / "outside.dng"
+    external_dng.write_bytes(b"outside dng")
+    manifest = {
+        "schema": "image2dng.raw_native_node_batch.v1",
+        "scenes": [
+            {
+                "slug": "sample",
+                "outputs": {
+                    "linearraw_dng": str(external_dng),
+                    "cfa_dng": str(batch_dir / "raw" / "sample-cfa.dng"),
+                },
+                "validations": {"linearraw": {"ok": True}, "cfa": {"ok": True}},
+            }
+        ],
+    }
+    sample_index = {
+        "schema": "image2dng.raw_native_sample_index.v1",
+        "scene_count": 1,
+        "all_validations_ok": True,
+    }
+    (manifest_dir / "raw-native-node-batch.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    (manifest_dir / "sample-index.json").write_text(
+        json.dumps(sample_index),
+        encoding="utf-8",
+    )
+
+    _inspection, errors = module._inspect_project_dng_fixtures(batch_dir, repo_root)
+
+    assert any("project fixture DNG outside batch dir" in error for error in errors)
+
+
 def test_verify_adobe_validation_stack_refuses_unsafe_output_dirs(tmp_path):
     module = _load_script_module("verify_adobe_validation_stack")
     repo_root = tmp_path / "repo"

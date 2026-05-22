@@ -508,10 +508,16 @@ def _inspect_project_dng_fixtures(
                 errors.append(f"project fixture output missing: {key}")
                 continue
             dng_path = _resolve_from_repo(Path(value), repo_root)
-            if not dng_path.exists():
+            resolved_dng_path = dng_path.resolve()
+            if not _is_path_within(resolved_dng_path, batch_dir):
+                errors.append(
+                    f"project fixture DNG outside batch dir: "
+                    f"{_display_path(resolved_dng_path, repo_root)}"
+                )
+            elif not resolved_dng_path.exists():
                 errors.append(f"project fixture DNG missing: {_display_path(dng_path, repo_root)}")
             else:
-                dng_paths.append(dng_path.resolve())
+                dng_paths.append(resolved_dng_path)
         if not isinstance(validations, dict):
             errors.append("project fixture scene validations missing")
             continue
