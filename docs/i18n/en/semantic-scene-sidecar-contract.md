@@ -113,6 +113,8 @@ By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sid
 
 When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable the deterministic `region-exposure-mask-v1` prototype. This prototype reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, applies EV modulation to 16-bit scene-linear RGB values inside the mask, and records a `semantic_reaction` summary in the manifests. It only supports linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. It is not a full physical sensor model and does not claim spectral or camera-simulation accuracy.
 
+`highlight-clipping-policy-v1` is a standalone helper for turning `preserve-highlights` / `soft-rolloff` values in `sensor_response_hints.clipping_policy` into deterministic highlight shoulder mapping. It is not applied automatically by the batch pipeline yet; its purpose is to lock down a small semantic-to-raw-value contract without claiming a camera tone curve, ISO response, or real sensor highlight recovery.
+
 For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input.
 
 Current reaction model matrix:
@@ -120,7 +122,7 @@ Current reaction model matrix:
 | Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` implemented | Yes | Yes | Finite EV, mask-bound, linear-light only. |
-| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` candidate | No | Yes | Future deterministic value mapping only; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
+| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented helper | Yes | Yes | Deterministic shoulder mapping only; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
 | `regions[].response_hints.noise_priority` | Metadata/research | No | Deferred | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
 | `sensor_response_hints.target_middle_gray` | Research | No | Deferred | Requires calibration policy before it can affect values. |
 | `sensor_response_hints.target_white_balance_kelvin` | Metadata/research | No | Deferred | Requires a color pipeline and illuminant policy before it can affect values. |

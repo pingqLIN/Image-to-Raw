@@ -51,6 +51,7 @@ from image2dng.pipeline import (
 from image2dng.semantic_reaction import (
     HIGHLIGHT_CLIPPING_REACTION_MODEL,
     REGION_EXPOSURE_REACTION_MODEL,
+    apply_highlight_clipping_policy,
     apply_region_exposure_reaction,
     load_semantic_payload,
     semantic_reaction_model_registry,
@@ -729,17 +730,20 @@ def test_semantic_scene_validator_rejects_non_string_semantic_physics_enums(tmp_
     )
 
 
-def test_semantic_reaction_model_registry_separates_implemented_and_candidate_models():
+def test_semantic_reaction_model_registry_reports_model_boundaries():
     registry = semantic_reaction_model_registry()
 
     assert registry[REGION_EXPOSURE_REACTION_MODEL]["status"] == "implemented"
     assert registry[REGION_EXPOSURE_REACTION_MODEL]["current_raw_value_effect"] is True
     assert registry[REGION_EXPOSURE_REACTION_MODEL]["intended_raw_value_effect"] is True
     assert "linear-light only" in registry[REGION_EXPOSURE_REACTION_MODEL]["boundary"]
-    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["status"] == "candidate"
-    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["status"] == "implemented"
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["current_raw_value_effect"] is True
     assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["intended_raw_value_effect"] is True
-    assert "not implemented" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
+    assert (
+        "deterministic shoulder mapping"
+        in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
+    )
     assert "camera tone-curve" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
 
 
@@ -824,6 +828,58 @@ def test_semantic_reaction_rejects_non_finite_exposure_bias(tmp_path):
         assert "semantic reaction exposure_bias_ev must be finite" in str(exc)
     else:
         raise AssertionError("expected non-finite exposure bias to fail")
+
+
+def test_highlight_clipping_policy_applies_global_shoulder(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=3, height=2)
+    image = np.array(
+        [
+            [[1000, 59000, 65535], [2000, 3000, 4000], [62000, 63000, 64000]],
+            [[100, 200, 300], [65535, 65535, 65535], [58000, 59000, 60000]],
+        ],
+        dtype=np.uint16,
+    )
+
+    reacted, result = apply_highlight_clipping_policy(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+    )
+
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.model == "highlight-clipping-policy-v1"
+    assert result.affected_pixels == 4
+    assert result.regions == [
+        {
+            "region_id": "global-highlight-shoulder",
+            "clipping_policy": "preserve-highlights",
+            "shoulder_start": 0.9,
+            "compression": 0.5,
+            "affected_pixels": 4,
+            "changed_channels": 10,
+        }
+    ]
+    assert np.array_equal(reacted[0, 1], image[0, 1])
+    assert reacted[0, 0, 1] < image[0, 0, 1]
+    assert reacted[0, 0, 2] < image[0, 0, 2]
+    assert reacted[1, 1, 0] == reacted[1, 1, 1] == reacted[1, 1, 2]
+
+
+def test_highlight_clipping_policy_reports_noop_for_clip_policy(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=2, height=2)
+    payload = load_semantic_payload(semantic_path)
+    payload["sensor_response_hints"]["clipping_policy"] = "clip"
+    image = np.full((2, 2, 3), 65535, dtype=np.uint16)
+
+    reacted, result = apply_highlight_clipping_policy(
+        image,
+        semantic_payload=payload,
+    )
+
+    assert result.applied is False
+    assert result.status == "no-op"
+    assert result.reason == "no highlight clipping policy requiring value mapping"
+    assert np.array_equal(reacted, image)
 
 
 def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):

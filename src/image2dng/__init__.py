@@ -27,6 +27,7 @@ from image2dng.semantic_reaction import (
     SUPPORTED_REACTION_INPUT_SPACES,
     SemanticReactionModelInfo,
     SemanticReactionResult,
+    apply_highlight_clipping_policy,
     apply_region_exposure_reaction,
     semantic_reaction_model_registry,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "SemanticSceneValidationResult",
     "UnsupportedInputError",
     "ValidationError",
+    "apply_highlight_clipping_policy",
     "apply_region_exposure_reaction",
     "convert",
     "inspect_adobe_converted_dng",
