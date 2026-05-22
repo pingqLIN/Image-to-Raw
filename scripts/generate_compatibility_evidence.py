@@ -109,12 +109,12 @@ def main(argv: list[str] | None = None) -> int:
             processor_dir=processor_dir,
             timeout_seconds=args.timeout_seconds,
         )
-        report["fixtures"].append(fixture)
-        report["matrix"].append(_structural_matrix_entry(fixture))
-        report["matrix"].extend(_processor_matrix_entries(fixture))
+        _fixtures(report).append(fixture)
+        _matrix(report).append(_structural_matrix_entry(fixture))
+        _matrix(report).extend(_processor_matrix_entries(fixture))
 
     _append_failures(report)
-    report["ok"] = not report["errors"]
+    report["ok"] = not _errors(report)
 
     report_path = root / "compatibility-report.json"
     summary_path = root / "compatibility-summary.md"
@@ -290,12 +290,12 @@ def _processor_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, object]
 
 
 def _append_failures(report: dict[str, Any]) -> None:
-    for fixture in report["fixtures"]:
+    for fixture in _fixtures(report):
         if not fixture["validation_ok"]:
-            report["errors"].append(f"{fixture['slug']} structural validation failed")
-    for entry in report["matrix"]:
+            _errors(report).append(f"{fixture['slug']} structural validation failed")
+    for entry in _matrix(report):
         if entry["result"] == "failed":
-            report["errors"].append(f"{entry['fixture']} failed {entry['tool']}: {entry['notes']}")
+            _errors(report).append(f"{entry['fixture']} failed {entry['tool']}: {entry['notes']}")
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
@@ -326,7 +326,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             "| --- | --- | --- | --- | --- |",
         ]
     )
-    for entry in report["matrix"]:
+    for entry in _matrix(report):
         fixture = _fixture_by_slug(report, str(entry["fixture"]))
         notes = entry["notes"]
         if fixture is not None and entry["tool"] == "image2dng validate":
@@ -358,10 +358,35 @@ def _summary_markdown(report: dict[str, Any]) -> str:
 
 
 def _fixture_by_slug(report: dict[str, Any], slug: str) -> dict[str, Any] | None:
-    for fixture in report["fixtures"]:
+    for fixture in _fixtures(report):
         if fixture["slug"] == slug:
             return fixture
     return None
+
+
+def _fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
+    fixtures = report["fixtures"]
+    if not isinstance(fixtures, list):
+        raise TypeError("report fixtures must be a list")
+    if not all(isinstance(fixture, dict) for fixture in fixtures):
+        raise TypeError("report fixtures must contain objects")
+    return fixtures
+
+
+def _matrix(report: dict[str, Any]) -> list[dict[str, Any]]:
+    matrix = report["matrix"]
+    if not isinstance(matrix, list):
+        raise TypeError("report matrix must be a list")
+    if not all(isinstance(entry, dict) for entry in matrix):
+        raise TypeError("report matrix must contain objects")
+    return matrix
+
+
+def _errors(report: dict[str, Any]) -> list[Any]:
+    errors = report["errors"]
+    if not isinstance(errors, list):
+        raise TypeError("report errors must be a list")
+    return errors
 
 
 if __name__ == "__main__":
