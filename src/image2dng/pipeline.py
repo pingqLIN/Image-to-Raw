@@ -695,31 +695,28 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
             }
         )
     if scene.semantic_reaction is not None:
-        sample["semantic_reaction"] = {
-            "model": scene.semantic_reaction["model"],
-            "applied": scene.semantic_reaction["applied"],
-            "region_count": scene.semantic_reaction["region_count"],
-            "affected_pixels": scene.semantic_reaction["affected_pixels"],
-            **(
-                {
-                    "affected_pixel_count_semantics": scene.semantic_reaction[
-                        "affected_pixel_count_semantics"
-                    ]
-                }
-                if "affected_pixel_count_semantics" in scene.semantic_reaction
-                else {}
-            ),
-            **(
-                {"reason": scene.semantic_reaction["reason"]}
-                if "reason" in scene.semantic_reaction
-                else {}
-            ),
-        }
+        sample["semantic_reaction"] = _semantic_reaction_summary(scene.semantic_reaction)
     if scene.producer_metadata is not None:
         sample["producer_metadata"] = scene.producer_metadata
     if scene.producer_metadata_artifacts is not None:
         sample["producer_metadata_artifacts"] = scene.producer_metadata_artifacts
     return sample
+
+
+def _semantic_reaction_summary(reaction: dict[str, Any]) -> dict[str, Any]:
+    summary = {
+        "model": reaction["model"],
+        "applied": reaction["applied"],
+        "region_count": reaction["region_count"],
+        "affected_pixels": reaction["affected_pixels"],
+    }
+    if "affected_pixel_count_semantics" in reaction:
+        summary["affected_pixel_count_semantics"] = reaction[
+            "affected_pixel_count_semantics"
+        ]
+    if "reason" in reaction:
+        summary["reason"] = reaction["reason"]
+    return summary
 
 
 def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
