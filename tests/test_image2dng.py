@@ -1802,6 +1802,12 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     assert {entry["result"] for entry in adobe_entries} == {"manual-only"}
     summary = summary_path.read_text(encoding="utf-8")
     assert "| Fixture | Tool | Result | Evidence | Notes |" in summary
+    assert (
+        "| Fixture | DNG bytes | DNG SHA-256 | "
+        "Validation JSON bytes | Validation JSON SHA-256 |"
+    ) in summary
+    assert first_fixture["dng_sha256"] in summary
+    assert first_fixture["validation_json_sha256"] in summary
     assert "layout=preview-subifd" in summary
     assert "raw_ifd_location=IFD0/SubIFD0" in summary
     assert "adobe-dng-sdk" in summary

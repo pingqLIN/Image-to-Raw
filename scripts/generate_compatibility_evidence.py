@@ -349,6 +349,22 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Fixture Integrity",
+            "",
+            "| Fixture | DNG bytes | DNG SHA-256 | "
+            "Validation JSON bytes | Validation JSON SHA-256 |",
+            "| --- | ---: | --- | ---: | --- |",
+        ]
+    )
+    for fixture in _fixtures(report):
+        lines.append(
+            "| "
+            f"`{fixture['slug']}` | `{fixture['dng_bytes']}` | `{fixture['dng_sha256']}` | "
+            f"`{fixture['validation_json_bytes']}` | `{fixture['validation_json_sha256']}` |"
+        )
+    lines.extend(
+        [
+            "",
             "## Install Policy",
             "",
             f"- Auto install: `{report['install_policy']['auto_install']}`",
