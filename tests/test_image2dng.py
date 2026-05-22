@@ -3207,6 +3207,16 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
     assert "Discovery" in runbook
     assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
     assert "Auto install is `False`" in prompt
+    assert any(
+        question
+        == (
+            "Should Adobe DNG SDK remain manual-only without a reproducible "
+            "local SDK validation path?"
+        )
+        for question in report["review_questions"]
+    )
+    assert "until a reproducible local SDK path exists" not in json.dumps(report)
+    assert "until a reproducible local SDK path exists" not in prompt
 
 
 def test_raw_processor_setup_audit_records_search_version_hints(tmp_path, monkeypatch):

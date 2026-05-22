@@ -159,7 +159,10 @@ def _build_report(
                 "Should dcraw remain legacy-optional because maintained Windows packages "
                 "may be harder to source?"
             ),
-            "Should Adobe DNG SDK remain manual-only until a reproducible local SDK path exists?",
+            (
+                "Should Adobe DNG SDK remain manual-only without a reproducible "
+                "local SDK validation path?"
+            ),
         ],
         "rerun_commands": [
             (
