@@ -4174,6 +4174,24 @@ def test_raw_processor_setup_audit_rejects_malformed_report_accessors(tmp_path):
         timeout_seconds=1,
         skip_package_search=True,
     )
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["generated_at"] = []
+    with pytest.raises(TypeError, match="report generated_at must be a string"):
+        module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
     report["tools"] = []
     with pytest.raises(TypeError, match="report tools must be an object"):
         module._runbook_markdown(report)
@@ -4186,6 +4204,15 @@ def test_raw_processor_setup_audit_rejects_malformed_report_accessors(tmp_path):
     report["policy"] = []
     with pytest.raises(TypeError, match="report policy must be an object"):
         module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["policy"]["auto_install"] = "false"
+    with pytest.raises(TypeError, match="report policy auto_install must be a boolean"):
+        module._external_review_prompt(report)
 
     report = module._build_report(
         output_dir=tmp_path,

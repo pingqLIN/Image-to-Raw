@@ -412,7 +412,7 @@ def _external_review_prompt(report: dict[str, Any]) -> str:
             "",
             "Important constraints:",
             "",
-            f"- Auto install is `{_policy(report)['auto_install']}`.",
+            f"- Auto install is `{_policy_auto_install(_policy(report))}`.",
             "- Missing tools are allowed to remain `skipped`.",
             "- Available tools that fail should remain hard failures in the compatibility report.",
             "- Binary demo outputs stay local-only under `demo-output/`.",
