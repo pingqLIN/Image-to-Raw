@@ -629,7 +629,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         "## Summary",
         "",
     ]
-    for key, value in report["summary"].items():
+    for key, value in _summary(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.extend(["", "## Blocking Findings", ""])
     if report["blocking_findings"]:
@@ -637,7 +637,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     else:
         lines.append("- none")
     lines.extend(["", "## Steps", ""])
-    for step in report["steps"]:
+    for step in _steps(report):
         lines.append(f"- `{step['name']}`: `{step['status']}`")
         lines.append(f"  - Exit code: `{step['exit_code']}`")
         child_report_path = step.get("child_report_path")
@@ -648,6 +648,22 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             lines.extend(f"    - {finding}" for finding in step["blocking_findings"])
     lines.append("")
     return "\n".join(lines)
+
+
+def _summary(report: dict[str, Any]) -> dict[str, Any]:
+    summary = report["summary"]
+    if not isinstance(summary, dict):
+        raise TypeError("report summary must be an object")
+    return summary
+
+
+def _steps(report: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = report["steps"]
+    if not isinstance(steps, list):
+        raise TypeError("report steps must be a list")
+    if not all(isinstance(step, dict) for step in steps):
+        raise TypeError("report steps must contain objects")
+    return steps
 
 
 def _resolve_from_repo(path: Path, repo_root: Path) -> Path:
