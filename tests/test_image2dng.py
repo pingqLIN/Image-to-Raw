@@ -3631,6 +3631,32 @@ def test_development_baseline_wheel_smoke_reports_missing_wheel(tmp_path):
     assert step["stderr_tail"] == ["no built image2dng wheel found under dist/"]
 
 
+def test_development_baseline_validation_artifact_reads_json(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    validation_path = tmp_path / "sample-validation.json"
+    validation_path.write_text(
+        json.dumps({"ok": True, "errors": [], "checks": []}),
+        encoding="utf-8",
+    )
+
+    record = module._validation_artifact_record("linearraw_validation", validation_path)
+
+    assert record["validation_ok"] is True
+    assert record["validation_error_count"] == 0
+
+
+def test_development_baseline_validation_artifact_rejects_failed_json(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    validation_path = tmp_path / "sample-validation.json"
+    validation_path.write_text(
+        json.dumps({"ok": False, "errors": ["synthetic failure"]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="validation JSON is not ok"):
+        module._validation_artifact_record("linearraw_validation", validation_path)
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"

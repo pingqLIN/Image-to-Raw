@@ -281,8 +281,11 @@ def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
     ]
     artifact_reports.extend(
         [
-            _artifact_record("linearraw_validation", validation_dir / f"{slug}-linearraw.json"),
-            _artifact_record("cfa_validation", validation_dir / f"{slug}-cfa.json"),
+            _validation_artifact_record(
+                "linearraw_validation",
+                validation_dir / f"{slug}-linearraw.json",
+            ),
+            _validation_artifact_record("cfa_validation", validation_dir / f"{slug}-cfa.json"),
         ]
     )
     for key in ("linearraw_jpeg", "cfa_jpeg"):
@@ -312,6 +315,24 @@ def _artifact_record(key: str, path: Path) -> dict[str, object]:
         "path": str(path),
         "bytes": path.stat().st_size,
     }
+
+
+def _validation_artifact_record(key: str, path: Path) -> dict[str, object]:
+    record = _artifact_record(key, path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{key}: validation JSON must be an object")
+    ok = payload.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError(f"{key}: validation JSON ok must be a boolean")
+    if ok is not True:
+        raise ValueError(f"{key}: validation JSON is not ok")
+    errors = payload.get("errors")
+    if not isinstance(errors, list):
+        raise ValueError(f"{key}: validation JSON errors must be a list")
+    record["validation_ok"] = ok
+    record["validation_error_count"] = len(errors)
+    return record
 
 
 def _inspect_jpeg(
