@@ -28,7 +28,7 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 - `validation/*.json`：每個 DNG 的 validation report。
 - `processor-output/*`：RAW processor export/open smoke 輸出，僅在工具存在且成功時產生。
 - `compatibility-report.json`：machine-readable evidence report。
-- `compatibility-summary.md`：人工可讀 evidence matrix。
+- `compatibility-summary.md`：人工可讀 evidence matrix 與 fixture integrity 表，列出每個 fixture 的 DNG / validation JSON byte count 與 SHA-256。
 
 `demo-output/` 是本機輸出，不應提交 binary fixtures。
 
@@ -129,4 +129,5 @@ image2dng.compatibility_evidence.v2
 - `install_policy`：不自動安裝、missing tool policy、available tool failure policy。
 - `fixtures`：每個 fixture 的 input、DNG、DNG byte count、DNG SHA-256、DNG layout、raw IFD location、IFD0 preview flag、validation JSON、validation JSON byte count、validation JSON SHA-256、validation status、processor result records。
 - `matrix`：fixture/tool/result/evidence/notes/exit code/duration/output artifacts/missing output artifacts evidence matrix。
+- `compatibility-summary.md`：除了 tool evidence matrix，也呈現 fixture DNG 與 validation JSON 的 byte count / SHA-256，方便人工審查時不用先打開 JSON report 才能核對 artifact integrity。
 - `ok` / `errors`：整體 gate 結果。

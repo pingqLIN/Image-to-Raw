@@ -19,7 +19,7 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 The evidence generator emits deterministic local fixtures and two reports:
 
 - `compatibility-report.json`: machine-readable report using `image2dng.compatibility_evidence.v2`.
-- `compatibility-summary.md`: human-readable evidence matrix.
+- `compatibility-summary.md`: human-readable evidence matrix and fixture integrity table with DNG / validation JSON byte counts and SHA-256 checksums.
 
 The generated fixtures live under `demo-output/compatibility-evidence/` and should not be committed as binary artifacts.
 
@@ -130,5 +130,7 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 - install policy: no automatic installation, missing tool policy, and available tool failure policy;
 - fixtures: input path, DNG path, DNG byte count, DNG SHA-256, DNG layout, raw IFD location, IFD0 preview flag, validation JSON path, validation JSON byte count, validation JSON SHA-256, structural validation status, and processor result records;
 - matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, output artifacts, and missing output artifacts.
+
+`compatibility-summary.md` mirrors the tool evidence matrix and includes a fixture integrity table for DNG and validation JSON byte counts and SHA-256 checksums, so reviewers can check artifact freshness without opening the JSON report first.
 
 Adobe DNG SDK remains `manual-only` without a reproducible local SDK validation path.

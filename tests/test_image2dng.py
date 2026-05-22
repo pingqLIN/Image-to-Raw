@@ -197,9 +197,14 @@ def test_compatibility_docs_keep_setup_audit_safety_boundary():
         "and should not be committed as binary artifacts."
         in english
     )
+    assert (
+        "fixture integrity table with DNG / validation JSON byte counts and SHA-256"
+        in english
+    )
     assert "不會安裝、不會升級任何 RAW processor。" in zh_tw
     assert "若使用者後續批准安裝其中一個工具" in zh_tw
     assert "`demo-output/` 是本機輸出，不應提交 binary fixtures。" in zh_tw
+    assert "fixture integrity 表" in zh_tw
 
 
 def test_repo_agent_instructions_keep_zh_tw_source_pair():
