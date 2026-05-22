@@ -585,7 +585,7 @@ def _tool_command(tool: dict[str, Any]) -> list[str]:
 
 def _tool_exit_code(tool: dict[str, Any]) -> int | None:
     exit_code = tool["exit_code"]
-    if isinstance(exit_code, int) or exit_code is None:
+    if (isinstance(exit_code, int) and not isinstance(exit_code, bool)) or exit_code is None:
         return exit_code
     raise TypeError("tool exit_code must be an integer or null")
 

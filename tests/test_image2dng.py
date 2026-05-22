@@ -3146,6 +3146,21 @@ def test_real_raw_sample_audit_rejects_malformed_tiff_metadata_shape():
 def test_real_raw_sample_audit_rejects_malformed_tool_summary():
     module = _load_script_module("audit_real_raw_sample")
 
+    with pytest.raises(TypeError, match="tool exit_code must be an integer or null"):
+        module._tool_summary(
+            {
+                "available": True,
+                "discovery": None,
+                "command": [],
+                "exit_code": False,
+                "duration_seconds": 0.0,
+                "result": "skipped",
+                "stdout_tail": [],
+                "stderr_tail": [],
+                "notes": "tool not found",
+            }
+        )
+
     with pytest.raises(TypeError, match="tool duration_seconds must be numeric"):
         module._tool_summary(
             {
