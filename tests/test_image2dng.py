@@ -3407,6 +3407,36 @@ def test_demo_review_bundle_rejects_artifact_path_alias(tmp_path):
         module._validate_bundle_report(output_dir, report)
 
 
+def test_demo_review_bundle_requires_source_reports_to_be_artifacts(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    extra_path = output_dir / "artifacts" / "reports" / "extra.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("registered report", encoding="utf-8")
+    extra_path.write_text("unregistered report", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {
+            "development_baseline_report": "artifacts/reports/report.txt",
+            "compatibility_report": "artifacts/reports/extra.txt",
+        },
+    }
+
+    with pytest.raises(ValueError, match="source report is not a registered artifact"):
+        module._validate_bundle_report(output_dir, report)
+
+    report["source_reports"]["compatibility_report"] = "artifacts/reports/report.txt"
+    module._validate_bundle_report(output_dir, report)
+
+
 def test_demo_review_bundle_skip_baseline_help_is_gate_oriented(capsys):
     module = _load_script_module("generate_demo_review_bundle")
 

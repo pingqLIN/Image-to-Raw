@@ -594,11 +594,13 @@ def _append_existing_artifact(
 
 
 def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
+    artifact_paths = set()
     for artifact in _artifacts(report):
         artifact_path = _validate_relative_existing_path(
             output_dir,
             _string(artifact, "bundle_path"),
         )
+        artifact_paths.add(artifact["bundle_path"])
         if artifact.get("path") != artifact["bundle_path"]:
             raise ValueError("artifact path must match bundle_path")
         if artifact.get("bytes") != artifact_path.stat().st_size:
@@ -606,7 +608,10 @@ def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
         if artifact.get("sha256") != _sha256(artifact_path):
             raise ValueError(f"artifact sha256 mismatch: {artifact['bundle_path']}")
     for value in _source_reports(report).values():
-        _validate_relative_existing_path(output_dir, str(value))
+        source_path = str(value)
+        _validate_relative_existing_path(output_dir, source_path)
+        if source_path not in artifact_paths:
+            raise ValueError(f"source report is not a registered artifact: {source_path}")
 
 
 def _validate_relative_existing_path(output_dir: Path, value: str) -> Path:
