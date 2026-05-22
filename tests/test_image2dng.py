@@ -2937,9 +2937,105 @@ def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
         allow_empty=False,
         runner=runner,
     )
+    report["error_markers"] = [{"fixture": [], "status": "failed", "markers": ["error"]}]
+    with pytest.raises(TypeError, match="error marker fixture must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = [{"fixture": "sample.dng", "status": False, "markers": ["error"]}]
+    with pytest.raises(TypeError, match="error marker status must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = [{"fixture": "sample.dng", "status": "failed", "markers": [7]}]
+    with pytest.raises(TypeError, match="error marker markers must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
     report["results"] = ["not-a-result-record"]
     with pytest.raises(TypeError, match="report results must be an object list"):
         module._summary_markdown(report)
+
+    result_report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=True,
+        runner=runner,
+    )
+    result_report["results"] = [
+        {
+            "fixture": {"repo_relative": "sample.dng"},
+            "status": "failed",
+            "exit_code": 1,
+            "timeout": False,
+            "duration_seconds": 0.1,
+        }
+    ]
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"fixture": []}]
+    }
+    with pytest.raises(TypeError, match="result fixture must be an object"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [
+            result_report["results"][0]
+            | {"fixture": {"repo_relative": False}}
+        ]
+    }
+    with pytest.raises(
+        TypeError,
+        match="result fixture repo_relative must be a string or null",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"status": []}]
+    }
+    with pytest.raises(TypeError, match="result status must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"exit_code": True}]
+    }
+    with pytest.raises(TypeError, match="result exit_code must be an integer or null"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"timeout": "false"}]
+    }
+    with pytest.raises(TypeError, match="result timeout must be a boolean"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"duration_seconds": "slow"}]
+    }
+    with pytest.raises(TypeError, match="result duration_seconds must be numeric"):
+        module._summary_markdown(malformed)
 
 
 def test_run_adobe_dng_sdk_validation_blocks_version_probe_timeout_with_version_text(

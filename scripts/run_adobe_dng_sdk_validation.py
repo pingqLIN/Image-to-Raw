@@ -479,18 +479,17 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     if error_markers:
         for record in error_markers:
             lines.append(
-                f"- `{record['fixture']}` ({record['status']}): "
-                f"{', '.join(record['markers'])}"
+                f"- `{_error_marker_fixture(record)}` ({_error_marker_status(record)}): "
+                f"{', '.join(_error_marker_markers(record))}"
             )
     else:
         lines.append("- none")
     lines.extend(["", "## Results", ""])
     for result in _result_records(report):
-        fixture = result["fixture"]["repo_relative"]
         lines.append(
-            f"- `{fixture}`: {result['status']} "
-            f"(exit={result['exit_code']}, timeout={result['timeout']}, "
-            f"{result['duration_seconds']}s)"
+            f"- `{_result_fixture_repo_relative(result)}`: {_result_status(result)} "
+            f"(exit={_result_exit_code(result)}, timeout={_result_timeout(result)}, "
+            f"{_result_duration_seconds(result)}s)"
         )
     lines.append("")
     return "\n".join(lines)
@@ -572,11 +571,72 @@ def _error_marker_records(report: dict[str, Any]) -> list[dict[str, Any]]:
     return records
 
 
+def _error_marker_fixture(record: dict[str, Any]) -> str:
+    fixture = record["fixture"]
+    if not isinstance(fixture, str):
+        raise TypeError("error marker fixture must be a string")
+    return fixture
+
+
+def _error_marker_status(record: dict[str, Any]) -> str:
+    status = record["status"]
+    if not isinstance(status, str):
+        raise TypeError("error marker status must be a string")
+    return status
+
+
+def _error_marker_markers(record: dict[str, Any]) -> list[str]:
+    markers = record["markers"]
+    if not isinstance(markers, list) or not all(isinstance(item, str) for item in markers):
+        raise TypeError("error marker markers must be a string list")
+    return markers
+
+
 def _result_records(report: dict[str, Any]) -> list[dict[str, Any]]:
     results = report["results"]
     if not isinstance(results, list) or not all(isinstance(item, dict) for item in results):
         raise TypeError("report results must be an object list")
     return results
+
+
+def _result_fixture_repo_relative(result: dict[str, Any]) -> str | None:
+    fixture = result["fixture"]
+    if not isinstance(fixture, dict):
+        raise TypeError("result fixture must be an object")
+    repo_relative = fixture["repo_relative"]
+    if isinstance(repo_relative, str) or repo_relative is None:
+        return repo_relative
+    raise TypeError("result fixture repo_relative must be a string or null")
+
+
+def _result_status(result: dict[str, Any]) -> str:
+    status = result["status"]
+    if not isinstance(status, str):
+        raise TypeError("result status must be a string")
+    return status
+
+
+def _result_exit_code(result: dict[str, Any]) -> int | None:
+    exit_code = result["exit_code"]
+    if isinstance(exit_code, bool):
+        raise TypeError("result exit_code must be an integer or null")
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("result exit_code must be an integer or null")
+
+
+def _result_timeout(result: dict[str, Any]) -> bool:
+    timeout = result["timeout"]
+    if not isinstance(timeout, bool):
+        raise TypeError("result timeout must be a boolean")
+    return timeout
+
+
+def _result_duration_seconds(result: dict[str, Any]) -> float | int:
+    duration = result["duration_seconds"]
+    if isinstance(duration, bool) or not isinstance(duration, int | float):
+        raise TypeError("result duration_seconds must be numeric")
+    return duration
 
 
 def _path_record(path: Path, repo_root: Path) -> dict[str, str | None]:
