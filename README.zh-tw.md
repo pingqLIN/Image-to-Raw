@@ -307,8 +307,8 @@ uv run ruff check
 
 - Sensor effects 是簡化 synthetic controls，不是物理相機模型。
 - Embedded preview 目前是 IFD layout experiment，不代表完整 Adobe 相容承諾。
-- 尚未支援 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
-- 相容性目前以結構驗證與 optional local smoke tools 為主，尚未納入 Adobe DNG SDK 自動驗證。
+- 目前不輸出 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
+- 相容性目前以結構驗證與 optional local smoke tools 為主；Adobe DNG SDK 維持 manual-only。
 
 設計說明見 [docs/design.md](docs/design.md)。
 目前 DNG tag contract 見 [docs/i18n/zh-TW/dng-tag-contract.md](docs/i18n/zh-TW/dng-tag-contract.md)。

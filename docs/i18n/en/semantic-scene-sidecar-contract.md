@@ -41,7 +41,7 @@ The default v1 goal is semantic preservation and validation. It lets the RAW-nat
 - `regions[].raw_statistics.mean_linear_rgb`, `p50_linear_rgb`, and `p95_linear_rgb`, when present, must be three finite non-negative numbers.
 - Unknown fields are tolerated and preserved so upstream producers can extend the sidecar.
 
-Missing `assets[].sha256` values produce warnings, not failures. This means the asset can be resolved, but the sidecar has not locked its integrity. When a hash is provided, the validator verifies it against the asset contents.
+Missing `assets[].sha256` values produce warnings, not failures. This means the asset can be resolved, but its integrity is not locked by the sidecar. When a hash is provided, the validator verifies it against the asset contents.
 
 ## Semantic-Physics Field Example
 

@@ -323,8 +323,8 @@ Known limitations:
 
 - Sensor effects are simple synthetic controls, not a physical camera model.
 - Embedded preview is currently an IFD layout experiment, not a full Adobe compatibility claim.
-- No EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
-- Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
+- The pipeline does not emit EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payloads.
+- Compatibility is validated structurally and with optional local smoke tools; Adobe DNG SDK remains manual-only.
 
 See [docs/design.md](docs/design.md) for the design notes.
 See [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md) for the current DNG tag contract.
