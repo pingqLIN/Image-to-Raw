@@ -139,7 +139,7 @@ uv run python scripts/verify_development_baseline.py --output-dir demo-output/de
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 ```
 
-這個流程會產生 deterministic DNG fixtures、validation JSON、`compatibility-report.json` 與 `compatibility-summary.md`。Phase 6 report schema 為 `image2dng.compatibility_evidence.v2`，會記錄 RAW processor command、exit code、stdout/stderr tail、輸出 artifact 與 dry-run install hints。缺少 optional RAW tools 時會記錄 `skipped`，不會造成失敗；已安裝工具若執行或輸出失敗會記錄 `failed`；Adobe DNG SDK 目前維持 manual-only。
+這個流程會產生 deterministic DNG fixtures、validation JSON、`compatibility-report.json` 與 `compatibility-summary.md`。Phase 6 report schema 為 `image2dng.compatibility_evidence.v2`，會記錄 RAW processor command、exit code、stdout/stderr tail、輸出 artifact 與 dry-run install hints。缺少 optional RAW tools 時會記錄 `skipped`，不會造成失敗；已安裝工具若執行或輸出失敗會記錄 `failed`；Adobe DNG SDK 目前維持 `manual-only`。
 
 Adobe DNG Converter regression 使用獨立本機腳本：
 
@@ -308,7 +308,7 @@ uv run ruff check
 - Sensor effects 是簡化 synthetic controls，不是物理相機模型。
 - Embedded preview 目前是 IFD layout experiment，不代表完整 Adobe 相容承諾。
 - 目前不輸出 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
-- 相容性目前以結構驗證與 optional local smoke tools 為主；Adobe DNG SDK 維持 manual-only。
+- 相容性目前以結構驗證與 optional local smoke tools 為主；Adobe DNG SDK 維持 `manual-only`。
 
 設計說明見 [docs/design.md](docs/design.md)。
 目前 DNG tag contract 見 [docs/i18n/zh-TW/dng-tag-contract.md](docs/i18n/zh-TW/dng-tag-contract.md)。

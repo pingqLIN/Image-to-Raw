@@ -142,7 +142,7 @@ This verification flow runs `pytest`, `ruff check`, RAW-native batch generation,
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 ```
 
-This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Phase 6 reports use `image2dng.compatibility_evidence.v2` and record RAW processor commands, exit codes, stdout/stderr tails, output artifacts, and dry-run install hints. Missing optional RAW tools are recorded as `skipped` instead of failures; installed tools that fail to run or fail to emit their export artifact are recorded as `failed`; Adobe DNG SDK remains manual-only for now.
+This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Phase 6 reports use `image2dng.compatibility_evidence.v2` and record RAW processor commands, exit codes, stdout/stderr tails, output artifacts, and dry-run install hints. Missing optional RAW tools are recorded as `skipped` instead of failures; installed tools that fail to run or fail to emit their export artifact are recorded as `failed`; Adobe DNG SDK remains `manual-only`.
 
 For Adobe DNG Converter regression, use the dedicated local script:
 
@@ -324,7 +324,7 @@ Known limitations:
 - Sensor effects are simple synthetic controls, not a physical camera model.
 - Embedded preview is currently an IFD layout experiment, not a full Adobe compatibility claim.
 - The pipeline does not emit EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payloads.
-- Compatibility is validated structurally and with optional local smoke tools; Adobe DNG SDK remains manual-only.
+- Compatibility is validated structurally and with optional local smoke tools; Adobe DNG SDK remains `manual-only`.
 
 See [docs/design.md](docs/design.md) for the design notes.
 See [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md) for the current DNG tag contract.

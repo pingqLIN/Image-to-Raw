@@ -6,7 +6,7 @@ This project validates generated DNG files structurally and records RAW processo
 
 The current DNG tag contract is documented in [docs/i18n/en/dng-tag-contract.md](i18n/en/dng-tag-contract.md). Compatibility evidence should be interpreted against that contract: missing optional tools are environment state, while missing required tags are structural failures.
 
-Missing optional tools are recorded as `skipped`, not as failures. Available tools that fail to run or fail to emit their expected export artifact are recorded as `failed`. CI must not require locally installed RAW processors unless a reproducible install path is added later. The evidence generator reports install hints as dry-run guidance only and never installs tools.
+Missing optional tools are recorded as `skipped`, not as failures. Available tools that fail to run or fail to emit their expected export artifact are recorded as `failed`. CI must not require locally installed RAW processors without a reproducible install path. The evidence generator reports install hints as dry-run guidance only and never installs tools.
 
 This product includes DNG technology under license by Adobe.
 
@@ -57,7 +57,7 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 Constraints:
 
 - The SDK validation path must be locally configurable and must not hard-code a private machine path.
-- Until a reproducible SDK path exists, Adobe DNG SDK entries in `compatibility-report.json` should remain `manual-only`.
+- Without a reproducible local SDK validation path, Adobe DNG SDK entries in `compatibility-report.json` should remain `manual-only`.
 - Any SDK or Adobe-tool structural failure should become a blocking compatibility finding for the next Phase 6 pass.
 
 ## Adobe DNG Converter Regression
@@ -131,4 +131,4 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 - fixtures: input path, DNG path, DNG layout, raw IFD location, IFD0 preview flag, validation JSON path, structural validation status, and processor result records;
 - matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, output artifacts, and missing output artifacts.
 
-Adobe DNG SDK remains `manual-only` until a reproducible local SDK validation path exists.
+Adobe DNG SDK remains `manual-only` without a reproducible local SDK validation path.
