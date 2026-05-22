@@ -469,13 +469,15 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     for key in ("selected", "passed", "failed", "marker_blocked", "timeout", "skipped"):
         lines.append(f"- `{key}`: `{summary[key]}`")
     lines.extend(["", "## Blocking Findings", ""])
-    if report["blocking_findings"]:
-        lines.extend(f"- {finding}" for finding in report["blocking_findings"])
+    blocking_findings = _blocking_findings_record(report)
+    if blocking_findings:
+        lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Error Markers", ""])
-    if report["error_markers"]:
-        for record in report["error_markers"]:
+    error_markers = _error_marker_records(report)
+    if error_markers:
+        for record in error_markers:
             lines.append(
                 f"- `{record['fixture']}` ({record['status']}): "
                 f"{', '.join(record['markers'])}"
@@ -483,7 +485,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     else:
         lines.append("- none")
     lines.extend(["", "## Results", ""])
-    for result in report["results"]:
+    for result in _result_records(report):
         fixture = result["fixture"]["repo_relative"]
         lines.append(
             f"- `{fixture}`: {result['status']} "
@@ -499,6 +501,27 @@ def _summary(report: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(summary, dict):
         raise TypeError("report summary must be an object")
     return summary
+
+
+def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
+    findings = report["blocking_findings"]
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("report blocking_findings must be a string list")
+    return findings
+
+
+def _error_marker_records(report: dict[str, Any]) -> list[dict[str, Any]]:
+    records = report["error_markers"]
+    if not isinstance(records, list) or not all(isinstance(item, dict) for item in records):
+        raise TypeError("report error_markers must be an object list")
+    return records
+
+
+def _result_records(report: dict[str, Any]) -> list[dict[str, Any]]:
+    results = report["results"]
+    if not isinstance(results, list) or not all(isinstance(item, dict) for item in results):
+        raise TypeError("report results must be an object list")
+    return results
 
 
 def _path_record(path: Path, repo_root: Path) -> dict[str, str | None]:

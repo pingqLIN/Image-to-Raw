@@ -2537,6 +2537,47 @@ def test_run_adobe_dng_sdk_validation_reports_missing_validator_and_empty_fixtur
     assert "no DNG fixtures selected" in report["blocking_findings"]
 
 
+def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    runner = _FakeDngValidateRunner()
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+
+    report["blocking_findings"] = [False]
+    with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = ["not-a-marker-record"]
+    with pytest.raises(TypeError, match="report error_markers must be an object list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["results"] = ["not-a-result-record"]
+    with pytest.raises(TypeError, match="report results must be an object list"):
+        module._summary_markdown(report)
+
+
 def test_run_adobe_dng_sdk_validation_blocks_version_probe_timeout_with_version_text(
     tmp_path,
 ):
