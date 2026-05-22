@@ -165,6 +165,25 @@ def test_i18n_english_docs_have_zh_tw_counterparts():
     assert missing == []
 
 
+def test_compatibility_docs_keep_setup_audit_safety_boundary():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "docs" / "compatibility.md").read_text(encoding="utf-8")
+    zh_tw = (
+        repo_root / "docs" / "i18n" / "zh-TW" / "compatibility-evidence.md"
+    ).read_text(encoding="utf-8")
+
+    assert "The setup audit never installs or upgrades RAW processor tools." in english
+    assert "If a tool is approved and installed later" in english
+    assert (
+        "generated fixtures live under `demo-output/compatibility-evidence/` "
+        "and should not be committed as binary artifacts."
+        in english
+    )
+    assert "不會安裝、不會升級任何 RAW processor。" in zh_tw
+    assert "若使用者後續批准安裝其中一個工具" in zh_tw
+    assert "`demo-output/` 是本機輸出，不應提交 binary fixtures。" in zh_tw
+
+
 def test_repo_agent_instructions_keep_zh_tw_source_pair():
     repo_root = Path(__file__).resolve().parents[1]
     english = (repo_root / "AGENTS.md").read_text(encoding="utf-8")
