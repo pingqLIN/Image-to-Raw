@@ -93,6 +93,16 @@ def _missing_local_markdown_links(markdown_path: Path) -> list[str]:
     return missing
 
 
+def _first_markdown_link_with_label(markdown_path: Path, label: str) -> Path:
+    markdown = markdown_path.read_text(encoding="utf-8")
+    pattern = re.compile(rf"{re.escape(label)}:\s*\[[^\]]+\]\(([^)]+)\)")
+    match = pattern.search(markdown)
+    if match is None:
+        raise AssertionError(f"missing {label!r} link in {markdown_path}")
+    href = match.group(1).split("#", 1)[0]
+    return (markdown_path.parent / unquote(href)).resolve()
+
+
 def test_readme_local_markdown_links_resolve():
     repo_root = Path(__file__).resolve().parents[1]
 
@@ -111,6 +121,39 @@ def test_docs_local_markdown_links_resolve():
             broken_links[str(path.relative_to(repo_root))] = missing
 
     assert broken_links == {}
+
+
+def test_public_docs_reference_zh_tw_sources_bidirectionally():
+    repo_root = Path(__file__).resolve().parents[1]
+    public_docs = sorted(
+        path
+        for path in (repo_root / "docs").glob("*.md")
+        if "Traditional Chinese source manuscript:" in path.read_text(encoding="utf-8")
+    )
+
+    assert public_docs
+    for public_doc in public_docs:
+        zh_source = _first_markdown_link_with_label(
+            public_doc,
+            "Traditional Chinese source manuscript",
+        )
+        assert zh_source.is_relative_to(repo_root / "docs" / "i18n" / "zh-TW")
+        english_baseline = _first_markdown_link_with_label(
+            zh_source,
+            "English public baseline",
+        )
+        assert english_baseline == public_doc.resolve()
+
+
+def test_i18n_english_docs_have_zh_tw_counterparts():
+    repo_root = Path(__file__).resolve().parents[1]
+    en_docs = sorted((repo_root / "docs" / "i18n" / "en").glob("*.md"))
+    zh_tw_dir = repo_root / "docs" / "i18n" / "zh-TW"
+
+    assert en_docs
+    missing = [path.name for path in en_docs if not (zh_tw_dir / path.name).exists()]
+
+    assert missing == []
 
 
 def test_generate_64x64_gradient_dng(tmp_path):
