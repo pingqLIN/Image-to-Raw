@@ -3332,6 +3332,32 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
     assert "until a reproducible local SDK path exists" not in prompt
 
 
+def test_raw_processor_setup_audit_rejects_malformed_runbook_tool_state(tmp_path):
+    module = _load_script_module("audit_raw_processor_setup")
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["tools"]["darktable-cli"]["current"]["available"] = "yes"
+
+    with pytest.raises(TypeError, match="tool current available must be a boolean"):
+        module._runbook_markdown(report)
+
+
+def test_raw_processor_setup_audit_rejects_malformed_package_search(tmp_path):
+    module = _load_script_module("audit_raw_processor_setup")
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["tools"]["darktable-cli"]["package_searches"][0]["version_hint"] = []
+
+    with pytest.raises(TypeError, match="package search version_hint must be a string or null"):
+        module._runbook_markdown(report)
+
+
 def test_raw_processor_setup_audit_records_search_version_hints(tmp_path, monkeypatch):
     module = _load_script_module("audit_raw_processor_setup")
     monkeypatch.setattr(module.shutil, "which", lambda command: f"C:/fake/{command}.exe")
