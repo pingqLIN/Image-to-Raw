@@ -121,14 +121,14 @@ For applied reactions, the pipeline binds provenance to the copied batch inputs:
 
 Current reaction model matrix:
 
-| Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
+| Semantic hint | Model status | Current raw effect | Contract status | Boundary |
 | --- | --- | --- | --- | --- |
-| `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` implemented | Yes | Yes | Finite EV, mask-bound, linear-light only. |
-| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented | Yes | Yes | Deterministic shoulder mapping only; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
-| implemented reaction composition | `semantic-reaction-chain-v1` implemented | Yes | Yes | Describes deterministic helper execution order and child details only; each child helper keeps its own boundary. |
-| `regions[].response_hints.noise_priority` | Metadata/research | No | Deferred | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
-| `sensor_response_hints.target_middle_gray` | Research | No | Deferred | Requires calibration policy before it can affect values. |
-| `sensor_response_hints.target_white_balance_kelvin` | Metadata/research | No | Deferred | Requires a color pipeline and illuminant policy before it can affect values. |
+| `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` implemented | Yes | Applied | Finite EV, mask-bound, linear-light only. |
+| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented | Yes | Applied | Deterministic shoulder mapping only; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
+| implemented reaction composition | `semantic-reaction-chain-v1` implemented | Yes | Applied | Describes deterministic helper execution order and child details only; each child helper keeps its own boundary. |
+| `regions[].response_hints.noise_priority` | Metadata/research | No | Not applied | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
+| `sensor_response_hints.target_middle_gray` | Research | No | Not applied | Requires calibration policy before it can affect values. |
+| `sensor_response_hints.target_white_balance_kelvin` | Metadata/research | No | Not applied | Requires a color pipeline and illuminant policy before it can affect values. |
 
 `semantic_to_raw_status` has three current states:
 

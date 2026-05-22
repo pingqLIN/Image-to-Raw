@@ -121,14 +121,14 @@ v1 的預設目標是保存並驗證語意資料，讓 RAW-native pipeline 能�
 
 目前 reaction model matrix：
 
-| Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
+| Semantic hint | Model status | Current raw effect | Contract status | Boundary |
 | --- | --- | --- | --- | --- |
-| `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Yes | finite EV、mask-bound、linear-light only。 |
-| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` 已實作 | Yes | Yes | deterministic shoulder mapping only；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
-| implemented reaction composition | `semantic-reaction-chain-v1` 已實作 | Yes | Yes | 只描述 deterministic helper 的執行順序與明細；每個 child helper 保留自身邊界。 |
-| `regions[].response_hints.noise_priority` | metadata / research | No | Deferred | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
-| `sensor_response_hints.target_middle_gray` | research | No | Deferred | 需要 calibration policy 才能影響 values。 |
-| `sensor_response_hints.target_white_balance_kelvin` | metadata / research | No | Deferred | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
+| `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Applied | finite EV、mask-bound、linear-light only。 |
+| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` 已實作 | Yes | Applied | deterministic shoulder mapping only；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
+| implemented reaction composition | `semantic-reaction-chain-v1` 已實作 | Yes | Applied | 只描述 deterministic helper 的執行順序與明細；每個 child helper 保留自身邊界。 |
+| `regions[].response_hints.noise_priority` | metadata / research | No | 目前不套用 | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
+| `sensor_response_hints.target_middle_gray` | research | No | 目前不套用 | 需要 calibration policy 才能影響 values。 |
+| `sensor_response_hints.target_white_balance_kelvin` | metadata / research | No | 目前不套用 | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
 
 目前 `semantic_to_raw_status` 有三種狀態：
 
