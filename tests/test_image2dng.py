@@ -2677,6 +2677,117 @@ def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
         runner=runner,
     )
 
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["ok"] = "false"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["summary"]["failed"] = True
+    with pytest.raises(TypeError, match="summary failed must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"] = []
+    with pytest.raises(TypeError, match="report validator must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["path"] = []
+    with pytest.raises(TypeError, match="validator path must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["path"]["repo_relative"] = False
+    with pytest.raises(
+        TypeError,
+        match="validator repo_relative path must be a string or null",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["version_probe"] = []
+    with pytest.raises(TypeError, match="validator version_probe must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["version_probe"]["version_text"] = []
+    with pytest.raises(TypeError, match="validator version_text must be a string or null"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
     report["blocking_findings"] = [False]
     with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
         module._summary_markdown(report)

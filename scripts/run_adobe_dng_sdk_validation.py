@@ -457,17 +457,17 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Adobe DNG SDK Validation Report",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
-        f"- Validator: `{report['validator']['path']['repo_relative']}`",
-        f"- Version: `{report['validator']['version_probe'].get('version_text')}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
+        f"- Validator: `{_validator_repo_relative(_validator(report))}`",
+        f"- Version: `{_validator_version_text(_validator(report))}`",
         "",
         "## Summary",
         "",
     ]
     for key in ("selected", "passed", "failed", "marker_blocked", "timeout", "skipped"):
-        lines.append(f"- `{key}`: `{summary[key]}`")
+        lines.append(f"- `{key}`: `{_summary_count(summary, key)}`")
     lines.extend(["", "## Blocking Findings", ""])
     blocking_findings = _blocking_findings_record(report)
     if blocking_findings:
@@ -496,11 +496,66 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
+
+
+def _validator(report: dict[str, Any]) -> dict[str, Any]:
+    validator = report["validator"]
+    if not isinstance(validator, dict):
+        raise TypeError("report validator must be an object")
+    return validator
+
+
+def _validator_repo_relative(validator: dict[str, Any]) -> str | None:
+    path = validator["path"]
+    if not isinstance(path, dict):
+        raise TypeError("validator path must be an object")
+    repo_relative = path["repo_relative"]
+    if isinstance(repo_relative, str) or repo_relative is None:
+        return repo_relative
+    raise TypeError("validator repo_relative path must be a string or null")
+
+
+def _validator_version_text(validator: dict[str, Any]) -> str | None:
+    version_probe = validator["version_probe"]
+    if not isinstance(version_probe, dict):
+        raise TypeError("validator version_probe must be an object")
+    version_text = version_probe.get("version_text")
+    if isinstance(version_text, str) or version_text is None:
+        return version_text
+    raise TypeError("validator version_text must be a string or null")
+
+
 def _summary(report: dict[str, Any]) -> dict[str, Any]:
     summary = report["summary"]
     if not isinstance(summary, dict):
         raise TypeError("report summary must be an object")
     return summary
+
+
+def _summary_count(summary: dict[str, Any], key: str) -> int:
+    count = summary[key]
+    if not isinstance(count, int) or isinstance(count, bool):
+        raise TypeError(f"summary {key} must be an integer")
+    return count
 
 
 def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
