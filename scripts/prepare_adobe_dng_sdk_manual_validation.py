@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import zipfile
@@ -163,10 +164,18 @@ def _fixture_records(fixture_dirs: tuple[Path, ...]) -> list[dict[str, Any]]:
                 "directory": _display_path(directory),
                 "exists": directory.is_dir(),
                 "dng_count": len(dngs),
-                "sample_dngs": [_display_path(path) for path in dngs[:20]],
+                "sample_dngs": [_dng_fixture_record(path) for path in dngs[:20]],
             }
         )
     return records
+
+
+def _dng_fixture_record(path: Path) -> dict[str, Any]:
+    return {
+        "path": _display_path(path),
+        "size_bytes": path.stat().st_size,
+        "sha256": _sha256_file(path),
+    }
 
 
 def _manual_steps(selected: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -252,6 +261,14 @@ def _output_dir_is_allowed(output_dir: Path) -> bool:
     demo_output = (repo_root / "demo-output").resolve()
     resolved = output_dir.resolve()
     return resolved == demo_output or demo_output in resolved.parents
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
 
 
 if __name__ == "__main__":

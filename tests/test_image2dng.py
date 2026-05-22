@@ -2285,6 +2285,13 @@ def test_prepare_adobe_dng_sdk_manual_validation_writes_plan(tmp_path):
     }
     assert report["selected_sdk_archive"]["name"] == "dng_sdk_1_7_1.zip"
     assert report["representative_fixtures"][0]["dng_count"] == 1
+    assert report["representative_fixtures"][0]["sample_dngs"] == [
+        {
+            "path": str(fixture_dir / "sample.dng"),
+            "size_bytes": (fixture_dir / "sample.dng").stat().st_size,
+            "sha256": _sha256_test_file(fixture_dir / "sample.dng"),
+        }
+    ]
     assert all(step["manual_only"] is True for step in report["manual_steps"])
     assert (output_dir / "adobe-dng-sdk-manual-validation-plan.md").exists()
 
