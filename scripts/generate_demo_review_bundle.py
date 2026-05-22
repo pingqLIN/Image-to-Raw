@@ -616,7 +616,15 @@ def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
 
 def _validate_relative_existing_path(output_dir: Path, value: str) -> Path:
     path = Path(value)
-    if path.is_absolute() or ".." in path.parts:
+    posix_path = PurePosixPath(value.replace("\\", "/"))
+    windows_path = PureWindowsPath(value)
+    if (
+        path.is_absolute()
+        or posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or ".." in posix_path.parts
+    ):
         raise ValueError(f"bundle path must be relative and local: {value}")
     resolved = output_dir / path
     if not resolved.exists():

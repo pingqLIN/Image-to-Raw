@@ -3570,6 +3570,15 @@ def test_demo_review_bundle_rejects_artifact_path_alias(tmp_path):
         module._validate_bundle_report(output_dir, report)
 
 
+def test_demo_review_bundle_rejects_unsafe_manifest_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+
+    for value in ("../outside.txt", "/tmp/outside.txt", "C:\\tmp\\outside.txt", "C:outside.txt"):
+        with pytest.raises(ValueError, match="bundle path must be relative and local"):
+            module._validate_relative_existing_path(output_dir, value)
+
+
 def test_demo_review_bundle_requires_source_reports_to_be_artifacts(tmp_path):
     module = _load_script_module("generate_demo_review_bundle")
     output_dir = tmp_path / "review-bundle"
