@@ -344,7 +344,7 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
         "| Tool | Available | Executable | Discovery | Recommendation |",
         "| --- | --- | --- | --- | --- |",
     ]
-    for tool, info in report["tools"].items():
+    for tool, info in _tools(report).items():
         current = info["current"]
         lines.append(
             f"| `{tool}` | `{current['available']}` | `{current['executable']}` | "
@@ -353,7 +353,7 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
         )
 
     lines.extend(["", "## Package Search Evidence", ""])
-    for tool, info in report["tools"].items():
+    for tool, info in _tools(report).items():
         lines.append(f"### `{tool}`")
         lines.append("")
         lines.append(info["recommendation"]["rationale"])
@@ -409,7 +409,7 @@ def _external_review_prompt(report: dict[str, Any]) -> str:
             "",
             "Important constraints:",
             "",
-            f"- Auto install is `{report['policy']['auto_install']}`.",
+            f"- Auto install is `{_policy(report)['auto_install']}`.",
             "- Missing tools are allowed to remain `skipped`.",
             "- Available tools that fail should remain hard failures in the compatibility report.",
             "- Binary demo outputs stay local-only under `demo-output/`.",
@@ -424,6 +424,20 @@ def _version_hint(*, manager: str, query: str, lines: list[str]) -> str | None:
         if hint:
             return hint
     return None
+
+
+def _tools(report: dict[str, Any]) -> dict[str, Any]:
+    tools = report["tools"]
+    if not isinstance(tools, dict):
+        raise TypeError("report tools must be an object")
+    return tools
+
+
+def _policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report policy must be an object")
+    return policy
 
 
 def _version_hint_from_exact_line(
