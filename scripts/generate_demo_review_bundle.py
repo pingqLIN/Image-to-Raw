@@ -697,6 +697,15 @@ def _write_lightweight_baseline(output_dir: Path) -> int:
                 "stderr_tail": [],
             },
             {
+                "name": "build",
+                "command": ["skipped", "by", "--skip-baseline-quality-gates"],
+                "exit_code": 0,
+                "duration_seconds": 0,
+                "status": "passed",
+                "stdout_tail": ["Skipped in lightweight bundle test mode."],
+                "stderr_tail": [],
+            },
+            {
                 "name": "raw-native-batch",
                 "command": [
                     "python",
@@ -708,6 +717,15 @@ def _write_lightweight_baseline(output_dir: Path) -> int:
                 "duration_seconds": 0,
                 "status": "passed",
                 "stdout_tail": [f"Wrote raw-native node batch to {batch.output_dir}"],
+                "stderr_tail": [],
+            },
+            {
+                "name": "wheel-install-smoke",
+                "command": ["skipped", "by", "--skip-baseline-quality-gates"],
+                "exit_code": 0,
+                "duration_seconds": 0,
+                "status": "passed",
+                "stdout_tail": ["Skipped in lightweight bundle test mode."],
                 "stderr_tail": [],
             },
         ],

@@ -3258,6 +3258,16 @@ def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     assert kinds["report"] >= 3
     assert kinds["manifest"] >= 3
 
+    baseline_path = output_dir / report["source_reports"]["development_baseline_report"]
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert [step["name"] for step in baseline["steps"]] == [
+        "pytest",
+        "ruff",
+        "build",
+        "raw-native-batch",
+        "wheel-install-smoke",
+    ]
+
     dng_names = [
         artifact["bundle_path"]
         for artifact in report["artifacts"]
