@@ -1755,6 +1755,43 @@ def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
     ]
 
 
+def test_external_scene_manifest_loader_rejects_malformed_schema(tmp_path):
+    manifest_path = tmp_path / "external-scenes.json"
+
+    manifest_path.write_text(json.dumps([]), encoding="utf-8")
+    with pytest.raises(ValueError, match="external scene manifest must be an object"):
+        load_external_scene_manifest(manifest_path)
+
+    manifest_path.write_text(json.dumps({"schema": False, "scenes": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="external scene manifest schema must be a string"):
+        load_external_scene_manifest(manifest_path)
+
+    manifest_path.write_text(json.dumps({"schema": "example.v0", "scenes": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected external scene manifest schema"):
+        load_external_scene_manifest(manifest_path)
+
+
+def test_raw_native_batch_cli_reports_manifest_errors_without_traceback(tmp_path, capsys):
+    module = _load_script_module("generate_raw_native_batch")
+    manifest_path = tmp_path / "external-scenes.json"
+    manifest_path.write_text(json.dumps({"schema": False, "scenes": []}), encoding="utf-8")
+
+    exit_code = module.main(
+        [
+            "--external-manifest",
+            str(manifest_path),
+            "--output-dir",
+            str(tmp_path / "batch"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == "error: external scene manifest schema must be a string\n"
+    assert "Traceback" not in captured.err
+
+
 def test_visual_demo_generates_phase3_evidence(tmp_path):
     output_dir = tmp_path / "visual-demo"
 

@@ -227,7 +227,12 @@ def run_external_scene_linear_batch(
 def load_external_scene_manifest(path: str | Path) -> list[ExternalSceneLinearInput]:
     source = Path(path)
     payload = json.loads(source.read_text(encoding="utf-8"))
-    if payload.get("schema") != "image2dng.external_scene_linear_sources.v1":
+    if not isinstance(payload, dict):
+        raise ValueError("external scene manifest must be an object")
+    schema = payload.get("schema")
+    if not isinstance(schema, str):
+        raise ValueError("external scene manifest schema must be a string")
+    if schema != "image2dng.external_scene_linear_sources.v1":
         raise ValueError("unexpected external scene manifest schema")
     scenes = payload.get("scenes")
     if not isinstance(scenes, list) or not scenes:
