@@ -3258,7 +3258,9 @@ def test_semantic_physics_manifest_builder_writes_local_manifest(tmp_path):
     assert manifest["schema"] == "image2dng.semantic_physics_dataset_manifest.v1"
     assert manifest["local_research_only"] is True
     assert manifest["all_validations_ok"] is True
+    assert sample["semantic_sidecar_bytes"] == semantic_path.stat().st_size
     assert sample["semantic_sidecar_sha256"].startswith("sha256:")
+    assert sample["semantic_sidecar_sha256"] == _sha256_test_file(semantic_path)
     assert sample["semantic_physics_fields"] == {
         "capture_physics": True,
         "camera_response": True,
@@ -3346,6 +3348,12 @@ def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path
     assert exit_code == 0
     assert manifest["schema"] == "image2dng.semantic_physics_dataset_manifest.v1"
     assert manifest["all_validations_ok"] is True
+    assert manifest["samples"][0]["semantic_sidecar_bytes"] == (
+        output_dir / f"{sample_id}.semantic.json"
+    ).stat().st_size
+    assert manifest["samples"][0]["semantic_sidecar_sha256"] == _sha256_test_file(
+        output_dir / f"{sample_id}.semantic.json"
+    )
     assert manifest["samples"][0]["semantic_physics_fields"] == {
         "capture_physics": True,
         "camera_response": True,

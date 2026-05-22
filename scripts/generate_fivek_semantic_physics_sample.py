@@ -295,6 +295,7 @@ def _sample_record(path: Path) -> dict[str, Any]:
     return {
         "sample_id": validation.scene_id or path.stem,
         "semantic_sidecar_path": str(path),
+        "semantic_sidecar_bytes": path.stat().st_size,
         "semantic_sidecar_sha256": _sha256_file(path),
         "validation_ok": validation.ok,
         "validation": validation.to_dict(),

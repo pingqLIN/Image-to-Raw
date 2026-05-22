@@ -77,6 +77,7 @@ def _sample_record(path: Path) -> dict[str, Any]:
     return {
         "sample_id": _sample_id(path, scene),
         "semantic_sidecar_path": str(path),
+        "semantic_sidecar_bytes": path.stat().st_size if path.exists() else None,
         "semantic_sidecar_sha256": _sha256_file(path) if path.exists() else None,
         "validation_ok": validation.ok,
         "validation": validation.to_dict(),
