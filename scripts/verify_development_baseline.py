@@ -234,7 +234,7 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
         "sample index reports validation failure",
     )
 
-    scene_reports = [_inspect_scene(scene, repo_root) for scene in scenes]
+    scene_reports = [_inspect_scene(scene, repo_root, batch_dir) for scene in scenes]
     return {
         "batch_dir": str(batch_dir),
         "manifest_path": str(manifest_path),
@@ -245,7 +245,7 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
     }
 
 
-def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
+def _inspect_scene(scene: object, repo_root: Path, batch_dir: Path) -> dict[str, object]:
     if not isinstance(scene, dict):
         raise ValueError("scene entry must be an object")
     slug = _string(scene, "slug")
@@ -273,11 +273,11 @@ def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
     if missing_outputs:
         raise ValueError(f"{slug}: missing outputs: {', '.join(missing_outputs)}")
 
-    linear_dng_path = _resolve_path(str(outputs["linearraw_dng"]), repo_root)
+    linear_dng_path = _resolve_batch_path(str(outputs["linearraw_dng"]), repo_root, batch_dir)
     validation_dir = linear_dng_path.parent.parent / "validation"
 
     artifact_reports = [
-        _artifact_record(key, _resolve_path(str(outputs[key]), repo_root))
+        _artifact_record(key, _resolve_batch_path(str(outputs[key]), repo_root, batch_dir))
         for key in sorted(expected_outputs)
     ]
     artifact_reports.extend(
@@ -290,7 +290,12 @@ def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
         ]
     )
     for key in ("linearraw_jpeg", "cfa_jpeg"):
-        _inspect_jpeg(slug, key, _resolve_path(str(outputs[key]), repo_root), artifact_reports)
+        _inspect_jpeg(
+            slug,
+            key,
+            _resolve_batch_path(str(outputs[key]), repo_root, batch_dir),
+            artifact_reports,
+        )
     for key in ("linearraw", "cfa"):
         validation = validations.get(key)
         if not isinstance(validation, dict) or validation.get("ok") is not True:
@@ -358,6 +363,18 @@ def _inspect_jpeg(
 def _resolve_path(value: str, repo_root: Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else repo_root / path
+
+
+def _resolve_batch_path(value: str, repo_root: Path, batch_dir: Path) -> Path:
+    path = _resolve_path(value, repo_root).resolve()
+    if not _is_path_within(path, batch_dir):
+        raise ValueError(f"batch artifact path is outside batch dir: {path}")
+    return path
+
+
+def _is_path_within(path: Path, root: Path) -> bool:
+    root = root.resolve()
+    return path == root or root in path.parents
 
 
 def _sha256(path: Path) -> str:
