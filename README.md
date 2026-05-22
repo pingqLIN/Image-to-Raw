@@ -45,7 +45,7 @@ Key explanatory documents:
 - Design overview: [docs/design.md](docs/design.md) / [docs/i18n/zh-TW/design-overview.md](docs/i18n/zh-TW/design-overview.md)
 - Compatibility evidence: [docs/compatibility.md](docs/compatibility.md) / [docs/i18n/zh-TW/compatibility-evidence.md](docs/i18n/zh-TW/compatibility-evidence.md)
 - Demo workflow: [docs/demo.md](docs/demo.md) / [docs/i18n/zh-TW/demo-visualization-workflow.md](docs/i18n/zh-TW/demo-visualization-workflow.md)
-- Current public status: [docs/Current Status and Development Suggestions_ChatGPT.md](docs/Current%20Status%20and%20Development%20Suggestions_ChatGPT.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
+- Current public status: [docs/current-public-status.md](docs/current-public-status.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
 
 ## Install for development
 

@@ -41,7 +41,7 @@ This product includes DNG technology under license by Adobe.
 - 設計總覽：[docs/design.md](docs/design.md) / [docs/i18n/zh-TW/design-overview.md](docs/i18n/zh-TW/design-overview.md)
 - 相容性證據：[docs/compatibility.md](docs/compatibility.md) / [docs/i18n/zh-TW/compatibility-evidence.md](docs/i18n/zh-TW/compatibility-evidence.md)
 - Demo 流程：[docs/demo.md](docs/demo.md) / [docs/i18n/zh-TW/demo-visualization-workflow.md](docs/i18n/zh-TW/demo-visualization-workflow.md)
-- 目前公開狀態：[docs/Current Status and Development Suggestions_ChatGPT.md](docs/Current%20Status%20and%20Development%20Suggestions_ChatGPT.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
+- 目前公開狀態：[docs/current-public-status.md](docs/current-public-status.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
 
 ---
 
