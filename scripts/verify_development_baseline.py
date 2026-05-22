@@ -75,8 +75,8 @@ def main() -> int:
     except ValueError as exc:
         _append_error(report, str(exc))
 
-    report["ok"] = not report["errors"] and all(
-        step["status"] == "passed" for step in report["steps"]  # type: ignore[index]
+    report["ok"] = not _errors(report) and all(
+        step["status"] == "passed" for step in _steps(report)
     )
     _write_report(output_dir, report)
     return 0 if report["ok"] else 1
@@ -98,10 +98,7 @@ def _run_step(name: str, command: list[str], cwd: Path) -> dict[str, object]:
 
 
 def _append_step(report: dict[str, object], step: dict[str, object]) -> None:
-    steps = report["steps"]
-    if not isinstance(steps, list):
-        raise TypeError("report steps must be a list")
-    steps.append(step)
+    _steps(report).append(step)
     if step["status"] == "failed":
         _append_error(report, f"{step['name']} failed with exit code {step['exit_code']}")
 
@@ -253,10 +250,23 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _append_error(report: dict[str, object], message: str) -> None:
+    _errors(report).append(message)
+
+
+def _steps(report: dict[str, object]) -> list[dict[str, object]]:
+    steps = report["steps"]
+    if not isinstance(steps, list):
+        raise TypeError("report steps must be a list")
+    if not all(isinstance(step, dict) for step in steps):
+        raise TypeError("report steps must contain objects")
+    return steps
+
+
+def _errors(report: dict[str, object]) -> list[object]:
     errors = report["errors"]
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
-    errors.append(message)
+    return errors
 
 
 def _tail(text: str, *, max_lines: int = 40) -> list[str]:
