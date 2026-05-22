@@ -5276,6 +5276,13 @@ def test_development_baseline_rejects_malformed_scene_manifest_records(tmp_path)
         module._inspect_scene(malformed, repo_root, batch_dir)
 
 
+def test_development_baseline_rejects_malformed_sample_index_validation_flag():
+    module = _load_script_module("verify_development_baseline")
+
+    with pytest.raises(ValueError, match="sample index all_validations_ok must be a boolean"):
+        module._sample_index_all_validations_ok({"all_validations_ok": "yes"})
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"

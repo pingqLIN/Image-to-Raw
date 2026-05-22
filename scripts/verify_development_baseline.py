@@ -232,10 +232,8 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
         sample_index.get("scene_count") == len(scenes),
         "sample index scene count does not match manifest",
     )
-    _require(
-        sample_index.get("all_validations_ok") is True,
-        "sample index reports validation failure",
-    )
+    sample_index_all_validations_ok = _sample_index_all_validations_ok(sample_index)
+    _require(sample_index_all_validations_ok, "sample index reports validation failure")
 
     scene_reports = [_inspect_scene(scene, repo_root, batch_dir) for scene in scenes]
     return {
@@ -243,7 +241,7 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
         "manifest_path": str(manifest_path),
         "sample_index_path": str(sample_index_path),
         "scene_count": len(scene_reports),
-        "sample_index_all_validations_ok": sample_index.get("all_validations_ok"),
+        "sample_index_all_validations_ok": sample_index_all_validations_ok,
         "scenes": scene_reports,
     }
 
@@ -355,6 +353,13 @@ def _validation_summary_ok(validations: dict[str, object], key: str, slug: str) 
     ok = validation.get("ok")
     if not isinstance(ok, bool):
         raise ValueError(f"{slug}: validation summary for {key} ok must be a boolean")
+    return ok
+
+
+def _sample_index_all_validations_ok(sample_index: dict[str, object]) -> bool:
+    ok = sample_index.get("all_validations_ok")
+    if not isinstance(ok, bool):
+        raise ValueError("sample index all_validations_ok must be a boolean")
     return ok
 
 
