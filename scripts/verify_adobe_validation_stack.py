@@ -638,8 +638,9 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     for key, value in _summary(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.extend(["", "## Blocking Findings", ""])
-    if report["blocking_findings"]:
-        lines.extend(f"- {finding}" for finding in report["blocking_findings"])
+    blocking_findings = _blocking_findings_record(report)
+    if blocking_findings:
+        lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Steps", ""])
@@ -649,9 +650,10 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         child_report_path = step.get("child_report_path")
         if isinstance(child_report_path, dict):
             lines.append(f"  - Child report: `{child_report_path['display']}`")
-        if step.get("blocking_findings"):
+        step_findings = _step_blocking_findings(step)
+        if step_findings:
             lines.append("  - Findings:")
-            lines.extend(f"    - {finding}" for finding in step["blocking_findings"])
+            lines.extend(f"    - {finding}" for finding in step_findings)
     lines.append("")
     return "\n".join(lines)
 
@@ -663,6 +665,13 @@ def _summary(report: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
+    findings = report["blocking_findings"]
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("report blocking_findings must be a string list")
+    return findings
+
+
 def _steps(report: dict[str, Any]) -> list[dict[str, Any]]:
     steps = report["steps"]
     if not isinstance(steps, list):
@@ -670,6 +679,13 @@ def _steps(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not all(isinstance(step, dict) for step in steps):
         raise TypeError("report steps must contain objects")
     return steps
+
+
+def _step_blocking_findings(step: dict[str, Any]) -> list[str]:
+    findings = step.get("blocking_findings", [])
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("step blocking_findings must be a string list")
+    return findings
 
 
 def _resolve_from_repo(path: Path, repo_root: Path) -> Path:

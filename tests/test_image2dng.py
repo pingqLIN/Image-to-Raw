@@ -2876,6 +2876,44 @@ def test_verify_adobe_validation_stack_writes_passing_report(tmp_path):
     )
 
 
+def test_verify_adobe_validation_stack_rejects_malformed_summary_findings(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+
+    report["blocking_findings"] = [False]
+    with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["blocking_findings"] = ["ok", False]
+    with pytest.raises(TypeError, match="step blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+
 def test_verify_adobe_validation_stack_dry_run_converter_is_not_readiness(tmp_path):
     module = _load_script_module("verify_adobe_validation_stack")
     repo_root = tmp_path / "repo"
