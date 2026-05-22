@@ -3625,6 +3625,52 @@ def test_demo_review_bundle_records_callable_exception():
     assert report["errors"] == ["synthetic-step failed: synthetic callable failure"]
 
 
+def test_demo_review_bundle_collects_source_reports_after_command_failure(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    work_dir = output_dir / "_work"
+    paths = module.BundlePaths(
+        output_dir=output_dir,
+        work_dir=work_dir,
+        visual_dir=work_dir / "visual-demo",
+        raw_native_dir=work_dir / "raw-native-node-batch",
+        baseline_dir=work_dir / "development-baseline",
+        compatibility_dir=work_dir / "compatibility-evidence",
+    )
+    report = {
+        "artifacts": [],
+        "source_reports": {},
+    }
+    source_files = {
+        paths.visual_dir / "manifest.json": {"schema": "visual"},
+        paths.raw_native_dir / "manifests" / "raw-native-node-batch.json": {"schema": "raw"},
+        paths.raw_native_dir / "manifests" / "sample-index.json": {"schema": "sample"},
+        paths.baseline_dir / "verification-report.json": {"schema": "baseline"},
+        paths.compatibility_dir / "compatibility-report.json": {"schema": "compatibility"},
+    }
+    for path, payload in source_files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    (paths.compatibility_dir / "compatibility-summary.md").write_text(
+        "# Compatibility Summary\n\n## Fixture Integrity\n",
+        encoding="utf-8",
+    )
+
+    module._collect_available_source_reports(paths=paths, report=report)
+
+    assert report["source_reports"] == {
+        "visual_manifest": "artifacts/manifests/visual-demo-manifest.json",
+        "raw_native_manifest": "artifacts/manifests/raw-native-node-batch.json",
+        "raw_native_sample_index": "artifacts/manifests/raw-native-sample-index.json",
+        "development_baseline_report": "artifacts/reports/development-baseline-report.json",
+        "compatibility_report": "artifacts/reports/compatibility-report.json",
+        "compatibility_summary": "artifacts/reports/compatibility-summary.md",
+    }
+    assert all((output_dir / path).exists() for path in report["source_reports"].values())
+    assert all(artifact["sha256"] for artifact in report["artifacts"])
+    module._validate_bundle_report(output_dir, report)
+
+
 def test_demo_review_bundle_rejects_malformed_command_status():
     module = _load_script_module("generate_demo_review_bundle")
 

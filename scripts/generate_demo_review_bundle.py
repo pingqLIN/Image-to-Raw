@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if _has_command_failure(report):
+        _collect_available_source_reports(paths=paths, report=report)
         _write_outputs(paths.output_dir, report)
         return 1
 
@@ -429,6 +430,65 @@ def _collect_compatibility_representatives(
     missing = wanted - found
     if missing:
         raise ValueError(f"missing compatibility representatives: {', '.join(sorted(missing))}")
+
+
+def _collect_available_source_reports(*, paths: BundlePaths, report: dict[str, Any]) -> None:
+    source_specs = (
+        (
+            "visual_manifest",
+            paths.visual_dir / "manifest.json",
+            Path("artifacts/manifests/visual-demo-manifest.json"),
+            "manifest",
+            "visual-demo-manifest",
+        ),
+        (
+            "raw_native_manifest",
+            paths.raw_native_dir / "manifests" / "raw-native-node-batch.json",
+            Path("artifacts/manifests/raw-native-node-batch.json"),
+            "manifest",
+            "raw-native-node-batch",
+        ),
+        (
+            "raw_native_sample_index",
+            paths.raw_native_dir / "manifests" / "sample-index.json",
+            Path("artifacts/manifests/raw-native-sample-index.json"),
+            "manifest",
+            "raw-native-sample-index",
+        ),
+        (
+            "development_baseline_report",
+            paths.baseline_dir / "verification-report.json",
+            Path("artifacts/reports/development-baseline-report.json"),
+            "report",
+            "development-baseline-report",
+        ),
+        (
+            "compatibility_report",
+            paths.compatibility_dir / "compatibility-report.json",
+            Path("artifacts/reports/compatibility-report.json"),
+            "report",
+            "compatibility-report",
+        ),
+        (
+            "compatibility_summary",
+            paths.compatibility_dir / "compatibility-summary.md",
+            Path("artifacts/reports/compatibility-summary.md"),
+            "report",
+            "compatibility-summary",
+        ),
+    )
+    source_reports = _source_reports(report)
+    for key, source, relative_target, kind, name in source_specs:
+        if not source.exists():
+            continue
+        source_reports[key] = _copy_artifact(
+            paths=paths,
+            report=report,
+            source=source,
+            relative_target=relative_target,
+            kind=kind,
+            name=name,
+        )["bundle_path"]
 
 
 def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
