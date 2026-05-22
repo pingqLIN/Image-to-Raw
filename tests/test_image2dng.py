@@ -2414,6 +2414,33 @@ def test_prepare_adobe_dng_sdk_manual_validation_reports_missing_sdk(tmp_path):
     assert report["selected_sdk_archive"] is None
 
 
+def test_prepare_adobe_dng_sdk_manual_validation_rejects_malformed_summary_records(tmp_path):
+    module = _load_script_module("prepare_adobe_dng_sdk_manual_validation")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
+
+    report["selected_sdk_archive"] = "dng_sdk.zip"
+    with pytest.raises(
+        TypeError,
+        match="report selected_sdk_archive must be an object or null",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
+    report["representative_fixtures"] = ["not-a-fixture"]
+    with pytest.raises(
+        TypeError,
+        match="report representative_fixtures must be an object list",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
+    report["manual_steps"] = ["not-a-step"]
+    with pytest.raises(TypeError, match="report manual_steps must be an object list"):
+        module._summary_markdown(report)
+
+
 def test_run_adobe_dng_sdk_validation_writes_passing_batch_report(tmp_path):
     module = _load_script_module("run_adobe_dng_sdk_validation")
     validator = tmp_path / "Adobe DNG Validate.exe"

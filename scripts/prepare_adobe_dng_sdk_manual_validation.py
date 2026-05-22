@@ -223,13 +223,13 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     for key, value in _policy(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.extend(["", "## Selected SDK Archive", ""])
-    selected = report["selected_sdk_archive"]
+    selected = _selected_sdk_archive(report)
     if selected is None:
         lines.append("- none")
     else:
         lines.append(f"- `{selected['path']}`")
     lines.extend(["", "## Representative Fixtures", ""])
-    for fixture in report["representative_fixtures"]:
+    for fixture in _representative_fixtures(report):
         lines.append(
             f"- `{fixture['directory']}`: exists={fixture['exists']}, "
             f"dng_count={fixture['dng_count']}"
@@ -240,7 +240,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
                 f"`{sample['sha256']}`"
             )
     lines.extend(["", "## Manual Steps", ""])
-    for item in report["manual_steps"]:
+    for item in _manual_step_records(report):
         lines.append(f"- `{item['step']}`: `{item['command_template']}`")
     lines.append("")
     return "\n".join(lines)
@@ -251,6 +251,27 @@ def _policy(report: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(policy, dict):
         raise TypeError("report policy must be an object")
     return policy
+
+
+def _selected_sdk_archive(report: dict[str, Any]) -> dict[str, Any] | None:
+    selected = report["selected_sdk_archive"]
+    if selected is None or isinstance(selected, dict):
+        return selected
+    raise TypeError("report selected_sdk_archive must be an object or null")
+
+
+def _representative_fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
+    fixtures = report["representative_fixtures"]
+    if not isinstance(fixtures, list) or not all(isinstance(item, dict) for item in fixtures):
+        raise TypeError("report representative_fixtures must be an object list")
+    return fixtures
+
+
+def _manual_step_records(report: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = report["manual_steps"]
+    if not isinstance(steps, list) or not all(isinstance(item, dict) for item in steps):
+        raise TypeError("report manual_steps must be an object list")
+    return steps
 
 
 def _display_path(path: Path) -> str:
