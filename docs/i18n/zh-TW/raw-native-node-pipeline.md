@@ -13,9 +13,9 @@
 - ComfyUI 很適合視覺化節點編排與生成模型生態，但應由獨立 bridge project 包覆核心 pipeline，避免 RAW 格式語意、模型工作流、UI extension 生命週期過早耦合。
 - 第一批驗證目標是產生含 IFD0 JPEG preview 的 DNG、sidecar JPEG preview、validation JSON 與 graph manifest，不需要先引入大型 diffusion runtime。
 
-ComfyUI / Stable Diffusion 整合位於 sibling bridge project：
+ComfyUI / Stable Diffusion 整合位於外部 sibling bridge project；本核心 repo 不 vendor 或安裝該 bridge：
 
-- [image-to-raw-comfyui-sd-bridge](../../../../image-to-raw-comfyui-sd-bridge/README.zh-tw.md)
+- `image-to-raw-comfyui-sd-bridge`
 
 ComfyUI 官方文件仍是 bridge project 後續 custom-node / CLI 整合的參考：
 
@@ -52,7 +52,7 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
-ComfyUI / Stable Diffusion 的離線 importer 已搬到 bridge project。新的 CLI 會讀取 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
+ComfyUI / Stable Diffusion 的離線 importer 已搬到 bridge project。bridge 專案提供的 CLI 會讀取 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
 
 ```powershell
 uv run image2dng-comfyui-import `
@@ -61,7 +61,7 @@ uv run image2dng-comfyui-import `
   --run-pipeline
 ```
 
-這條路徑位於 `../image-to-raw-comfyui-sd-bridge/`，刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
+這條路徑由外部 bridge project 提供，刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
 
 Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與 `producer_metadata_manifest`。RAW-native external batch 會複製 metadata sidecar，並在 batch manifest / sample index 中記錄 `producer_metadata_artifacts`，讓 ComfyUI workflow 摘要與 output DNG 維持可追溯關係。Producer metadata 只做保存與追蹤，不會改變 raw sample values；會影響像素值的 deterministic transform 只存在於明確 opt-in 的 semantic reaction path。
 

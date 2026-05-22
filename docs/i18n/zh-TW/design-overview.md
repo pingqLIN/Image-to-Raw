@@ -36,7 +36,7 @@ English public baseline: [docs/design.md](../../design.md)
 
 專案正在從單次 conversion 擴展成 RAW-native generation pipeline。在這個模型中，DNG 是主要生成 artifact，JPEG/PNG 則是從 generated RAW buffer render 出來的 preview 或交付副產品。
 
-目前實作選擇先把第一版 node graph 放在本 repo 內，而不是把 ComfyUI 作為第一個核心 runtime。這能讓 DNG semantics、XMP provenance、validation、synthetic camera rules 都留在已測試的核心程式碼旁邊。ComfyUI / Stable Diffusion bridge 已分割到 sibling project `../image-to-raw-comfyui-sd-bridge/`；它負責 workflow metadata、SD checkpoint/sampler/scheduler 等外部生成器語意，並包覆 `image2dng` 核心 pipeline，而不是取代核心。
+目前實作選擇先把第一版 node graph 放在本 repo 內，而不是把 ComfyUI 作為第一個核心 runtime。這能讓 DNG semantics、XMP provenance、validation、synthetic camera rules 都留在已測試的核心程式碼旁邊。ComfyUI / Stable Diffusion bridge 已分割到外部 sibling project `image-to-raw-comfyui-sd-bridge`；它負責 workflow metadata、SD checkpoint/sampler/scheduler 等外部生成器語意，並包覆 `image2dng` 核心 pipeline，而不是取代核心。
 
 目前最小 graph：
 

@@ -36,7 +36,7 @@ That keeps the design direction grounded in a few rules:
 
 The project is expanding from one-shot conversion into a RAW-native generation pipeline. In this model, DNG is the primary generated artifact, while JPEG/PNG outputs are previews or delivery renders produced from the generated RAW buffer.
 
-The current implementation keeps the first node graph inside this repository instead of making ComfyUI the first core runtime dependency. That keeps DNG semantics, XMP provenance, validation, and synthetic camera rules next to the tested core code. The ComfyUI / Stable Diffusion bridge has been split into the sibling project `../image-to-raw-comfyui-sd-bridge/`; it owns workflow metadata, checkpoint/sampler/scheduler semantics, and wraps the `image2dng` core pipeline rather than replacing it.
+The current implementation keeps the first node graph inside this repository instead of making ComfyUI the first core runtime dependency. That keeps DNG semantics, XMP provenance, validation, and synthetic camera rules next to the tested core code. The ComfyUI / Stable Diffusion bridge has been split into the external sibling project `image-to-raw-comfyui-sd-bridge`; it owns workflow metadata, checkpoint/sampler/scheduler semantics, and wraps the `image2dng` core pipeline rather than replacing it.
 
 Current minimal graph:
 

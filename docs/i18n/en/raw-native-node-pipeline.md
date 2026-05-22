@@ -13,9 +13,9 @@ Rationale:
 - ComfyUI is a strong visual orchestration and model ecosystem, but it should wrap the core pipeline from a separate bridge project so RAW semantics, model workflow, and UI extension lifecycle do not become coupled too early.
 - The first validation target is to emit DNG files with IFD0 JPEG previews, sidecar JPEG previews, validation JSON, and a graph manifest. That does not require a full diffusion runtime yet.
 
-ComfyUI / Stable Diffusion integration lives in the sibling bridge project:
+ComfyUI / Stable Diffusion integration lives in an external sibling bridge project; this core repository does not vendor or install that bridge:
 
-- [image-to-raw-comfyui-sd-bridge](../../../../image-to-raw-comfyui-sd-bridge/README.md)
+- `image-to-raw-comfyui-sd-bridge`
 
 ComfyUI documentation remains useful for future bridge-side custom-node and CLI integration:
 
@@ -52,7 +52,7 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
-The ComfyUI / Stable Diffusion offline importer moved to the bridge project. Its CLI reads ComfyUI output PNG `prompt` / `workflow` metadata, converts the image into a 16-bit TIFF handoff artifact, and writes an external scene manifest:
+The ComfyUI / Stable Diffusion offline importer moved to the bridge project. The CLI provided by that bridge reads ComfyUI output PNG `prompt` / `workflow` metadata, converts the image into a 16-bit TIFF handoff artifact, and writes an external scene manifest:
 
 ```powershell
 uv run image2dng-comfyui-import `
@@ -61,7 +61,7 @@ uv run image2dng-comfyui-import `
   --run-pipeline
 ```
 
-This path lives in `../image-to-raw-comfyui-sd-bridge/` and intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
+This path is provided by the external bridge project and intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
 
 The bridge importer writes `producer_metadata` and `producer_metadata_manifest` into the external scene manifest. The RAW-native external batch copies the metadata sidecar and records `producer_metadata_artifacts` in the batch manifest / sample index, keeping the ComfyUI workflow summary traceable to the output DNGs. Producer metadata is preserved for traceability only and does not modify raw sample values; deterministic pixel changes live only in the explicit opt-in semantic reaction path.
 

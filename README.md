@@ -111,11 +111,11 @@ Use a manifest when each image needs producer, prompt, lighting, or semantic sid
 
 ## ComfyUI / Stable Diffusion Bridge
 
-The ComfyUI / Stable Diffusion importer now lives in a sibling project:
+The ComfyUI / Stable Diffusion importer now lives in an external sibling bridge project; this core repository does not vendor or install that bridge:
 
-[image-to-raw-comfyui-sd-bridge](../image-to-raw-comfyui-sd-bridge/README.md)
+`image-to-raw-comfyui-sd-bridge`
 
-The old `scripts/import_comfyui_output.py` and `image2dng.comfyui_importer` interfaces moved to that bridge project. The new CLI is:
+The old `scripts/import_comfyui_output.py` and `image2dng.comfyui_importer` interfaces moved to that bridge project. The new CLI is provided by the bridge project, not by this repository's console scripts:
 
 ```powershell
 uv run image2dng-comfyui-import `

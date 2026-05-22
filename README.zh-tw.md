@@ -108,11 +108,11 @@ uv run python scripts/generate_raw_native_batch.py `
 
 ## ComfyUI / Stable Diffusion bridge
 
-ComfyUI / Stable Diffusion 專屬 importer 已分割到 sibling project：
+ComfyUI / Stable Diffusion 專屬 importer 已分割到外部 sibling bridge project；本核心 repo 不 vendor 或安裝該 bridge：
 
-[image-to-raw-comfyui-sd-bridge](../image-to-raw-comfyui-sd-bridge/README.zh-tw.md)
+`image-to-raw-comfyui-sd-bridge`
 
-原本位於本 repo 的 `scripts/import_comfyui_output.py` 與 `image2dng.comfyui_importer` 已搬到該 bridge 專案。新的 CLI 是：
+原本位於本 repo 的 `scripts/import_comfyui_output.py` 與 `image2dng.comfyui_importer` 已搬到該 bridge 專案。新的 CLI 由 bridge 專案提供，不是本 repo 的 console script：
 
 ```powershell
 uv run image2dng-comfyui-import `
