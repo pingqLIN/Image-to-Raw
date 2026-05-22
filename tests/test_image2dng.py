@@ -132,10 +132,15 @@ def test_readme_workflows_keep_local_output_and_install_boundaries():
     )
     assert "It does not install or update any tool" in english
     assert "installing one RAW processor requires explicit user approval" in english
+    assert (
+        "preserves already generated source reports and manifests as diagnostic evidence"
+        in english
+    )
     assert "`demo-output/` 是本機輸出資料夾，不應提交 binary 樣片。" in zh_tw
     assert "`demo-output/` 仍是本機輸出資料夾，不應提交 binary 樣片。" in zh_tw
     assert "它不會安裝或更新任何工具" in zh_tw
     assert "安裝其中一個 RAW processor 必須等使用者明確批准" in zh_tw
+    assert "source reports / manifests 作為診斷 evidence" in zh_tw
 
 
 def test_docs_local_markdown_links_resolve():

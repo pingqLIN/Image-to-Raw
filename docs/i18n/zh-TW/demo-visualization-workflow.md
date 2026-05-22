@@ -68,6 +68,8 @@ English public baseline: [docs/demo.md](../../demo.md)
 
 Development baseline verifier 會寫入 `verification-report.json`，記錄 `pytest`、`ruff check`、`uv build`、RAW-native batch generation 與 isolated wheel install smoke test 的 command result。它也會記錄 artifact path、byte count、SHA-256、JPEG dimensions、validation artifact metadata 與 sample index status。
 
+Demo review bundle 會收斂 visual demo、RAW-native node batch、development baseline 與 compatibility evidence 的 reports / manifests。若上游 command 失敗，bundle 仍會保留已產生的 source reports / manifests 作為診斷 evidence，但不會放寬 gate：`review-bundle-report.json` 的 `ok` 會維持 `false`，script 也會回傳 non-zero exit code。
+
 ## 圖像種類分配
 
 每次完整 demo run 建議至少輸出 12 張 preview PNG：

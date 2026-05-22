@@ -159,7 +159,7 @@ This keeps validation layers separate: strict `image2dng` contract validation fo
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
-This flow reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence, then collects the externally reviewable contact sheets, representative DNG files, validation JSON, reports, and manifests under `demo-output/review-bundle/`. The human entry point is `index.md`; the machine-readable manifest is `review-bundle-report.json`. `demo-output/` remains local output and binary samples should not be committed.
+This flow reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence, then collects the externally reviewable contact sheets, representative DNG files, validation JSON, reports, and manifests under `demo-output/review-bundle/`. The human entry point is `index.md`; the machine-readable manifest is `review-bundle-report.json`. If an upstream command fails, the bundle still preserves already generated source reports and manifests as diagnostic evidence, while `ok` remains `false` and the script exits non-zero. `demo-output/` remains local output and binary samples should not be committed.
 
 ## Generate a RAW processor setup audit
 
