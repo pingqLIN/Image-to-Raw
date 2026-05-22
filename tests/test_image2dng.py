@@ -3101,6 +3101,7 @@ def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     assert "Review Entry Points" in index
     assert "review-bundle-report.json" in index
     assert "uv run python scripts/generate_demo_review_bundle.py" in index
+    assert f"--output-dir '{output_dir}'" in index
 
 
 def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch):

@@ -495,7 +495,7 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
             "```powershell",
             (
                 "uv run python scripts/generate_demo_review_bundle.py "
-                "--output-dir demo-output/review-bundle"
+                f"--output-dir {_powershell_quote(report['output_dir'])}"
             ),
             "```",
         ]
@@ -530,6 +530,11 @@ def _write_outputs(output_dir: Path, report: dict[str, Any]) -> None:
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Wrote review bundle index to {output_dir / 'index.md'}")
     print(f"Wrote review bundle report to {report_path}")
+
+
+def _powershell_quote(value: object) -> str:
+    text = str(value)
+    return "'" + text.replace("'", "''") + "'"
 
 
 def _copy_artifact(
