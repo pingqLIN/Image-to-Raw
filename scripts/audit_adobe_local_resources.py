@@ -273,7 +273,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         "## Readiness",
         "",
     ]
-    readiness = report["readiness"]
+    readiness = _readiness(report)
     for key in sorted(readiness):
         lines.append(f"- `{key}`: `{str(readiness[key]).lower()}`")
     lines.extend(["", "## Missing Required Kinds", ""])
@@ -294,7 +294,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             f"- `{resource['name']}`: `{resource['kind']}`, {resource['size_bytes']} bytes"
         )
     lines.extend(["", "## Policy", ""])
-    for key, value in report["policy"].items():
+    for key, value in _policy(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.append("")
     return "\n".join(lines)
@@ -306,6 +306,20 @@ def _display_path(path: Path) -> str:
         return path.resolve().relative_to(repo_root).as_posix()
     except ValueError:
         return str(path)
+
+
+def _readiness(report: dict[str, Any]) -> dict[str, Any]:
+    readiness = report["readiness"]
+    if not isinstance(readiness, dict):
+        raise TypeError("report readiness must be an object")
+    return readiness
+
+
+def _policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report policy must be an object")
+    return policy
 
 
 def _output_dir_is_allowed(output_dir: Path) -> bool:
