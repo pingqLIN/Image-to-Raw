@@ -2483,8 +2483,36 @@ def test_prepare_adobe_dng_sdk_manual_validation_rejects_malformed_summary_recor
     module = _load_script_module("prepare_adobe_dng_sdk_manual_validation")
     adobe_dir = tmp_path / "Adobe"
     adobe_dir.mkdir()
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng")
     report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
 
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["ok"] = "false"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["status"] = []
+    with pytest.raises(TypeError, match="report status must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["selected_sdk_archive"] = {"path": []}
+    with pytest.raises(TypeError, match="selected SDK archive path must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
     report["selected_sdk_archive"] = "dng_sdk.zip"
     with pytest.raises(
         TypeError,
@@ -2498,6 +2526,41 @@ def test_prepare_adobe_dng_sdk_manual_validation_rejects_malformed_summary_recor
         TypeError,
         match="report representative_fixtures must be an object list",
     ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["directory"] = []
+    with pytest.raises(TypeError, match="fixture directory must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["exists"] = "yes"
+    with pytest.raises(TypeError, match="fixture exists must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["dng_count"] = False
+    with pytest.raises(TypeError, match="fixture dng_count must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"] = ["sample.dng"]
+    with pytest.raises(TypeError, match="fixture sample_dngs must be an object list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"][0]["path"] = []
+    with pytest.raises(TypeError, match="sample path must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"][0]["size_bytes"] = True
+    with pytest.raises(TypeError, match="sample size_bytes must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"][0]["sha256"] = 7
+    with pytest.raises(TypeError, match="sample sha256 must be a string"):
         module._summary_markdown(report)
 
     report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))

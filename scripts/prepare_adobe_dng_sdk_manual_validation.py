@@ -212,10 +212,10 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Adobe DNG SDK Manual Validation Plan",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Status: `{report['status']}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Status: `{_report_status(report)}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
         "",
         "## Policy",
         "",
@@ -227,23 +227,51 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     if selected is None:
         lines.append("- none")
     else:
-        lines.append(f"- `{selected['path']}`")
+        lines.append(f"- `{_selected_sdk_archive_path(selected)}`")
     lines.extend(["", "## Representative Fixtures", ""])
     for fixture in _representative_fixtures(report):
         lines.append(
-            f"- `{fixture['directory']}`: exists={fixture['exists']}, "
-            f"dng_count={fixture['dng_count']}"
+            f"- `{_fixture_directory(fixture)}`: exists={_fixture_exists(fixture)}, "
+            f"dng_count={_fixture_dng_count(fixture)}"
         )
-        for sample in fixture["sample_dngs"]:
+        for sample in _fixture_sample_dngs(fixture):
             lines.append(
-                f"  - `{sample['path']}`: {sample['size_bytes']} bytes, "
-                f"`{sample['sha256']}`"
+                f"  - `{_sample_path(sample)}`: {_sample_size_bytes(sample)} bytes, "
+                f"`{_sample_sha256(sample)}`"
             )
     lines.extend(["", "## Manual Steps", ""])
     for item in _manual_step_records(report):
         lines.append(f"- `{item['step']}`: `{item['command_template']}`")
     lines.append("")
     return "\n".join(lines)
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _report_status(report: dict[str, Any]) -> str:
+    status = report["status"]
+    if not isinstance(status, str):
+        raise TypeError("report status must be a string")
+    return status
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
 
 
 def _policy(report: dict[str, Any]) -> dict[str, Any]:
@@ -260,6 +288,13 @@ def _selected_sdk_archive(report: dict[str, Any]) -> dict[str, Any] | None:
     raise TypeError("report selected_sdk_archive must be an object or null")
 
 
+def _selected_sdk_archive_path(selected: dict[str, Any]) -> str:
+    path = selected["path"]
+    if not isinstance(path, str):
+        raise TypeError("selected SDK archive path must be a string")
+    return path
+
+
 def _representative_fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
     fixtures = report["representative_fixtures"]
     if not isinstance(fixtures, list) or not all(isinstance(item, dict) for item in fixtures):
@@ -272,6 +307,55 @@ def _manual_step_records(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(steps, list) or not all(isinstance(item, dict) for item in steps):
         raise TypeError("report manual_steps must be an object list")
     return steps
+
+
+def _fixture_directory(fixture: dict[str, Any]) -> str:
+    directory = fixture["directory"]
+    if not isinstance(directory, str):
+        raise TypeError("fixture directory must be a string")
+    return directory
+
+
+def _fixture_exists(fixture: dict[str, Any]) -> bool:
+    exists = fixture["exists"]
+    if not isinstance(exists, bool):
+        raise TypeError("fixture exists must be a boolean")
+    return exists
+
+
+def _fixture_dng_count(fixture: dict[str, Any]) -> int:
+    dng_count = fixture["dng_count"]
+    if not isinstance(dng_count, int) or isinstance(dng_count, bool):
+        raise TypeError("fixture dng_count must be an integer")
+    return dng_count
+
+
+def _fixture_sample_dngs(fixture: dict[str, Any]) -> list[dict[str, Any]]:
+    samples = fixture["sample_dngs"]
+    if not isinstance(samples, list) or not all(isinstance(item, dict) for item in samples):
+        raise TypeError("fixture sample_dngs must be an object list")
+    return samples
+
+
+def _sample_path(sample: dict[str, Any]) -> str:
+    path = sample["path"]
+    if not isinstance(path, str):
+        raise TypeError("sample path must be a string")
+    return path
+
+
+def _sample_size_bytes(sample: dict[str, Any]) -> int:
+    size_bytes = sample["size_bytes"]
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
+        raise TypeError("sample size_bytes must be an integer")
+    return size_bytes
+
+
+def _sample_sha256(sample: dict[str, Any]) -> str:
+    sha256 = sample["sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("sample sha256 must be a string")
+    return sha256
 
 
 def _display_path(path: Path) -> str:
