@@ -249,18 +249,10 @@ def _inspect_scene(scene: object, repo_root: Path, batch_dir: Path) -> dict[str,
     if not isinstance(scene, dict):
         raise ValueError("scene entry must be an object")
     slug = _string(scene, "slug")
-    outputs = scene.get("outputs")
-    validations = scene.get("validations")
-    raw_ids = scene.get("raw_data_unique_ids")
-    nodes = scene.get("nodes")
-    if not isinstance(outputs, dict):
-        raise ValueError(f"{slug}: outputs must be an object")
-    if not isinstance(validations, dict):
-        raise ValueError(f"{slug}: validations must be an object")
-    if not isinstance(raw_ids, dict):
-        raise ValueError(f"{slug}: raw_data_unique_ids must be an object")
-    if not isinstance(nodes, list) or not nodes:
-        raise ValueError(f"{slug}: nodes must be a non-empty list")
+    outputs = _scene_outputs(scene, slug)
+    validations = _scene_validations(scene, slug)
+    raw_ids = _scene_raw_data_unique_ids(scene, slug)
+    nodes = _scene_nodes(scene, slug)
 
     expected_outputs = {
         "scene_linear_tiff",
@@ -272,12 +264,17 @@ def _inspect_scene(scene: object, repo_root: Path, batch_dir: Path) -> dict[str,
     missing_outputs = sorted(expected_outputs - set(outputs))
     if missing_outputs:
         raise ValueError(f"{slug}: missing outputs: {', '.join(missing_outputs)}")
+    for key in ("linearraw", "cfa"):
+        if not _validation_summary_ok(validations, key, slug):
+            raise ValueError(f"{slug}: validation summary for {key} is not ok")
+        if not _raw_data_unique_id(raw_ids, key, slug):
+            raise ValueError(f"{slug}: raw data unique id for {key} is missing")
 
-    linear_dng_path = _resolve_batch_path(str(outputs["linearraw_dng"]), repo_root, batch_dir)
+    linear_dng_path = _output_path(outputs, "linearraw_dng", repo_root, batch_dir, slug)
     validation_dir = linear_dng_path.parent.parent / "validation"
 
     artifact_reports = [
-        _artifact_record(key, _resolve_batch_path(str(outputs[key]), repo_root, batch_dir))
+        _artifact_record(key, _output_path(outputs, key, repo_root, batch_dir, slug))
         for key in sorted(expected_outputs)
     ]
     artifact_reports.extend(
@@ -293,15 +290,9 @@ def _inspect_scene(scene: object, repo_root: Path, batch_dir: Path) -> dict[str,
         _inspect_jpeg(
             slug,
             key,
-            _resolve_batch_path(str(outputs[key]), repo_root, batch_dir),
+            _output_path(outputs, key, repo_root, batch_dir, slug),
             artifact_reports,
         )
-    for key in ("linearraw", "cfa"):
-        validation = validations.get(key)
-        if not isinstance(validation, dict) or validation.get("ok") is not True:
-            raise ValueError(f"{slug}: validation summary for {key} is not ok")
-        if not raw_ids.get(key):
-            raise ValueError(f"{slug}: raw data unique id for {key} is missing")
 
     return {
         "slug": slug,
@@ -311,6 +302,64 @@ def _inspect_scene(scene: object, repo_root: Path, batch_dir: Path) -> dict[str,
         "validations": validations,
         "raw_data_unique_ids": raw_ids,
     }
+
+
+def _scene_outputs(scene: dict[str, object], slug: str) -> dict[str, object]:
+    outputs = scene.get("outputs")
+    if not isinstance(outputs, dict):
+        raise ValueError(f"{slug}: outputs must be an object")
+    return outputs
+
+
+def _scene_validations(scene: dict[str, object], slug: str) -> dict[str, object]:
+    validations = scene.get("validations")
+    if not isinstance(validations, dict):
+        raise ValueError(f"{slug}: validations must be an object")
+    return validations
+
+
+def _scene_raw_data_unique_ids(scene: dict[str, object], slug: str) -> dict[str, object]:
+    raw_ids = scene.get("raw_data_unique_ids")
+    if not isinstance(raw_ids, dict):
+        raise ValueError(f"{slug}: raw_data_unique_ids must be an object")
+    return raw_ids
+
+
+def _scene_nodes(scene: dict[str, object], slug: str) -> list[object]:
+    nodes = scene.get("nodes")
+    if not isinstance(nodes, list) or not nodes:
+        raise ValueError(f"{slug}: nodes must be a non-empty list")
+    return nodes
+
+
+def _output_path(
+    outputs: dict[str, object],
+    key: str,
+    repo_root: Path,
+    batch_dir: Path,
+    slug: str,
+) -> Path:
+    value = outputs[key]
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{slug}: output {key} must be a non-empty string")
+    return _resolve_batch_path(value, repo_root, batch_dir)
+
+
+def _validation_summary_ok(validations: dict[str, object], key: str, slug: str) -> bool:
+    validation = validations.get(key)
+    if not isinstance(validation, dict):
+        raise ValueError(f"{slug}: validation summary for {key} must be an object")
+    ok = validation.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError(f"{slug}: validation summary for {key} ok must be a boolean")
+    return ok
+
+
+def _raw_data_unique_id(raw_ids: dict[str, object], key: str, slug: str) -> str | None:
+    value = raw_ids.get(key)
+    if isinstance(value, str) or value is None:
+        return value
+    raise ValueError(f"{slug}: raw data unique id for {key} must be a string or null")
 
 
 def _artifact_record(key: str, path: Path) -> dict[str, object]:

@@ -5072,6 +5072,55 @@ def test_development_baseline_rejects_external_batch_artifact_paths(tmp_path):
         module._inspect_scene(scene, repo_root, batch_dir)
 
 
+def test_development_baseline_rejects_malformed_scene_manifest_records(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    batch_dir = repo_root / "demo-output" / "development-baseline" / "raw-native-node-batch"
+    raw_dir = batch_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    scene = {
+        "slug": "sample",
+        "prompt_hash": "sha256:sample",
+        "nodes": [{"id": "source"}],
+        "outputs": {
+            "scene_linear_tiff": str(raw_dir / "sample.tif"),
+            "linearraw_dng": str(raw_dir / "sample.dng"),
+            "cfa_dng": str(raw_dir / "sample-cfa.dng"),
+            "linearraw_jpeg": str(raw_dir / "sample-linearraw.jpg"),
+            "cfa_jpeg": str(raw_dir / "sample-cfa.jpg"),
+        },
+        "validations": {"linearraw": {"ok": True}, "cfa": {"ok": True}},
+        "raw_data_unique_ids": {"linearraw": "linear-id", "cfa": "cfa-id"},
+    }
+
+    malformed = scene | {"outputs": scene["outputs"] | {"linearraw_dng": []}}
+    with pytest.raises(ValueError, match="sample: output linearraw_dng must be a non-empty string"):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+    malformed = scene | {"validations": scene["validations"] | {"linearraw": []}}
+    with pytest.raises(
+        ValueError,
+        match="sample: validation summary for linearraw must be an object",
+    ):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+    malformed = scene | {"validations": scene["validations"] | {"linearraw": {"ok": "yes"}}}
+    with pytest.raises(
+        ValueError,
+        match="sample: validation summary for linearraw ok must be a boolean",
+    ):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+    malformed = scene | {
+        "raw_data_unique_ids": scene["raw_data_unique_ids"] | {"linearraw": []}
+    }
+    with pytest.raises(
+        ValueError,
+        match="sample: raw data unique id for linearraw must be a string or null",
+    ):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"
