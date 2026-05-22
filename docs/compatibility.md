@@ -57,7 +57,8 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 Constraints:
 
 - The SDK validation path must be locally configurable and must not hard-code a private machine path.
-- Without a reproducible local SDK validation path, Adobe DNG SDK entries in `compatibility-report.json` should remain `manual-only`.
+- Adobe DNG SDK entries in `compatibility-report.json` remain `manual-only`; reproducible local SDK evidence should be produced by dedicated local scripts instead of being mixed into the generic optional RAW processor matrix.
+- When local SDK evidence is needed, use `scripts/run_adobe_dng_sdk_validation.py` or the outer `scripts/verify_adobe_validation_stack.py`, and keep outputs under ignored `demo-output/` or local-only notes.
 - Any SDK or Adobe-tool structural failure should become a blocking compatibility finding for the next Phase 6 pass.
 
 ## Adobe DNG Converter Regression
@@ -133,4 +134,4 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 
 `compatibility-summary.md` mirrors the tool evidence matrix and includes a fixture integrity table for DNG and validation JSON byte counts and SHA-256 checksums, so reviewers can check artifact freshness without opening the JSON report first.
 
-Adobe DNG SDK remains `manual-only` without a reproducible local SDK validation path.
+Adobe DNG SDK remains `manual-only` in the compatibility matrix. Dedicated local SDK validation scripts can produce sidecar evidence, but those outputs remain local-only and are not CI gates.

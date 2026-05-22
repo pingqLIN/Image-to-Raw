@@ -206,10 +206,16 @@ def test_compatibility_docs_keep_setup_audit_safety_boundary():
         "fixture integrity table with DNG / validation JSON byte counts and SHA-256"
         in english
     )
+    assert "Dedicated local SDK validation scripts can produce sidecar evidence" in english
+    assert "scripts/run_adobe_dng_sdk_validation.py" in english
+    assert "scripts/verify_adobe_validation_stack.py" in english
     assert "不會安裝、不會升級任何 RAW processor。" in zh_tw
     assert "若使用者後續批准安裝其中一個工具" in zh_tw
     assert "`demo-output/` 是本機輸出，不應提交 binary fixtures。" in zh_tw
     assert "fixture integrity 表" in zh_tw
+    assert "本機 SDK evidence 由 dedicated local validation scripts" in zh_tw
+    assert "scripts/run_adobe_dng_sdk_validation.py" in zh_tw
+    assert "scripts/verify_adobe_validation_stack.py" in zh_tw
 
 
 def test_current_public_status_mentions_review_bundle_failure_diagnostics():

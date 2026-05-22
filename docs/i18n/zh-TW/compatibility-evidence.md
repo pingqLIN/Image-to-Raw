@@ -69,7 +69,8 @@ uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/re
 限制：
 
 - SDK validation path 必須 local-configurable，不應 hard-code 私人機器路徑。
-- 若沒有可重現的本機 SDK validation path，`compatibility-report.json` 中的 Adobe DNG SDK entry 應維持 `manual-only`。
+- `compatibility-report.json` 中的 Adobe DNG SDK entry 仍維持 `manual-only`；可重現的本機 SDK evidence 應由 dedicated local scripts 產出，不混入一般 optional RAW processor matrix。
+- 若需要產生本機 SDK evidence，可使用 `scripts/run_adobe_dng_sdk_validation.py` 或外層 `scripts/verify_adobe_validation_stack.py`，輸出仍應留在 ignored `demo-output/` 或 local-only notes。
 - 若 SDK 或 Adobe tool 回報 DNG 結構問題，該結果應升級成下一輪 Phase 6 blocking compatibility finding。
 
 ## Adobe DNG Converter regression
@@ -112,7 +113,7 @@ Validation 分層如下：
 - optional tool 不存在時記錄 `skipped: not found`，不造成失敗。
 - optional tool 若實際執行但 parse/open/export 失敗，或成功 exit 但沒有產出預期 artifact，report 會標示 failure，script exit code 也會是 non-zero。
 - 本流程只輸出 dry-run install hints，不會自動安裝任何 RAW processor。
-- Adobe DNG SDK 目前維持 `manual-only`，不作為自動 gate。
+- Adobe DNG SDK 在 compatibility matrix 中維持 `manual-only`，不作為自動 gate；本機 SDK evidence 由 dedicated local validation scripts 另行產出。
 
 ## Report Schema
 
