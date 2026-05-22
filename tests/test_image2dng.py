@@ -3557,6 +3557,12 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
     assert "Do not install tools until the user approves." in runbook
     assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
     assert "Auto install is `False`" in prompt
+    assert "Missing tools are allowed to remain `skipped`." in prompt
+    assert (
+        "Available tools that fail should remain hard failures in the compatibility report."
+        in prompt
+    )
+    assert "Binary demo outputs stay local-only under `demo-output/`." in prompt
     assert any(
         question
         == (
