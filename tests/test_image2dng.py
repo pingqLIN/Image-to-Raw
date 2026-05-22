@@ -1873,6 +1873,28 @@ def test_compatibility_evidence_rejects_malformed_fixture_validation_flag():
         )
 
 
+def test_compatibility_evidence_rejects_malformed_report_accessors():
+    module = _load_script_module("generate_compatibility_evidence")
+
+    with pytest.raises(TypeError, match="report fixtures must contain objects"):
+        module._fixtures({"fixtures": ["not-a-fixture"]})
+
+    with pytest.raises(TypeError, match="report tools must be an object"):
+        module._tools({"tools": []})
+
+    with pytest.raises(TypeError, match="report matrix must contain objects"):
+        module._matrix({"matrix": ["not-a-matrix-entry"]})
+
+    with pytest.raises(TypeError, match="matrix result must be a string"):
+        module._matrix_result({"result": False})
+
+    with pytest.raises(TypeError, match="matrix notes must be a string"):
+        module._matrix_notes({"notes": []})
+
+    with pytest.raises(TypeError, match="report errors must be a list"):
+        module._errors({"errors": "none"})
+
+
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-success")
     monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
