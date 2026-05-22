@@ -131,7 +131,7 @@ uv run image2dng-comfyui-import `
 uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
 ```
 
-這個驗證流程會執行 `pytest`、`ruff check`、RAW-native batch generation，並檢查 manifest、sample index、DNG validation JSON 與 JPEG preview。結果會寫入 `demo-output/development-baseline/verification-report.json`。`demo-output/` 是本機輸出資料夾，不應提交 binary 樣片。
+這個驗證流程會執行 `pytest`、`ruff check`、`uv build`、RAW-native batch generation，並在隔離 venv 中安裝 built wheel 後 smoke test `image2dng --help` 與 `image2dng validate --help`。它也會檢查 manifest、sample index、DNG validation JSON 與 JPEG preview。結果會寫入 `demo-output/development-baseline/verification-report.json`。`demo-output/` 是本機輸出資料夾，不應提交 binary 樣片。
 
 ## 產生相容性證據矩陣
 

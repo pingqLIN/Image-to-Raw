@@ -64,7 +64,7 @@ The RAW-native node batch creates:
 
 When a batch scene includes an `image2dng.semantic_scene.v1` sidecar, the manifests record preservation/validation status, copied sidecar assets, and opt-in `semantic_reaction` summaries for deterministic region exposure and highlight clipping helpers.
 
-The development baseline verifier writes `verification-report.json` with command results, artifact paths, JPEG dimensions, validation status, and sample index status.
+The development baseline verifier writes `verification-report.json` with command results for `pytest`, `ruff check`, `uv build`, RAW-native batch generation, and isolated wheel install smoke tests. It also records artifact paths, JPEG dimensions, validation status, and sample index status.
 
 The demo review bundle generator reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence into a work directory, then writes a portable review package at `demo-output/review-bundle/`. Use `index.md` as the human review entry point and `review-bundle-report.json` as the machine-readable artifact manifest with bundle-relative paths, byte counts, and SHA-256 checksums.
 

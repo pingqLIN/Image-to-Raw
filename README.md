@@ -134,7 +134,7 @@ When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated bef
 uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
 ```
 
-This verification flow runs `pytest`, `ruff check`, RAW-native batch generation, and checks the manifest, sample index, DNG validation JSON, and JPEG previews. It writes `demo-output/development-baseline/verification-report.json`. `demo-output/` is local output and binary samples should not be committed.
+This verification flow runs `pytest`, `ruff check`, `uv build`, RAW-native batch generation, and wheel install smoke tests for `image2dng --help` and `image2dng validate --help` in an isolated venv. It also checks the manifest, sample index, DNG validation JSON, and JPEG previews. It writes `demo-output/development-baseline/verification-report.json`. `demo-output/` is local output and binary samples should not be committed.
 
 ## Generate compatibility evidence
 
