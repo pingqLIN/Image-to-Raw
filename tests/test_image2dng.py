@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 import numpy as np
 import png
@@ -72,6 +74,27 @@ from image2dng.xmp import XMP_AI_NAMESPACE
 
 def _fake_processor_executable(command: str) -> str:
     return f"C:/fake/{command}.exe"
+
+
+def test_readme_local_markdown_links_resolve():
+    repo_root = Path(__file__).resolve().parents[1]
+    link_pattern = re.compile(r"!?\[[^\]]+\]\(([^)]+)\)")
+
+    for readme_name in ("README.md", "README.zh-tw.md"):
+        readme_path = repo_root / readme_name
+        readme = readme_path.read_text(encoding="utf-8")
+        missing = []
+
+        for match in link_pattern.finditer(readme):
+            href = match.group(1).split("#", 1)[0]
+            if not href or href.startswith(("http://", "https://", "#")):
+                continue
+
+            target = (readme_path.parent / unquote(href)).resolve()
+            if not target.exists():
+                missing.append(href)
+
+        assert missing == []
 
 
 def test_generate_64x64_gradient_dng(tmp_path):
