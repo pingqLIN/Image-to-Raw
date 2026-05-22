@@ -135,8 +135,8 @@ Current reaction model matrix:
 | Status | Manifest shape | Meaning |
 | --- | --- | --- |
 | `preserved-not-applied` | `semantic_validation` is present, `semantic_reaction` is empty | Sidecar was copied and validated, but raw values were generated from the original scene-linear input. |
-| `applied` | `semantic_reaction.applied` is `true` with affected-region counts | Opt-in `region-exposure-mask-v1` modified a copied scene-linear input before RAW generation. |
-| `no-op` | `semantic_reaction.applied` is `false` with a `reason` | Reaction was requested and validated, but no eligible exposure-mask region changed pixels. |
+| `applied` | `semantic_reaction.applied` is `true` with affected-region counts | Opt-in `semantic-reaction-chain-v1` helpers modified a copied scene-linear input before RAW generation. |
+| `no-op` | `semantic_reaction.applied` is `false` with a `reason` | Reaction was requested and validated, but no eligible semantic helper changed pixels. |
 
 ## Validation
 

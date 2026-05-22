@@ -135,8 +135,8 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 | Status | Manifest shape | 意義 |
 | --- | --- | --- |
 | `preserved-not-applied` | 有 `semantic_validation`，`semantic_reaction` 為空 | sidecar 已複製並驗證，但 raw values 仍由原始 scene-linear input 產生。 |
-| `applied` | `semantic_reaction.applied` 為 `true`，並包含 affected-region counts | opt-in `region-exposure-mask-v1` 在 RAW generation 前修改了複製後的 scene-linear input。 |
-| `no-op` | `semantic_reaction.applied` 為 `false`，並包含 `reason` | 已要求並驗證 reaction，但沒有符合條件的 exposure-mask region 造成 pixel 變更。 |
+| `applied` | `semantic_reaction.applied` 為 `true`，並包含 affected-region counts | opt-in `semantic-reaction-chain-v1` helper 在 RAW generation 前修改了複製後的 scene-linear input。 |
+| `no-op` | `semantic_reaction.applied` 為 `false`，並包含 `reason` | 已要求並驗證 reaction，但沒有符合條件的 semantic helper 造成 pixel 變更。 |
 
 ## 驗證
 
