@@ -38,7 +38,7 @@ English public baseline: [docs/Current Status and Development Suggestions_ChatGP
 
 參考文件：
 
-- [README.md](../../README.md)
+- [README.md](../../../README.md)
 - [docs/design.md](../../design.md)
 - [docs/compatibility.md](../../compatibility.md)
 - [docs/demo.md](../../demo.md)
