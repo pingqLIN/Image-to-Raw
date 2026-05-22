@@ -91,6 +91,7 @@ class PipelineSceneResult:
     semantic_contract: str | None = None
     semantic_to_raw_status: str | None = None
     semantic_reaction: dict[str, Any] | None = None
+    semantic_reaction_summary: dict[str, Any] | None = None
     producer_metadata: dict[str, Any] | None = None
     producer_metadata_artifacts: dict[str, str] | None = None
 
@@ -539,6 +540,9 @@ def _run_capture_graph(
         ),
         semantic_to_raw_status=_semantic_to_raw_status(semantic_validation, semantic_reaction),
         semantic_reaction=semantic_reaction.to_dict() if semantic_reaction is not None else None,
+        semantic_reaction_summary=(
+            semantic_reaction.summary_dict() if semantic_reaction is not None else None
+        ),
         producer_metadata=producer_metadata,
         producer_metadata_artifacts=producer_metadata_artifacts,
     )
@@ -694,29 +698,13 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
                 "semantic_validation": scene.semantic_validation,
             }
         )
-    if scene.semantic_reaction is not None:
-        sample["semantic_reaction"] = _semantic_reaction_summary(scene.semantic_reaction)
+    if scene.semantic_reaction_summary is not None:
+        sample["semantic_reaction"] = scene.semantic_reaction_summary
     if scene.producer_metadata is not None:
         sample["producer_metadata"] = scene.producer_metadata
     if scene.producer_metadata_artifacts is not None:
         sample["producer_metadata_artifacts"] = scene.producer_metadata_artifacts
     return sample
-
-
-def _semantic_reaction_summary(reaction: dict[str, Any]) -> dict[str, Any]:
-    summary = {
-        "model": reaction["model"],
-        "applied": reaction["applied"],
-        "region_count": reaction["region_count"],
-        "affected_pixels": reaction["affected_pixels"],
-    }
-    if "affected_pixel_count_semantics" in reaction:
-        summary["affected_pixel_count_semantics"] = reaction[
-            "affected_pixel_count_semantics"
-        ]
-    if "reason" in reaction:
-        summary["reason"] = reaction["reason"]
-    return summary
 
 
 def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
