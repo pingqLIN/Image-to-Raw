@@ -211,7 +211,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         "## Policy",
         "",
     ]
-    for key, value in report["policy"].items():
+    for key, value in _policy(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.extend(["", "## Selected SDK Archive", ""])
     selected = report["selected_sdk_archive"]
@@ -230,6 +230,13 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- `{item['step']}`: `{item['command_template']}`")
     lines.append("")
     return "\n".join(lines)
+
+
+def _policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report policy must be an object")
+    return policy
 
 
 def _display_path(path: Path) -> str:
