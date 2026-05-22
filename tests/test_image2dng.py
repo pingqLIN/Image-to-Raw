@@ -111,6 +111,15 @@ def test_readme_local_markdown_links_resolve():
         assert _missing_local_markdown_links(readme_path) == []
 
 
+def test_readme_language_links_are_reciprocal():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "README.md").read_text(encoding="utf-8")
+    zh_tw = (repo_root / "README.zh-tw.md").read_text(encoding="utf-8")
+
+    assert "[繁體中文](README.zh-tw.md)" in english
+    assert "[English](README.md)" in zh_tw
+
+
 def test_docs_local_markdown_links_resolve():
     repo_root = Path(__file__).resolve().parents[1]
     broken_links = {}
