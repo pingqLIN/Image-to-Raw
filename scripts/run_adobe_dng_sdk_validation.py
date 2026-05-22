@@ -453,7 +453,7 @@ def _safe_text(value: str | bytes | None) -> str:
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
-    summary = report["summary"]
+    summary = _summary(report)
     lines = [
         "# Adobe DNG SDK Validation Report",
         "",
@@ -492,6 +492,13 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def _summary(report: dict[str, Any]) -> dict[str, Any]:
+    summary = report["summary"]
+    if not isinstance(summary, dict):
+        raise TypeError("report summary must be an object")
+    return summary
 
 
 def _path_record(path: Path, repo_root: Path) -> dict[str, str | None]:
