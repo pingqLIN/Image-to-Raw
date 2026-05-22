@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from image2dng.pipeline import run_raw_native_batch
@@ -808,6 +808,10 @@ def _resolve_source_path(value: str, default_root: Path, repo_root: Path) -> Pat
 
 
 def _join_reported_path(root: Path, value: str) -> Path:
+    posix_path = PurePosixPath(value.replace("\\", "/"))
+    windows_path = PureWindowsPath(value)
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+        raise ValueError(f"unsafe relative path in report: {value}")
     parts = [part for part in value.replace("\\", "/").split("/") if part and part != "."]
     if not parts or any(part == ".." for part in parts):
         raise ValueError(f"unsafe relative path in report: {value}")
