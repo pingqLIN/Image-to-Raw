@@ -633,9 +633,3 @@ def _as_tuple(value) -> tuple:
     if isinstance(value, list):
         return tuple(value)
     return (value,)
-
-
-def _expand_to_three(values: list[int]) -> tuple[int, int, int]:
-    if len(values) == 1:
-        return (values[0], values[0], values[0])
-    return tuple(values[:3])  # type: ignore[return-value]
