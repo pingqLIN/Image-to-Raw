@@ -234,6 +234,11 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             f"- `{fixture['directory']}`: exists={fixture['exists']}, "
             f"dng_count={fixture['dng_count']}"
         )
+        for sample in fixture["sample_dngs"]:
+            lines.append(
+                f"  - `{sample['path']}`: {sample['size_bytes']} bytes, "
+                f"`{sample['sha256']}`"
+            )
     lines.extend(["", "## Manual Steps", ""])
     for item in report["manual_steps"]:
         lines.append(f"- `{item['step']}`: `{item['command_template']}`")

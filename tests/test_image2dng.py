@@ -2308,7 +2308,11 @@ def test_prepare_adobe_dng_sdk_manual_validation_writes_plan(tmp_path):
         }
     ]
     assert all(step["manual_only"] is True for step in report["manual_steps"])
-    assert (output_dir / "adobe-dng-sdk-manual-validation-plan.md").exists()
+    summary = (output_dir / "adobe-dng-sdk-manual-validation-plan.md").read_text(
+        encoding="utf-8"
+    )
+    assert str(fixture_dir / "sample.dng") in summary
+    assert _sha256_test_file(fixture_dir / "sample.dng") in summary
 
 
 def test_prepare_adobe_dng_sdk_manual_validation_refuses_tracked_output(tmp_path):
