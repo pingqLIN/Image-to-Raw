@@ -3361,7 +3361,19 @@ def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path
     }
     assert (output_dir / "assets" / f"{sample_id}-neutral-preview.jpg").exists()
     assert (output_dir / "assets" / f"{sample_id}-center-mask.png").exists()
+    assert sidecar["producer"]["source_dng_bytes"] == (
+        fivek_dir / f"{sample_id}.dng"
+    ).stat().st_size
     assert sidecar["producer"]["source_dng_sha256"].startswith("sha256:")
+    assert sidecar["producer"]["source_dng_sha256"] == _sha256_test_file(
+        fivek_dir / f"{sample_id}.dng"
+    )
+    assert sidecar["producer"]["source_tiff_bytes"] == (
+        fivek_dir / f"{sample_id}.tif"
+    ).stat().st_size
+    assert sidecar["producer"]["source_tiff_sha256"] == _sha256_test_file(
+        fivek_dir / f"{sample_id}.tif"
+    )
     assert sidecar["regions"][0]["raw_statistics"]["clipped_pixel_ratio"] >= 0
 
 

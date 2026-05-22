@@ -195,7 +195,9 @@ def _semantic_payload(
         "producer": {
             "name": "MIT-Adobe FiveK smoke sample",
             "version": "local-smoke",
+            "source_dng_bytes": dng_path.stat().st_size,
             "source_dng_sha256": _sha256_file(dng_path),
+            "source_tiff_bytes": tiff_path.stat().st_size,
             "source_tiff_sha256": _sha256_file(tiff_path),
             "notes": "DNG/TIFF bytes remain local-only under ignored data/.",
         },
