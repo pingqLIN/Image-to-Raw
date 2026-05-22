@@ -1309,6 +1309,19 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
     assert "no regions with exposure_bias_ev and mask_asset_id" in scene_manifest[
         "semantic_reaction"
     ]["reason"]
+    assert "no highlight clipping policy requiring value mapping" in scene_manifest[
+        "semantic_reaction"
+    ]["reason"]
+
+    sample = json.loads(result.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
+    assert sample["semantic_to_raw_status"] == "no-op"
+    assert sample["semantic_reaction"]["applied"] is False
+    assert "no regions with exposure_bias_ev and mask_asset_id" in sample[
+        "semantic_reaction"
+    ]["reason"]
+    assert "no highlight clipping policy requiring value mapping" in sample[
+        "semantic_reaction"
+    ]["reason"]
 
 
 def test_external_scene_linear_batch_semantic_reaction_rejects_encoded_input(tmp_path):
