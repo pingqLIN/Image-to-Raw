@@ -3553,6 +3553,8 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
         for search in tool["package_searches"]
     )
     assert "Discovery" in runbook
+    assert "- Auto install: `False`" in runbook
+    assert "Do not install tools until the user approves." in runbook
     assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
     assert "Auto install is `False`" in prompt
     assert any(
