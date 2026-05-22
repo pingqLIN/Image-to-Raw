@@ -919,6 +919,55 @@ def test_semantic_reaction_chain_composes_region_exposure_and_highlight_policy(t
     assert np.array_equal(reacted[:, 2:], image[:, 2:])
 
 
+def test_semantic_reaction_chain_reports_single_active_highlight_helper(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=3,
+        height=2,
+        exposure_bias_ev=None,
+    )
+    image = np.full((2, 3, 3), 65535, dtype=np.uint16)
+
+    reacted, result = apply_semantic_reaction_chain(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+        semantic_base_dir=tmp_path,
+    )
+
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.model == HIGHLIGHT_CLIPPING_REACTION_MODEL
+    assert result.affected_pixels == 6
+    assert len(result.regions) == 1
+    assert result.regions[0]["region_id"] == "global-highlight-shoulder"
+    assert np.all(reacted < image)
+
+
+def test_semantic_reaction_chain_noop_keeps_child_reasons(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=3,
+        height=2,
+        exposure_bias_ev=None,
+    )
+    payload = load_semantic_payload(semantic_path)
+    payload["sensor_response_hints"]["clipping_policy"] = "clip"
+    image = np.full((2, 3, 3), 1000, dtype=np.uint16)
+
+    reacted, result = apply_semantic_reaction_chain(
+        image,
+        semantic_payload=payload,
+        semantic_base_dir=tmp_path,
+    )
+
+    assert result.applied is False
+    assert result.status == "no-op"
+    assert result.model == SEMANTIC_REACTION_CHAIN_MODEL
+    assert "no regions with exposure_bias_ev and mask_asset_id" in result.reason
+    assert "no highlight clipping policy requiring value mapping" in result.reason
+    assert np.array_equal(reacted, image)
+
+
 def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
     source_path = tmp_path / "external-scene.tif"
     tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
