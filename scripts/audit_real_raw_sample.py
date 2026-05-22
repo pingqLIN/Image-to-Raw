@@ -390,20 +390,20 @@ def _detected_metadata(
     tiff_metadata: dict[str, Any],
     exiftool: dict[str, Any],
 ) -> dict[str, Any]:
-    tags = tiff_metadata["tags"]
-    exif = exiftool["metadata"]
+    tags = _tiff_tags(tiff_metadata)
+    exif = _exiftool_metadata(exiftool)
     return {
         "camera_make": _first_present(exif, tags, keys=("Make", "271")),
         "camera_model": _first_present(exif, tags, keys=("Model", "272")),
         "cfa_pattern": _first_present(exif, tags, keys=("CFAPattern", "CFA Pattern", "33422")),
         "black_level": _first_present(exif, tags, keys=("BlackLevel", "Black Level", "50714")),
         "white_level": _first_present(exif, tags, keys=("WhiteLevel", "White Level", "50717")),
-        "preview_ifd_present": tiff_metadata["preview_ifd_present"],
-        "raw_ifd_present": tiff_metadata["raw_ifd_present"],
-        "subifd_present": tiff_metadata["subifd_present"],
+        "preview_ifd_present": _tiff_preview_ifd_present(tiff_metadata),
+        "raw_ifd_present": _tiff_raw_ifd_present(tiff_metadata),
+        "subifd_present": _tiff_subifd_present(tiff_metadata),
         "metadata_reader_status": {
-            "tifffile": tiff_metadata["status"],
-            "exiftool": exiftool["result"],
+            "tifffile": _tiff_status(tiff_metadata),
+            "exiftool": _exiftool_result(exiftool),
         },
     }
 
@@ -417,9 +417,9 @@ def _redaction_report(
     tiff_metadata: dict[str, Any],
     exiftool: dict[str, Any],
 ) -> dict[str, Any]:
-    tags = tiff_metadata["tags"]
-    exif = exiftool["metadata"]
-    reader_known = tiff_metadata["status"] == "passed" or exiftool["result"] == "passed"
+    tags = _tiff_tags(tiff_metadata)
+    exif = _exiftool_metadata(exiftool)
+    reader_known = _tiff_status(tiff_metadata) == "passed" or _exiftool_result(exiftool) == "passed"
     fields = {
         "gps_present": _field_presence(
             tags, exif, GPS_TAG_NAMES, code_names=GPS_TAG_CODES, known=reader_known
@@ -433,8 +433,8 @@ def _redaction_report(
         ),
         "embedded_preview_present": _preview_presence(tiff_metadata, exiftool),
     }
-    warnings = list(tiff_metadata["warnings"])
-    if raw_format not in TIFF_COMPATIBLE_FORMATS and exiftool["result"] != "passed":
+    warnings = list(_tiff_warnings(tiff_metadata))
+    if raw_format not in TIFF_COMPATIBLE_FORMATS and _exiftool_result(exiftool) != "passed":
         warnings.append(
             "Proprietary RAW metadata needs ExifTool or a format-specific reader for redaction."
         )
@@ -481,11 +481,11 @@ def _field_presence(
 
 
 def _preview_presence(tiff_metadata: dict[str, Any], exiftool: dict[str, Any]) -> TriState:
-    preview = tiff_metadata["preview_ifd_present"]
+    preview = _tiff_preview_ifd_present(tiff_metadata)
     if isinstance(preview, bool):
         return TRI_PRESENT if preview else TRI_ABSENT
-    if exiftool["result"] == "passed":
-        exif = exiftool["metadata"]
+    if _exiftool_result(exiftool) == "passed":
+        exif = _exiftool_metadata(exiftool)
         if any(
             _has_value(exif, name)
             for name in ("JpgFromRaw", "PreviewImage", "PreviewTIFF", "ThumbnailImage")
@@ -493,6 +493,59 @@ def _preview_presence(tiff_metadata: dict[str, Any], exiftool: dict[str, Any]) -
             return TRI_PRESENT
         return TRI_ABSENT
     return TRI_UNKNOWN
+
+
+def _tiff_tags(tiff_metadata: dict[str, Any]) -> dict[str, Any]:
+    tags = tiff_metadata["tags"]
+    if not isinstance(tags, dict):
+        raise TypeError("tifffile metadata tags must be an object")
+    return tags
+
+
+def _tiff_status(tiff_metadata: dict[str, Any]) -> str:
+    status = tiff_metadata["status"]
+    if not isinstance(status, str):
+        raise TypeError("tifffile metadata status must be a string")
+    return status
+
+
+def _tiff_warnings(tiff_metadata: dict[str, Any]) -> list[str]:
+    warnings = tiff_metadata["warnings"]
+    if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
+        raise TypeError("tifffile metadata warnings must be a string list")
+    return warnings
+
+
+def _tiff_preview_ifd_present(tiff_metadata: dict[str, Any]) -> bool | None:
+    return _optional_bool(tiff_metadata["preview_ifd_present"], "preview_ifd_present")
+
+
+def _tiff_raw_ifd_present(tiff_metadata: dict[str, Any]) -> bool | None:
+    return _optional_bool(tiff_metadata["raw_ifd_present"], "raw_ifd_present")
+
+
+def _tiff_subifd_present(tiff_metadata: dict[str, Any]) -> bool | None:
+    return _optional_bool(tiff_metadata["subifd_present"], "subifd_present")
+
+
+def _exiftool_metadata(exiftool: dict[str, Any]) -> dict[str, Any]:
+    metadata = exiftool["metadata"]
+    if not isinstance(metadata, dict):
+        raise TypeError("exiftool metadata must be an object")
+    return metadata
+
+
+def _exiftool_result(exiftool: dict[str, Any]) -> str:
+    result = exiftool["result"]
+    if not isinstance(result, str):
+        raise TypeError("exiftool result must be a string")
+    return result
+
+
+def _optional_bool(value: Any, field_name: str) -> bool | None:
+    if isinstance(value, bool) or value is None:
+        return value
+    raise TypeError(f"tifffile metadata {field_name} must be a boolean or null")
 
 
 def _tool_summary(tool: dict[str, Any]) -> dict[str, Any]:

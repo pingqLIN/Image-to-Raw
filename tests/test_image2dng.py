@@ -2820,6 +2820,26 @@ def test_real_raw_sample_audit_writes_local_research_reports(tmp_path, monkeypat
     assert "metadata" not in ledger["optional_tools"]["exiftool"]
 
 
+def test_real_raw_sample_audit_rejects_malformed_tiff_metadata():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="tifffile metadata tags must be an object"):
+        module._detected_metadata(
+            {
+                "status": "passed",
+                "warnings": [],
+                "tags": [],
+                "preview_ifd_present": True,
+                "raw_ifd_present": True,
+                "subifd_present": False,
+            },
+            {
+                "result": "skipped",
+                "metadata": {},
+            },
+        )
+
+
 def test_real_raw_sample_audit_rejects_missing_input(tmp_path):
     module = _load_script_module("audit_real_raw_sample")
 
