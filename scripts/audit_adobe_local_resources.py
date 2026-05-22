@@ -267,10 +267,10 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Adobe Local Resource Audit",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Adobe dir: `{report['adobe_dir']}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Adobe dir: `{_adobe_dir(report)}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
         "",
         "## Readiness",
         "",
@@ -293,14 +293,42 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines.extend(["", "## Resources", ""])
     for resource in _resources(report):
         lines.append(
-            f"- `{resource['name']}`: `{resource['kind']}`, "
-            f"{resource['size_bytes']} bytes, `{resource['sha256']}`"
+            f"- `{_resource_name(resource)}`: `{_resource_kind(resource)}`, "
+            f"{_resource_size_bytes(resource)} bytes, `{_resource_sha256(resource)}`"
         )
     lines.extend(["", "## Policy", ""])
     for key, value in _policy(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.append("")
     return "\n".join(lines)
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _adobe_dir(report: dict[str, Any]) -> str:
+    adobe_dir = report["adobe_dir"]
+    if not isinstance(adobe_dir, str):
+        raise TypeError("report adobe_dir must be a string")
+    return adobe_dir
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
 
 
 def _display_path(path: Path) -> str:
@@ -344,6 +372,34 @@ def _resources(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(resources, list) or not all(isinstance(item, dict) for item in resources):
         raise TypeError("report resources must be an object list")
     return resources
+
+
+def _resource_name(resource: dict[str, Any]) -> str:
+    name = resource["name"]
+    if not isinstance(name, str):
+        raise TypeError("resource name must be a string")
+    return name
+
+
+def _resource_kind(resource: dict[str, Any]) -> str:
+    kind = resource["kind"]
+    if not isinstance(kind, str):
+        raise TypeError("resource kind must be a string")
+    return kind
+
+
+def _resource_size_bytes(resource: dict[str, Any]) -> int:
+    size_bytes = resource["size_bytes"]
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
+        raise TypeError("resource size_bytes must be an integer")
+    return size_bytes
+
+
+def _resource_sha256(resource: dict[str, Any]) -> str:
+    sha256 = resource["sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("resource sha256 must be a string")
+    return sha256
 
 
 def _output_dir_is_allowed(output_dir: Path) -> bool:

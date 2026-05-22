@@ -2223,6 +2223,26 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
     adobe_dir.mkdir()
     report = module.build_report(adobe_dir)
 
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["ok"] = "true"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["adobe_dir"] = []
+    with pytest.raises(TypeError, match="report adobe_dir must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
     report["missing_required_kinds"] = ["dng-sdk-archive", 7]
     with pytest.raises(
         TypeError,
@@ -2238,6 +2258,29 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
     report = module.build_report(adobe_dir)
     report["resources"] = ["not-a-resource"]
     with pytest.raises(TypeError, match="report resources must be an object list"):
+        module._summary_markdown(report)
+
+    resource_path = adobe_dir / "DNG_Spec_1_7_1_0.pdf"
+    resource_path.write_bytes(b"fake dng spec")
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["name"] = []
+    with pytest.raises(TypeError, match="resource name must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["kind"] = False
+    with pytest.raises(TypeError, match="resource kind must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["size_bytes"] = True
+    with pytest.raises(TypeError, match="resource size_bytes must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["sha256"] = 7
+    with pytest.raises(TypeError, match="resource sha256 must be a string"):
         module._summary_markdown(report)
 
 
