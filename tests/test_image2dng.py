@@ -3611,6 +3611,24 @@ def test_demo_review_bundle_rejects_unsafe_reported_paths(tmp_path):
             module._join_reported_path(tmp_path, value)
 
 
+def test_demo_review_bundle_restricts_absolute_source_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    default_root = tmp_path / "work" / "visual-demo"
+    repo_root = tmp_path / "repo"
+    allowed_work_source = default_root / "phase-2-cfa" / "sample.dng"
+    allowed_repo_source = repo_root / "docs" / "compatibility.md"
+    outside_source = tmp_path / "outside" / "sample.dng"
+
+    assert module._resolve_source_path(str(allowed_work_source), default_root, repo_root) == (
+        allowed_work_source
+    )
+    assert module._resolve_source_path(str(allowed_repo_source), default_root, repo_root) == (
+        allowed_repo_source
+    )
+    with pytest.raises(ValueError, match="unsafe source path in report"):
+        module._resolve_source_path(str(outside_source), default_root, repo_root)
+
+
 def test_demo_review_bundle_skip_baseline_help_is_gate_oriented(capsys):
     module = _load_script_module("generate_demo_review_bundle")
 

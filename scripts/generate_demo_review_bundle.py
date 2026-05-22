@@ -800,6 +800,10 @@ def _resolve_under_repo(path: Path, repo_root: Path) -> Path:
 def _resolve_source_path(value: str, default_root: Path, repo_root: Path) -> Path:
     path = Path(value)
     if path.is_absolute():
+        resolved = path.resolve()
+        allowed_roots = (default_root.resolve(), repo_root.resolve())
+        if not any(_is_relative_to(resolved, root) for root in allowed_roots):
+            raise ValueError(f"unsafe source path in report: {value}")
         return path
     repo_path = repo_root / path
     if repo_path.exists():
@@ -820,6 +824,10 @@ def _join_reported_path(root: Path, value: str) -> Path:
 
 def _relative_posix(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
 
 def _sha256(path: Path) -> str:
