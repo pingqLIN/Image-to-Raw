@@ -3923,6 +3923,22 @@ def test_demo_review_bundle_rejects_malformed_command_status():
         module._has_command_failure({"commands": [{"status": False}]})
 
 
+def test_demo_review_bundle_rejects_malformed_report_accessors():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(TypeError, match="report commands must contain objects"):
+        module._commands({"commands": ["not-a-command"]})
+
+    with pytest.raises(TypeError, match="report artifacts must contain objects"):
+        module._artifacts({"artifacts": ["not-an-artifact"]})
+
+    with pytest.raises(TypeError, match="report source_reports must be an object"):
+        module._source_reports({"source_reports": []})
+
+    with pytest.raises(TypeError, match="report errors must be a list"):
+        module._errors({"errors": "none"})
+
+
 def test_demo_review_bundle_rejects_stale_artifact_integrity(tmp_path):
     module = _load_script_module("generate_demo_review_bundle")
     output_dir = tmp_path / "review-bundle"
