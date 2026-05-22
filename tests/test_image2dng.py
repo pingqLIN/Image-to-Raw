@@ -1875,6 +1875,61 @@ def test_compatibility_evidence_rejects_malformed_fixture_validation_flag():
 
 def test_compatibility_evidence_rejects_malformed_report_accessors():
     module = _load_script_module("generate_compatibility_evidence")
+    report = {
+        "schema": "image2dng.compatibility_evidence.v2",
+        "generated_at": "2026-05-23T00:00:00Z",
+        "output_dir": "demo-output/compatibility-evidence",
+        "ok": True,
+        "tools": {},
+        "matrix": [],
+        "fixtures": [],
+        "errors": [],
+        "install_policy": {
+            "auto_install": False,
+            "missing_tool_policy": "skipped",
+            "available_tool_failure_policy": "failed",
+        },
+    }
+
+    malformed = report | {"schema": 1}
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"generated_at": []}
+    with pytest.raises(TypeError, match="report generated_at must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"output_dir": False}
+    with pytest.raises(TypeError, match="report output_dir must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"ok": "true"}
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"install_policy": []}
+    with pytest.raises(TypeError, match="report install_policy must be an object"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"install_policy": report["install_policy"] | {"auto_install": "no"}}
+    with pytest.raises(TypeError, match="install_policy auto_install must be a boolean"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"] | {"missing_tool_policy": []}
+    }
+    with pytest.raises(TypeError, match="install_policy missing_tool_policy must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"]
+        | {"available_tool_failure_policy": False}
+    }
+    with pytest.raises(
+        TypeError,
+        match="install_policy available_tool_failure_policy must be a string",
+    ):
+        module._summary_markdown(malformed)
 
     with pytest.raises(TypeError, match="report fixtures must contain objects"):
         module._fixtures({"fixtures": ["not-a-fixture"]})

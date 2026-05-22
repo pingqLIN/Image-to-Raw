@@ -306,13 +306,14 @@ def _append_failures(report: dict[str, Any]) -> None:
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
+    install_policy = _install_policy(report)
     lines = [
         "# Compatibility Evidence Summary",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- Generated at: `{report['generated_at']}`",
-        f"- Output dir: `{report['output_dir']}`",
-        f"- Overall ok: `{report['ok']}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- Generated at: `{_generated_at(report)}`",
+        f"- Output dir: `{_output_dir(report)}`",
+        f"- Overall ok: `{_report_ok(report)}`",
         "",
         "## Tool Inventory",
         "",
@@ -367,11 +368,11 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             "",
             "## Install Policy",
             "",
-            f"- Auto install: `{report['install_policy']['auto_install']}`",
-            f"- Missing tool policy: `{report['install_policy']['missing_tool_policy']}`",
+            f"- Auto install: `{_install_policy_auto_install(install_policy)}`",
+            f"- Missing tool policy: `{_install_policy_missing_tool_policy(install_policy)}`",
             (
                 "- Available tool failure policy: "
-                f"`{report['install_policy']['available_tool_failure_policy']}`"
+                f"`{_install_policy_available_tool_failure_policy(install_policy)}`"
             ),
             "- Install hints are dry-run guidance only.",
         ]
@@ -385,6 +386,62 @@ def _fixture_by_slug(report: dict[str, Any], slug: str) -> dict[str, Any] | None
         if fixture["slug"] == slug:
             return fixture
     return None
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _generated_at(report: dict[str, Any]) -> str:
+    generated_at = report["generated_at"]
+    if not isinstance(generated_at, str):
+        raise TypeError("report generated_at must be a string")
+    return generated_at
+
+
+def _output_dir(report: dict[str, Any]) -> str:
+    output_dir = report["output_dir"]
+    if not isinstance(output_dir, str):
+        raise TypeError("report output_dir must be a string")
+    return output_dir
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _install_policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["install_policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report install_policy must be an object")
+    return policy
+
+
+def _install_policy_auto_install(policy: dict[str, Any]) -> bool:
+    auto_install = policy["auto_install"]
+    if not isinstance(auto_install, bool):
+        raise TypeError("install_policy auto_install must be a boolean")
+    return auto_install
+
+
+def _install_policy_missing_tool_policy(policy: dict[str, Any]) -> str:
+    missing_tool_policy = policy["missing_tool_policy"]
+    if not isinstance(missing_tool_policy, str):
+        raise TypeError("install_policy missing_tool_policy must be a string")
+    return missing_tool_policy
+
+
+def _install_policy_available_tool_failure_policy(policy: dict[str, Any]) -> str:
+    failure_policy = policy["available_tool_failure_policy"]
+    if not isinstance(failure_policy, str):
+        raise TypeError("install_policy available_tool_failure_policy must be a string")
+    return failure_policy
 
 
 def _fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
