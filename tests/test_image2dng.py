@@ -51,8 +51,10 @@ from image2dng.pipeline import (
 from image2dng.semantic_reaction import (
     HIGHLIGHT_CLIPPING_REACTION_MODEL,
     REGION_EXPOSURE_REACTION_MODEL,
+    SEMANTIC_REACTION_CHAIN_MODEL,
     apply_highlight_clipping_policy,
     apply_region_exposure_reaction,
+    apply_semantic_reaction_chain,
     load_semantic_payload,
     semantic_reaction_model_registry,
 )
@@ -745,6 +747,9 @@ def test_semantic_reaction_model_registry_reports_model_boundaries():
         in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
     )
     assert "camera tone-curve" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
+    assert registry[SEMANTIC_REACTION_CHAIN_MODEL]["status"] == "implemented"
+    assert registry[SEMANTIC_REACTION_CHAIN_MODEL]["current_raw_value_effect"] is True
+    assert "ordered composition" in registry[SEMANTIC_REACTION_CHAIN_MODEL]["scope"]
 
 
 def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):
@@ -880,6 +885,37 @@ def test_highlight_clipping_policy_reports_noop_for_clip_policy(tmp_path):
     assert result.status == "no-op"
     assert result.reason == "no highlight clipping policy requiring value mapping"
     assert np.array_equal(reacted, image)
+
+
+def test_semantic_reaction_chain_composes_region_exposure_and_highlight_policy(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=4,
+        height=3,
+        exposure_bias_ev=1.0,
+        mask_columns=2,
+    )
+    image = np.full((3, 4, 3), 40000, dtype=np.uint16)
+
+    reacted, result = apply_semantic_reaction_chain(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+        semantic_base_dir=tmp_path,
+    )
+
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.model == SEMANTIC_REACTION_CHAIN_MODEL
+    assert result.affected_pixels == 12
+    assert [entry["model"] for entry in result.regions] == [
+        REGION_EXPOSURE_REACTION_MODEL,
+        HIGHLIGHT_CLIPPING_REACTION_MODEL,
+    ]
+    assert result.regions[0]["affected_pixels"] == 6
+    assert result.regions[1]["affected_pixels"] == 6
+    assert np.all(reacted[:, :2] < 65535)
+    assert np.all(reacted[:, :2] > image[:, :2])
+    assert np.array_equal(reacted[:, 2:], image[:, 2:])
 
 
 def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
@@ -1086,8 +1122,13 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
     reacted_scene = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     assert preserved_scene["semantic_to_raw_status"] == "preserved-not-applied"
     assert reacted_scene["semantic_to_raw_status"] == "applied"
-    assert reacted_scene["semantic_reaction"]["model"] == "region-exposure-mask-v1"
-    assert reacted_scene["semantic_reaction"]["affected_pixels"] == 180
+    assert reacted_scene["semantic_reaction"]["model"] == "semantic-reaction-chain-v1"
+    assert reacted_scene["semantic_reaction"]["affected_pixels"] == 340
+    assert [
+        entry["model"] for entry in reacted_scene["semantic_reaction"]["regions"]
+    ] == ["region-exposure-mask-v1", "highlight-clipping-policy-v1"]
+    assert reacted_scene["semantic_reaction"]["regions"][0]["affected_pixels"] == 180
+    assert reacted_scene["semantic_reaction"]["regions"][1]["affected_pixels"] == 160
     assert Path(reacted_scene["outputs"]["original_scene_linear_input"]).exists()
     assert Path(reacted_scene["outputs"]["scene_linear_input"]).name.endswith(
         "-semantic-reaction.tif"
@@ -1104,10 +1145,10 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
     sample = json.loads(reacted.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
     assert sample["semantic_to_raw_status"] == "applied"
     assert sample["semantic_reaction"] == {
-        "model": "region-exposure-mask-v1",
+        "model": "semantic-reaction-chain-v1",
         "applied": True,
-        "region_count": 1,
-        "affected_pixels": 180,
+        "region_count": 2,
+        "affected_pixels": 340,
     }
 
 
@@ -1191,6 +1232,9 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
         height=18,
         exposure_bias_ev=None,
     )
+    payload = load_semantic_payload(semantic_path)
+    payload["sensor_response_hints"]["clipping_policy"] = "clip"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
 
     result = run_external_scene_linear_batch(
         tmp_path / "noop-batch",
@@ -1207,9 +1251,9 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
     scene_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     assert scene_manifest["semantic_to_raw_status"] == "no-op"
     assert scene_manifest["semantic_reaction"]["applied"] is False
-    assert scene_manifest["semantic_reaction"]["reason"] == (
-        "no regions with exposure_bias_ev and mask_asset_id"
-    )
+    assert "no regions with exposure_bias_ev and mask_asset_id" in scene_manifest[
+        "semantic_reaction"
+    ]["reason"]
 
 
 def test_external_scene_linear_batch_semantic_reaction_rejects_encoded_input(tmp_path):
@@ -1277,8 +1321,10 @@ def test_external_scene_linear_batch_semantic_reaction_hashes_mask_asset_bytes(t
     first_scene = json.loads(first.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     second_scene = json.loads(second.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     assert first_scene["prompt_hash"] != second_scene["prompt_hash"]
-    assert first_scene["semantic_reaction"]["affected_pixels"] == 90
-    assert second_scene["semantic_reaction"]["affected_pixels"] == 360
+    assert first_scene["semantic_reaction"]["regions"][0]["affected_pixels"] == 90
+    assert first_scene["semantic_reaction"]["regions"][1]["affected_pixels"] == 112
+    assert second_scene["semantic_reaction"]["regions"][0]["affected_pixels"] == 360
+    assert second_scene["semantic_reaction"]["regions"][1]["affected_pixels"] == 288
     assert (
         first_scene["raw_data_unique_ids"]["linearraw"]
         != second_scene["raw_data_unique_ids"]["linearraw"]

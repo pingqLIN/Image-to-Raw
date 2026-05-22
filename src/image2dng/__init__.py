@@ -23,12 +23,14 @@ from image2dng.pipeline import (
 from image2dng.semantic_reaction import (
     HIGHLIGHT_CLIPPING_REACTION_MODEL,
     REGION_EXPOSURE_REACTION_MODEL,
+    SEMANTIC_REACTION_CHAIN_MODEL,
     SEMANTIC_REACTION_MODEL_REGISTRY,
     SUPPORTED_REACTION_INPUT_SPACES,
     SemanticReactionModelInfo,
     SemanticReactionResult,
     apply_highlight_clipping_policy,
     apply_region_exposure_reaction,
+    apply_semantic_reaction_chain,
     semantic_reaction_model_registry,
 )
 from image2dng.semantic_scene import (
@@ -52,6 +54,7 @@ __all__ = [
     "OutputExistsError",
     "PipelineBatchResult",
     "REGION_EXPOSURE_REACTION_MODEL",
+    "SEMANTIC_REACTION_CHAIN_MODEL",
     "SEMANTIC_SCENE_SCHEMA",
     "SEMANTIC_REACTION_MODEL_REGISTRY",
     "SUPPORTED_REACTION_INPUT_SPACES",
@@ -63,6 +66,7 @@ __all__ = [
     "ValidationError",
     "apply_highlight_clipping_policy",
     "apply_region_exposure_reaction",
+    "apply_semantic_reaction_chain",
     "convert",
     "inspect_adobe_converted_dng",
     "load_external_scene_manifest",

@@ -18,7 +18,7 @@ from image2dng.image_processing import InputSpace
 from image2dng.semantic_reaction import (
     SUPPORTED_REACTION_INPUT_SPACES,
     SemanticReactionResult,
-    apply_region_exposure_reaction,
+    apply_semantic_reaction_chain,
     load_semantic_payload,
     read_scene_linear_image,
 )
@@ -838,7 +838,7 @@ def _apply_semantic_reaction(
     semantic_path = Path(semantic_path_value)
     payload = load_semantic_payload(semantic_path)
     image = read_scene_linear_image(scene_linear_path)
-    reacted_image, reaction = apply_region_exposure_reaction(
+    reacted_image, reaction = apply_semantic_reaction_chain(
         image,
         semantic_payload=payload,
         semantic_base_dir=semantic_path.parent,

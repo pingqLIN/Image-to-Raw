@@ -12,6 +12,7 @@ from PIL import Image
 
 REGION_EXPOSURE_REACTION_MODEL = "region-exposure-mask-v1"
 HIGHLIGHT_CLIPPING_REACTION_MODEL = "highlight-clipping-policy-v1"
+SEMANTIC_REACTION_CHAIN_MODEL = "semantic-reaction-chain-v1"
 SUPPORTED_REACTION_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
 _HIGHLIGHT_POLICY_SHOULDERS = {
     "preserve-highlights": (0.90, 0.50),
@@ -57,6 +58,17 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
         boundary=(
             "deterministic shoulder mapping only; must not claim camera tone-curve, "
             "ISO response, or preserved sensor detail"
+        ),
+    ),
+    SEMANTIC_REACTION_CHAIN_MODEL: SemanticReactionModelInfo(
+        model_id=SEMANTIC_REACTION_CHAIN_MODEL,
+        status="implemented",
+        current_raw_value_effect=True,
+        intended_raw_value_effect=True,
+        scope="ordered composition of implemented deterministic semantic reaction helpers",
+        boundary=(
+            "composition contract only; each child helper keeps its own physical-model "
+            "limits and provenance boundaries"
         ),
     ),
 }
@@ -163,6 +175,56 @@ def apply_region_exposure_reaction(
         status="applied",
         regions=applied_regions,
         affected_pixels=affected_total,
+    )
+
+
+def apply_semantic_reaction_chain(
+    image: np.ndarray,
+    *,
+    semantic_payload: dict[str, Any],
+    semantic_base_dir: Path,
+    input_space: str | None = None,
+) -> tuple[np.ndarray, SemanticReactionResult]:
+    reacted, exposure = apply_region_exposure_reaction(
+        image,
+        semantic_payload=semantic_payload,
+        semantic_base_dir=semantic_base_dir,
+        input_space=input_space,
+    )
+    reacted, highlight = apply_highlight_clipping_policy(
+        reacted,
+        semantic_payload=semantic_payload,
+        input_space=input_space,
+    )
+    active = [result for result in (exposure, highlight) if result.applied]
+    if not active:
+        return image.copy(), SemanticReactionResult(
+            model=SEMANTIC_REACTION_CHAIN_MODEL,
+            applied=False,
+            status="no-op",
+            reason="; ".join(
+                result.reason for result in (exposure, highlight) if result.reason
+            ),
+            regions=[],
+        )
+    if len(active) == 1:
+        return reacted, active[0]
+
+    return reacted, SemanticReactionResult(
+        model=SEMANTIC_REACTION_CHAIN_MODEL,
+        applied=True,
+        status="applied",
+        regions=[
+            {
+                "model": result.model,
+                "applied": result.applied,
+                "region_count": len(result.regions),
+                "affected_pixels": result.affected_pixels,
+                "regions": result.regions,
+            }
+            for result in active
+        ],
+        affected_pixels=sum(result.affected_pixels for result in active),
     )
 
 
