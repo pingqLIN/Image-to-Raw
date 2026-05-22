@@ -312,7 +312,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         "| Tool | Available | Version | Notes |",
         "| --- | --- | --- | --- |",
     ]
-    for name, tool in report["tools"].items():
+    for name, tool in _tools(report).items():
         notes = tool.get("notes", "")
         lines.append(
             f"| `{name}` | `{tool.get('available')}` | `{tool.get('version')}` | {notes} |"
@@ -371,6 +371,13 @@ def _fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not all(isinstance(fixture, dict) for fixture in fixtures):
         raise TypeError("report fixtures must contain objects")
     return fixtures
+
+
+def _tools(report: dict[str, Any]) -> dict[str, Any]:
+    tools = report["tools"]
+    if not isinstance(tools, dict):
+        raise TypeError("report tools must be an object")
+    return tools
 
 
 def _matrix(report: dict[str, Any]) -> list[dict[str, Any]]:
