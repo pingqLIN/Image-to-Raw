@@ -3676,6 +3676,63 @@ def test_demo_review_bundle_collects_source_reports_after_command_failure(tmp_pa
     module._validate_bundle_report(output_dir, report)
 
 
+def test_demo_review_bundle_main_writes_partial_bundle_after_command_failure(
+    tmp_path, monkeypatch
+):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+
+    def fail_after_writing_source_reports(**kwargs):
+        paths = kwargs["paths"]
+        report = kwargs["report"]
+        source_files = {
+            paths.visual_dir / "manifest.json": {"schema": "visual"},
+            paths.raw_native_dir
+            / "manifests"
+            / "raw-native-node-batch.json": {"schema": "raw"},
+            paths.raw_native_dir / "manifests" / "sample-index.json": {"schema": "sample"},
+            paths.baseline_dir / "verification-report.json": {"schema": "baseline"},
+            paths.compatibility_dir / "compatibility-report.json": {"schema": "compatibility"},
+        }
+        for path, payload in source_files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload), encoding="utf-8")
+        (paths.compatibility_dir / "compatibility-summary.md").write_text(
+            "# Compatibility Summary\n\n## Fixture Integrity\n",
+            encoding="utf-8",
+        )
+        report["commands"].append(
+            {
+                "name": "compatibility-evidence",
+                "command": ["synthetic", "compatibility-evidence"],
+                "exit_code": 7,
+                "duration_seconds": 0.0,
+                "status": "failed",
+            }
+        )
+        report["errors"].append("compatibility-evidence failed with exit code 7")
+
+    monkeypatch.setattr(module, "_run_upstream_generators", fail_after_writing_source_reports)
+
+    assert module.main(["--output-dir", str(output_dir)]) == 1
+
+    report_path = output_dir / "review-bundle-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    source_reports = report["source_reports"]
+    artifact_paths = {artifact["bundle_path"] for artifact in report["artifacts"]}
+
+    assert report["ok"] is False
+    assert report["errors"] == ["compatibility-evidence failed with exit code 7"]
+    assert source_reports["compatibility_summary"] == (
+        "artifacts/reports/compatibility-summary.md"
+    )
+    assert all(path in artifact_paths for path in source_reports.values())
+    assert all((output_dir / path).exists() for path in source_reports.values())
+    assert "index.md" in artifact_paths
+    assert "## Errors" in (output_dir / "index.md").read_text(encoding="utf-8")
+    module._validate_bundle_report(output_dir, report)
+
+
 def test_demo_review_bundle_rejects_malformed_command_status():
     module = _load_script_module("generate_demo_review_bundle")
 
