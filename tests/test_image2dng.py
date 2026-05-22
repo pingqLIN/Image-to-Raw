@@ -417,8 +417,8 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "raw_ifd_location": "Raw SubIFD referenced from IFD0",
         "external_scene_linear_boundary": "available",
         "semantic_boundary": (
-            "semantic sidecar is preserved by default; opt-in region-exposure-mask-v1 "
-            "can affect raw values"
+            "semantic sidecar is preserved by default; opt-in semantic-reaction-chain-v1 "
+            "helpers can affect raw values"
         ),
     }
     assert scene_manifest.keys() >= {
@@ -1139,7 +1139,7 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
         "-semantic-reaction.tif"
     )
     assert reacted_scene["nodes"][0]["parameters"]["semantic_boundary"] == (
-        "semantic sidecar applied through opt-in region-exposure-mask-v1 reaction"
+        "semantic sidecar applied through opt-in semantic-reaction-chain-v1 helpers"
     )
     assert (
         preserved_scene["raw_data_unique_ids"]["linearraw"]

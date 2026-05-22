@@ -28,7 +28,7 @@ This product includes DNG technology under license by Adobe.
 | Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
 | Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
 | RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
-| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; optional region-exposure reaction prototype |
+| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; optional semantic reaction chain helpers |
 | Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
 | Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
 
@@ -126,7 +126,7 @@ uv run image2dng-comfyui-import `
 
 This core repository accepts `image2dng.external_scene_linear_sources.v1` manifests from the bridge or any other external producer, then owns the scene-linear input, semantic sidecar, DNG writer, validation, and RAW-native batch steps. ComfyUI workflow metadata still enters manifests through `producer_metadata` / `producer_metadata_manifest`, but it is no longer a built-in core package API.
 
-When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. By default this remains preservation + validation; when the manifest explicitly sets `apply_semantic_reaction: true`, the deterministic `region-exposure-mask-v1` prototype can use region masks and `exposure_bias_ev` to affect 16-bit scene-linear RGB values. This prototype is not a full physical sensor model. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
+When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. By default this remains preservation + validation; when the manifest explicitly sets `apply_semantic_reaction: true`, the deterministic `semantic-reaction-chain-v1` helpers currently apply `region-exposure-mask-v1` followed by `highlight-clipping-policy-v1` to affect 16-bit scene-linear RGB values. This chain is not a full physical sensor model. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
 
 ## Run the development baseline verification
 
@@ -313,7 +313,7 @@ Current MVP:
 - Explicit simulated CFA mosaic mode.
 - Default `preview-subifd` DNG layout with an IFD0 JPEG preview and Raw SubIFD.
 - Built-in minimal RAW-native node pipeline that emits DNG, sidecar JPEG preview, validation JSON, and graph manifest artifacts.
-- `image2dng.semantic_scene.v1` sidecar validation / preservation plus the opt-in `region-exposure-mask-v1` reaction prototype.
+- `image2dng.semantic_scene.v1` sidecar validation / preservation plus the opt-in `semantic-reaction-chain-v1` helpers.
 - Optional deterministic synthetic sensor effects for demos and compatibility testing.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.

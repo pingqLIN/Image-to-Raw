@@ -32,8 +32,8 @@ from image2dng.validate import find_raw_image_page, validate_dng
 SceneStyle = Literal["chart-ramp", "portrait-light-study", "material-still-life"]
 
 SEMANTIC_BOUNDARY = (
-    "semantic sidecar is preserved by default; opt-in region-exposure-mask-v1 "
-    "can affect raw values"
+    "semantic sidecar is preserved by default; opt-in semantic-reaction-chain-v1 "
+    "helpers can affect raw values"
 )
 
 
@@ -815,7 +815,7 @@ def _semantic_to_raw_status(
 
 def _external_semantic_boundary(scene: ExternalSceneLinearInput) -> str:
     if scene.apply_semantic_reaction:
-        return "semantic sidecar applied through opt-in region-exposure-mask-v1 reaction"
+        return "semantic sidecar applied through opt-in semantic-reaction-chain-v1 helpers"
     if scene.semantic_manifest is not None:
         return "semantic sidecar preserved and validated, but not applied to raw values"
     return "semantic sidecar absent"

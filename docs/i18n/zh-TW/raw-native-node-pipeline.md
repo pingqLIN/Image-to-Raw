@@ -87,7 +87,7 @@ Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與
 
 `semantic_manifest` 是刻意保留的下一階段接點。若 sidecar 使用 `image2dng.semantic_scene.v1`，pipeline 會在 DNG 產生前驗證它、複製 sidecar、複製可 resolve 的 local assets，並在 batch manifest 與 sample index 記錄 validation summary。預設仍不把語意資訊轉成 raw sample values。
 
-若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 會啟用 `region-exposure-mask-v1` prototype，使用 region mask 與 `exposure_bias_ev` 對 16-bit scene-linear RGB input 進行 deterministic EV modulation。這只支援 `linear-rec709`、`acescg`、`xyz`，不支援 encoded `srgb` 或 `prophoto-rgb` 直接套用 reaction。詳細 contract 見 [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md)。
+若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 會啟用 `semantic-reaction-chain-v1` helpers，目前先用 `region-exposure-mask-v1` 依 region mask 與 `exposure_bias_ev` 對 16-bit scene-linear RGB input 進行 deterministic EV modulation，再套用 `highlight-clipping-policy-v1` 的 highlight shoulder mapping。這只支援 `linear-rec709`、`acescg`、`xyz`，不支援 encoded `srgb` 或 `prophoto-rgb` 直接套用 reaction。詳細 contract 見 [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md)。
 
 ## Artifact contract
 
