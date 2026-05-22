@@ -3300,6 +3300,13 @@ def test_demo_review_bundle_records_callable_exception():
     assert report["errors"] == ["synthetic-step failed: synthetic callable failure"]
 
 
+def test_demo_review_bundle_rejects_malformed_command_status():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(TypeError, match="command status must be a string"):
+        module._has_command_failure({"commands": [{"status": False}]})
+
+
 def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch):
     module = _load_script_module("audit_raw_processor_setup")
 

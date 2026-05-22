@@ -824,7 +824,7 @@ def _append_error(report: dict[str, Any], message: str) -> None:
 
 
 def _has_command_failure(report: dict[str, Any]) -> bool:
-    return any(command["status"] != "passed" for command in _commands(report))
+    return any(_command_status(command) != "passed" for command in _commands(report))
 
 
 def _commands(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -834,6 +834,13 @@ def _commands(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not all(isinstance(command, dict) for command in commands):
         raise TypeError("report commands must contain objects")
     return commands
+
+
+def _command_status(command: dict[str, Any]) -> str:
+    status = command["status"]
+    if not isinstance(status, str):
+        raise TypeError("command status must be a string")
+    return status
 
 
 def _artifacts(report: dict[str, Any]) -> list[dict[str, Any]]:
