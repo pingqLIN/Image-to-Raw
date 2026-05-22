@@ -3625,6 +3625,25 @@ def test_verify_adobe_validation_stack_rejects_malformed_summary_findings(tmp_pa
         module._summary_markdown(report)
 
 
+def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
+    module = _load_script_module("verify_adobe_validation_stack")
+
+    with pytest.raises(TypeError, match="child report ok must be a boolean"):
+        module._child_report_ok({"ok": "true"})
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture sample index all_validations_ok must be a boolean",
+    ):
+        module._sample_index_all_validations_ok({"all_validations_ok": "yes"})
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture validation linearraw ok must be a boolean",
+    ):
+        module._validation_ok({"ok": []}, "project fixture validation linearraw")
+
+
 def test_verify_adobe_validation_stack_dry_run_converter_is_not_readiness(tmp_path):
     module = _load_script_module("verify_adobe_validation_stack")
     repo_root = tmp_path / "repo"

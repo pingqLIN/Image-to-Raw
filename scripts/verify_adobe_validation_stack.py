@@ -345,7 +345,7 @@ def _run_child_step(
     step["child_report_path"] = _path_record(report_path, repo_root)
     step["child_report"] = child_report
     step["blocking_findings"].extend(report_errors)
-    if child_report is not None and child_report.get("ok") is not True:
+    if child_report is not None and not _child_report_ok(child_report):
         for finding in _child_blocking_findings(child_report):
             step["blocking_findings"].append(f"{name}: {finding}")
     _finalize_step_status(step)
@@ -482,14 +482,14 @@ def _inspect_project_dng_fixtures(
         errors.append("project fixture manifest schema mismatch")
     if sample_index.get("schema") != "image2dng.raw_native_sample_index.v1":
         errors.append("project fixture sample index schema mismatch")
-    if sample_index.get("all_validations_ok") is not True:
+    if not _sample_index_all_validations_ok(sample_index):
         errors.append("project fixture sample index reports validation failure")
     scenes = manifest.get("scenes")
     if not isinstance(scenes, list) or not scenes:
         errors.append("project fixture manifest has no scenes")
         scenes = []
     inspection["scene_count"] = len(scenes)
-    inspection["all_validations_ok"] = sample_index.get("all_validations_ok") is True
+    inspection["all_validations_ok"] = _sample_index_all_validations_ok(sample_index)
 
     dng_paths: list[Path] = []
     validation_failures = 0
@@ -523,7 +523,10 @@ def _inspect_project_dng_fixtures(
             continue
         for key in ("linearraw", "cfa"):
             validation = validations.get(key)
-            if not isinstance(validation, dict) or validation.get("ok") is not True:
+            if not isinstance(validation, dict) or not _validation_ok(
+                validation,
+                f"project fixture validation {key}",
+            ):
                 validation_failures += 1
     if validation_failures:
         errors.append(f"project fixture validation failure count: {validation_failures}")
@@ -572,6 +575,27 @@ def _child_blocking_findings(report: dict[str, Any]) -> list[str]:
     if isinstance(status, str) and status not in {"passed", "dry-run"}:
         return [f"child report status is {status}"]
     return ["child report ok is false"]
+
+
+def _child_report_ok(report: dict[str, Any]) -> bool:
+    ok = report.get("ok")
+    if not isinstance(ok, bool):
+        raise TypeError("child report ok must be a boolean")
+    return ok
+
+
+def _sample_index_all_validations_ok(sample_index: dict[str, Any]) -> bool:
+    ok = sample_index.get("all_validations_ok")
+    if not isinstance(ok, bool):
+        raise TypeError("project fixture sample index all_validations_ok must be a boolean")
+    return ok
+
+
+def _validation_ok(validation: dict[str, Any], label: str) -> bool:
+    ok = validation.get("ok")
+    if not isinstance(ok, bool):
+        raise TypeError(f"{label} ok must be a boolean")
+    return ok
 
 
 def _extend_blocking_findings(blocking_findings: list[str], step: dict[str, Any]) -> None:
