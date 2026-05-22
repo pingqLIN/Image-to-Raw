@@ -1881,8 +1881,26 @@ def test_compatibility_evidence_rejects_malformed_report_accessors():
         "output_dir": "demo-output/compatibility-evidence",
         "ok": True,
         "tools": {},
-        "matrix": [],
-        "fixtures": [],
+        "matrix": [
+            {
+                "fixture": "sample",
+                "tool": "image2dng validate",
+                "result": "passed",
+                "evidence": "sample.validation.json",
+                "notes": "ok",
+            }
+        ],
+        "fixtures": [
+            {
+                "slug": "sample",
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "dng_bytes": 128,
+                "dng_sha256": "sha256:dng",
+                "validation_json_bytes": 64,
+                "validation_json_sha256": "sha256:validation",
+            }
+        ],
         "errors": [],
         "install_policy": {
             "auto_install": False,
@@ -1928,6 +1946,58 @@ def test_compatibility_evidence_rejects_malformed_report_accessors():
     with pytest.raises(
         TypeError,
         match="install_policy available_tool_failure_policy must be a string",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"matrix": [report["matrix"][0] | {"fixture": []}]}
+    with pytest.raises(TypeError, match="matrix fixture must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"matrix": [report["matrix"][0] | {"tool": False}]}
+    with pytest.raises(TypeError, match="matrix tool must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"matrix": [report["matrix"][0] | {"evidence": []}]}
+    with pytest.raises(TypeError, match="matrix evidence must be a string or null"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"slug": []}]}
+    with pytest.raises(TypeError, match="fixture slug must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"dng_layout": False}]}
+    with pytest.raises(TypeError, match="fixture dng_layout must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "fixtures": [report["fixtures"][0] | {"raw_ifd_location": []}]
+    }
+    with pytest.raises(TypeError, match="fixture raw_ifd_location must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"dng_bytes": True}]}
+    with pytest.raises(TypeError, match="fixture dng_bytes must be an integer"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"dng_sha256": 7}]}
+    with pytest.raises(TypeError, match="fixture dng_sha256 must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "fixtures": [report["fixtures"][0] | {"validation_json_bytes": False}]
+    }
+    with pytest.raises(
+        TypeError,
+        match="fixture validation_json_bytes must be an integer",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "fixtures": [report["fixtures"][0] | {"validation_json_sha256": []}]
+    }
+    with pytest.raises(
+        TypeError,
+        match="fixture validation_json_sha256 must be a string",
     ):
         module._summary_markdown(malformed)
 

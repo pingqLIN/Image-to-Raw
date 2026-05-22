@@ -335,17 +335,19 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         ]
     )
     for entry in _matrix(report):
-        fixture = _fixture_by_slug(report, str(entry["fixture"]))
-        notes = entry["notes"]
-        if fixture is not None and entry["tool"] == "image2dng validate":
+        entry_fixture = _matrix_fixture(entry)
+        entry_tool = _matrix_tool(entry)
+        fixture = _fixture_by_slug(report, entry_fixture)
+        notes = _matrix_notes(entry)
+        if fixture is not None and entry_tool == "image2dng validate":
             notes = (
-                f"{notes}; layout={fixture['dng_layout']}; "
-                f"raw_ifd_location={fixture['raw_ifd_location']}"
+                f"{notes}; layout={_fixture_dng_layout(fixture)}; "
+                f"raw_ifd_location={_fixture_raw_ifd_location(fixture)}"
             )
         lines.append(
             "| "
-            f"`{entry['fixture']}` | `{entry['tool']}` | `{entry['result']}` | "
-            f"`{entry['evidence']}` | {notes} |"
+            f"`{entry_fixture}` | `{entry_tool}` | `{_matrix_result(entry)}` | "
+            f"`{_matrix_evidence(entry)}` | {notes} |"
         )
     lines.extend(
         [
@@ -360,8 +362,10 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     for fixture in _fixtures(report):
         lines.append(
             "| "
-            f"`{fixture['slug']}` | `{fixture['dng_bytes']}` | `{fixture['dng_sha256']}` | "
-            f"`{fixture['validation_json_bytes']}` | `{fixture['validation_json_sha256']}` |"
+            f"`{_fixture_slug(fixture)}` | `{_fixture_dng_bytes(fixture)}` | "
+            f"`{_fixture_dng_sha256(fixture)}` | "
+            f"`{_fixture_validation_json_bytes(fixture)}` | "
+            f"`{_fixture_validation_json_sha256(fixture)}` |"
         )
     lines.extend(
         [
@@ -383,7 +387,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
 
 def _fixture_by_slug(report: dict[str, Any], slug: str) -> dict[str, Any] | None:
     for fixture in _fixtures(report):
-        if fixture["slug"] == slug:
+        if _fixture_slug(fixture) == slug:
             return fixture
     return None
 
@@ -467,6 +471,55 @@ def _fixture_validation_ok(fixture: dict[str, Any]) -> bool:
     return validation_ok
 
 
+def _fixture_slug(fixture: dict[str, Any]) -> str:
+    slug = fixture["slug"]
+    if not isinstance(slug, str):
+        raise TypeError("fixture slug must be a string")
+    return slug
+
+
+def _fixture_dng_layout(fixture: dict[str, Any]) -> str:
+    layout = fixture["dng_layout"]
+    if not isinstance(layout, str):
+        raise TypeError("fixture dng_layout must be a string")
+    return layout
+
+
+def _fixture_raw_ifd_location(fixture: dict[str, Any]) -> str:
+    location = fixture["raw_ifd_location"]
+    if not isinstance(location, str):
+        raise TypeError("fixture raw_ifd_location must be a string")
+    return location
+
+
+def _fixture_dng_bytes(fixture: dict[str, Any]) -> int:
+    byte_count = fixture["dng_bytes"]
+    if not isinstance(byte_count, int) or isinstance(byte_count, bool):
+        raise TypeError("fixture dng_bytes must be an integer")
+    return byte_count
+
+
+def _fixture_dng_sha256(fixture: dict[str, Any]) -> str:
+    sha256 = fixture["dng_sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("fixture dng_sha256 must be a string")
+    return sha256
+
+
+def _fixture_validation_json_bytes(fixture: dict[str, Any]) -> int:
+    byte_count = fixture["validation_json_bytes"]
+    if not isinstance(byte_count, int) or isinstance(byte_count, bool):
+        raise TypeError("fixture validation_json_bytes must be an integer")
+    return byte_count
+
+
+def _fixture_validation_json_sha256(fixture: dict[str, Any]) -> str:
+    sha256 = fixture["validation_json_sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("fixture validation_json_sha256 must be a string")
+    return sha256
+
+
 def _tools(report: dict[str, Any]) -> dict[str, Any]:
     tools = report["tools"]
     if not isinstance(tools, dict):
@@ -483,11 +536,32 @@ def _matrix(report: dict[str, Any]) -> list[dict[str, Any]]:
     return matrix
 
 
+def _matrix_fixture(entry: dict[str, Any]) -> str:
+    fixture = entry["fixture"]
+    if not isinstance(fixture, str):
+        raise TypeError("matrix fixture must be a string")
+    return fixture
+
+
+def _matrix_tool(entry: dict[str, Any]) -> str:
+    tool = entry["tool"]
+    if not isinstance(tool, str):
+        raise TypeError("matrix tool must be a string")
+    return tool
+
+
 def _matrix_result(entry: dict[str, Any]) -> str:
     result = entry["result"]
     if not isinstance(result, str):
         raise TypeError("matrix result must be a string")
     return result
+
+
+def _matrix_evidence(entry: dict[str, Any]) -> str | None:
+    evidence = entry["evidence"]
+    if isinstance(evidence, str) or evidence is None:
+        return evidence
+    raise TypeError("matrix evidence must be a string or null")
 
 
 def _matrix_notes(entry: dict[str, Any]) -> str:
