@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import shutil
@@ -314,6 +315,7 @@ def _artifact_record(key: str, path: Path) -> dict[str, object]:
         "key": key,
         "path": str(path),
         "bytes": path.stat().st_size,
+        "sha256": _sha256(path),
     }
 
 
@@ -356,6 +358,14 @@ def _inspect_jpeg(
 def _resolve_path(value: str, repo_root: Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else repo_root / path
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _string(payload: dict[str, object], key: str) -> str:

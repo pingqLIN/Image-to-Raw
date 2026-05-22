@@ -3643,6 +3643,7 @@ def test_development_baseline_validation_artifact_reads_json(tmp_path):
 
     assert record["validation_ok"] is True
     assert record["validation_error_count"] == 0
+    assert record["sha256"] == module._sha256(validation_path)
 
 
 def test_development_baseline_validation_artifact_rejects_failed_json(tmp_path):
