@@ -95,4 +95,4 @@ Optional smoke tools are compatibility evidence, not mandatory gates:
 
 - available tools that parse/export successfully are recorded as `passed`;
 - missing tools are recorded as `skipped`;
-- Adobe DNG SDK remains `manual-only` until a reproducible local validation path is added.
+- Adobe DNG SDK remains `manual-only`; it is not an automated gate without a reproducible local validation path.
