@@ -4318,6 +4318,9 @@ def test_generate_fivek_semantic_physics_sample_refuses_tracked_output(tmp_path)
 def test_generate_visual_demo_rejects_malformed_validation_flag():
     module = _load_script_module("generate_visual_demo")
 
+    with pytest.raises(TypeError, match="validation ok must be a boolean"):
+        module._validation_ok({"ok": "yes"})
+
     with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
         module._all_validations_ok([{"validation_ok": "yes"}])
 

@@ -233,7 +233,7 @@ def generate_asset_outputs(
         validation = validate_dng(path, run_smoke=False).to_dict()
         validation_path.write_text(json.dumps(validation, indent=2), encoding="utf-8")
         validation_paths[name] = validation_path
-        validation_ok[name] = validation["ok"]
+        validation_ok[name] = _validation_ok(validation)
 
     return {
         "manifest": {
@@ -485,7 +485,7 @@ def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> ManifestSheet:
                 "output": str(output),
                 "preview": str(preview_path),
                 "validation": str(validation_path),
-                "validation_ok": validation["ok"],
+                "validation_ok": _validation_ok(validation),
             }
         )
     return ManifestSheet(
@@ -533,7 +533,7 @@ def make_cfa_pattern_sheet(
                 "output": str(output),
                 "preview": str(preview_path),
                 "validation": str(validation_path),
-                "validation_ok": validation["ok"],
+                "validation_ok": _validation_ok(validation),
             }
         )
     return ManifestSheet(
@@ -566,6 +566,13 @@ def write_png_rgb8(path: Path, image: np.ndarray) -> None:
 
 def _all_validations_ok(samples: list[dict[str, Any]]) -> bool:
     return all(_sample_validation_ok(sample) for sample in samples)
+
+
+def _validation_ok(validation: dict[str, Any]) -> bool:
+    ok = validation["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("validation ok must be a boolean")
+    return ok
 
 
 def _sample_validation_ok(sample: dict[str, Any]) -> bool:
