@@ -156,6 +156,19 @@ def test_i18n_english_docs_have_zh_tw_counterparts():
     assert missing == []
 
 
+def test_repo_agent_instructions_keep_zh_tw_source_pair():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "AGENTS.md").read_text(encoding="utf-8")
+    zh_tw = (repo_root / "AGENTS.zh-tw.md").read_text(encoding="utf-8")
+
+    assert "`AGENTS.zh-tw.md` is the Traditional Chinese original source manuscript" in english
+    assert "`AGENTS.md` remains the English canonical baseline" in english
+    assert "edit `AGENTS.zh-tw.md` first, then update this English file" in english
+    assert "`AGENTS.zh-tw.md` 是本專案 repo-local agent 指令的繁體中文原始母檔" in zh_tw
+    assert "`AGENTS.md` 是英文 canonical baseline" in zh_tw
+    assert "先修改 `AGENTS.zh-tw.md`，再同步更新英文 `AGENTS.md`" in zh_tw
+
+
 def test_generate_64x64_gradient_dng(tmp_path):
     input_path = tmp_path / "gradient.tif"
     output_path = tmp_path / "gradient.dng"
