@@ -44,6 +44,7 @@ from image2dng.models import PHOTOMETRIC_LINEAR_RAW, AIMetadataModel, CameraProf
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
+    _validation_summary,
     load_external_scene_manifest,
     run_external_scene_linear_batch,
     run_raw_native_batch,
@@ -382,6 +383,36 @@ def test_raw_native_pipeline_generates_dng_jpeg_and_manifest(tmp_path):
     with Image.open(outputs["cfa_jpeg"]) as image:
         assert image.format == "JPEG"
         assert image.size == (32, 32)
+
+
+def test_raw_native_validation_summary_requires_contract_keys():
+    summary = _validation_summary(
+        {
+            "ok": True,
+            "dng_layout": "preview-subifd",
+            "raw_ifd_location": "IFD0/SubIFD0",
+            "errors": [],
+            "warnings": [],
+            "extra": "kept out of manifest summary",
+        }
+    )
+
+    assert summary == {
+        "ok": True,
+        "dng_layout": "preview-subifd",
+        "raw_ifd_location": "IFD0/SubIFD0",
+        "errors": [],
+        "warnings": [],
+    }
+    with pytest.raises(ValueError, match="validation report missing keys: warnings"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+            }
+        )
 
 
 def test_raw_native_manifest_contract_is_stable(tmp_path):

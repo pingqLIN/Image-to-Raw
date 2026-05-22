@@ -724,13 +724,7 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "producer_metadata_artifacts": scene.producer_metadata_artifacts or {},
         "raw_data_unique_ids": scene.raw_data_unique_ids,
         "validations": {
-            key: {
-                "ok": report["ok"],
-                "dng_layout": report["dng_layout"],
-                "raw_ifd_location": report["raw_ifd_location"],
-                "errors": report["errors"],
-                "warnings": report["warnings"],
-            }
+            key: _validation_summary(report)
             for key, report in scene.validations.items()
         },
         "nodes": [
@@ -744,6 +738,14 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
             for node in scene.nodes
         ],
     }
+
+
+def _validation_summary(report: dict[str, Any]) -> dict[str, Any]:
+    required_keys = ("ok", "dng_layout", "raw_ifd_location", "errors", "warnings")
+    missing = [key for key in required_keys if key not in report]
+    if missing:
+        raise ValueError(f"validation report missing keys: {', '.join(missing)}")
+    return {key: report[key] for key in required_keys}
 
 
 def _external_scene_from_manifest_item(
