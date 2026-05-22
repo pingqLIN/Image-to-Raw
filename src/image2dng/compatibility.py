@@ -322,6 +322,7 @@ def _run_rawtherapee(
         command=[
             "rawtherapee-cli",
             "-Y",
+            "-t",
             "-o",
             _processor_path(output),
             "-c",

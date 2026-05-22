@@ -1592,6 +1592,7 @@ def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeyp
     assert Path(payload["dcraw"]["output_artifacts"][0]).exists()
     assert "\\" not in " ".join(payload["darktable-cli"]["command"][1:])
     assert "\\" not in " ".join(payload["rawtherapee-cli"]["command"][1:])
+    assert "-t" in payload["rawtherapee-cli"]["command"]
 
 
 def test_adobe_converted_artifact_inspection_is_relaxed_for_rewritten_tags(tmp_path):
