@@ -89,6 +89,7 @@ class SemanticReactionResult:
     regions: list[dict[str, Any]]
     affected_pixels: int = 0
     reason: str | None = None
+    affected_pixel_count_semantics: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -101,6 +102,8 @@ class SemanticReactionResult:
         }
         if self.reason is not None:
             payload["reason"] = self.reason
+        if self.affected_pixel_count_semantics is not None:
+            payload["affected_pixel_count_semantics"] = self.affected_pixel_count_semantics
         return payload
 
     def summary_dict(self) -> dict[str, Any]:
@@ -112,6 +115,8 @@ class SemanticReactionResult:
         }
         if self.reason is not None:
             payload["reason"] = self.reason
+        if self.affected_pixel_count_semantics is not None:
+            payload["affected_pixel_count_semantics"] = self.affected_pixel_count_semantics
         return payload
 
 
@@ -225,6 +230,7 @@ def apply_semantic_reaction_chain(
             for result in active
         ],
         affected_pixels=sum(result.affected_pixels for result in active),
+        affected_pixel_count_semantics="sum-of-child-affected-pixels",
     )
 
 

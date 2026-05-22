@@ -907,6 +907,7 @@ def test_semantic_reaction_chain_composes_region_exposure_and_highlight_policy(t
     assert result.status == "applied"
     assert result.model == SEMANTIC_REACTION_CHAIN_MODEL
     assert result.affected_pixels == 12
+    assert result.affected_pixel_count_semantics == "sum-of-child-affected-pixels"
     assert [entry["model"] for entry in result.regions] == [
         REGION_EXPOSURE_REACTION_MODEL,
         HIGHLIGHT_CLIPPING_REACTION_MODEL,
@@ -1124,6 +1125,10 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
     assert reacted_scene["semantic_to_raw_status"] == "applied"
     assert reacted_scene["semantic_reaction"]["model"] == "semantic-reaction-chain-v1"
     assert reacted_scene["semantic_reaction"]["affected_pixels"] == 340
+    assert (
+        reacted_scene["semantic_reaction"]["affected_pixel_count_semantics"]
+        == "sum-of-child-affected-pixels"
+    )
     assert [
         entry["model"] for entry in reacted_scene["semantic_reaction"]["regions"]
     ] == ["region-exposure-mask-v1", "highlight-clipping-policy-v1"]
@@ -1149,6 +1154,7 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
         "applied": True,
         "region_count": 2,
         "affected_pixels": 340,
+        "affected_pixel_count_semantics": "sum-of-child-affected-pixels",
     }
 
 

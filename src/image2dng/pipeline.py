@@ -701,6 +701,15 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
             "region_count": scene.semantic_reaction["region_count"],
             "affected_pixels": scene.semantic_reaction["affected_pixels"],
             **(
+                {
+                    "affected_pixel_count_semantics": scene.semantic_reaction[
+                        "affected_pixel_count_semantics"
+                    ]
+                }
+                if "affected_pixel_count_semantics" in scene.semantic_reaction
+                else {}
+            ),
+            **(
                 {"reason": scene.semantic_reaction["reason"]}
                 if "reason" in scene.semantic_reaction
                 else {}

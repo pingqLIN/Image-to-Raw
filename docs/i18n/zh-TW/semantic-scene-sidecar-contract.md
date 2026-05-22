@@ -115,6 +115,8 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 
 `highlight-clipping-policy-v1` 會把 `sensor_response_hints.clipping_policy` 中的 `preserve-highlights` / `soft-rolloff` 轉成 deterministic highlight shoulder mapping。當 `apply_semantic_reaction: true` 時，pipeline 會在 `region-exposure-mask-v1` 後接著套用此 helper；若兩者都有實際修改，manifest 會以 `semantic-reaction-chain-v1` 記錄 composition。這仍只是 deterministic raw value mapping，避免把 highlight policy 誤說成 camera tone curve、ISO response，或真實 sensor highlight recovery。
 
+對 `semantic-reaction-chain-v1` 而言，`affected_pixels` 是 child helper `affected_pixels` 的加總，不是 unique pixel union；manifest 與 sample index 會以 `affected_pixel_count_semantics: "sum-of-child-affected-pixels"` 明確標示這個口徑。
+
 對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。
 
 目前 reaction model matrix：

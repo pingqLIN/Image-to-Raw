@@ -115,6 +115,8 @@ When the external scene manifest explicitly sets `apply_semantic_reaction: true`
 
 `highlight-clipping-policy-v1` turns `preserve-highlights` / `soft-rolloff` values in `sensor_response_hints.clipping_policy` into deterministic highlight shoulder mapping. When `apply_semantic_reaction: true`, the pipeline runs this helper after `region-exposure-mask-v1`; when both helpers change values, the manifest records the composition as `semantic-reaction-chain-v1`. This is still deterministic raw value mapping only, without claiming a camera tone curve, ISO response, or real sensor highlight recovery.
 
+For `semantic-reaction-chain-v1`, `affected_pixels` is the sum of child helper `affected_pixels`, not a unique pixel union; the manifest and sample index make this explicit with `affected_pixel_count_semantics: "sum-of-child-affected-pixels"`.
+
 For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input.
 
 Current reaction model matrix:
