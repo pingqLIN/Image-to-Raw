@@ -17,7 +17,7 @@ ComfyUI / Stable Diffusion 整合位於外部 sibling bridge project；本核心
 
 - `image-to-raw-comfyui-sd-bridge`
 
-ComfyUI 官方文件仍是 bridge project 後續 custom-node / CLI 整合的參考：
+ComfyUI 官方文件仍是 bridge project custom-node / CLI 整合邊界的參考：
 
 - <https://docs.comfy.org/development/core-concepts/custom-nodes>
 - <https://docs.comfy.org/comfy-cli/getting-started>

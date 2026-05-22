@@ -17,7 +17,7 @@ ComfyUI / Stable Diffusion integration lives in an external sibling bridge proje
 
 - `image-to-raw-comfyui-sd-bridge`
 
-ComfyUI documentation remains useful for future bridge-side custom-node and CLI integration:
+ComfyUI documentation remains useful for the bridge-side custom-node and CLI integration boundary:
 
 - <https://docs.comfy.org/development/core-concepts/custom-nodes>
 - <https://docs.comfy.org/comfy-cli/getting-started>
