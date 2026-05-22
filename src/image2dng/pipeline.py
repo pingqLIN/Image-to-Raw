@@ -814,11 +814,11 @@ def _external_scene_from_manifest_item(
         slug=slug,
         path=source_path,
         input_space=input_space,
-        prompt=str(item.get("prompt", "")),
-        description=str(item.get("description", "")),
-        lighting=str(item.get("lighting", "")),
-        weather=str(item.get("weather", "")),
-        producer=str(item.get("producer", "external-scene-linear")),
+        prompt=_optional_manifest_string(item, "prompt", ""),
+        description=_optional_manifest_string(item, "description", ""),
+        lighting=_optional_manifest_string(item, "lighting", ""),
+        weather=_optional_manifest_string(item, "weather", ""),
+        producer=_optional_manifest_string(item, "producer", "external-scene-linear"),
         semantic_manifest=semantic_manifest,
         apply_semantic_reaction=apply_semantic_reaction,
         producer_metadata=producer_metadata,
@@ -976,6 +976,15 @@ def _manifest_string(item: dict[str, object], key: str) -> str:
     value = item.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"external scene manifest entry missing string field: {key}")
+    return value
+
+
+def _optional_manifest_string(item: dict[str, object], key: str, default: str) -> str:
+    if key not in item:
+        return default
+    value = item[key]
+    if not isinstance(value, str):
+        raise ValueError(f"external scene manifest field must be a string when present: {key}")
     return value
 
 
