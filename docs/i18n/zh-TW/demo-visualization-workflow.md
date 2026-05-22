@@ -66,6 +66,8 @@ English public baseline: [docs/demo.md](../../demo.md)
 | Phase 3 | synthetic sensor effects / demo layer | 人像膚色、日常物品、低光/暗部 patch | `cfa-noisy.dng`、`linearraw-noisy.dng`、demo manifest | before/after crop、noise heatmap、膚色與暗部比較 |
 | RAW-native semantic sidecar | 語意 sidecar preservation / opt-in reaction | 人像、物品、遮罩樣張、highlight stress input | semantic manifest、copied assets、reaction-applied scene-linear TIFF、sample index | metadata evidence panel、reaction/no-op status、highlight/region before-after |
 
+Development baseline verifier 會寫入 `verification-report.json`，記錄 `pytest`、`ruff check`、`uv build`、RAW-native batch generation 與 isolated wheel install smoke test 的 command result。它也會記錄 artifact path、byte count、SHA-256、JPEG dimensions、validation artifact metadata 與 sample index status。
+
 ## 圖像種類分配
 
 每次完整 demo run 建議至少輸出 12 張 preview PNG：
