@@ -53,6 +53,7 @@ The samples are generated locally and should not be committed as binary fixtures
 The RAW-native node batch creates:
 
 - `inputs/*-scene-linear.tif`
+- `inputs/*-semantic-reaction.tif` when opt-in semantic reaction changes the copied scene-linear input
 - `raw/*-linearraw.dng`
 - `raw/*-cfa-rggb.dng`
 - `jpeg/*-linearraw.jpg`
@@ -60,6 +61,8 @@ The RAW-native node batch creates:
 - `validation/*.json`
 - `manifests/raw-native-node-batch.json`
 - `manifests/sample-index.json`
+
+When a batch scene includes an `image2dng.semantic_scene.v1` sidecar, the manifests record preservation/validation status, copied sidecar assets, and opt-in `semantic_reaction` summaries for deterministic region exposure and highlight clipping helpers.
 
 The development baseline verifier writes `verification-report.json` with command results, artifact paths, JPEG dimensions, validation status, and sample index status.
 
