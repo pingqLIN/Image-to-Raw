@@ -212,7 +212,7 @@ def _generate_fixture(
         "raw_ifd_location": validation["raw_ifd_location"],
         "ifd0_preview": validation["ifd0_preview"],
         "validation_json": str(validation_path),
-        "validation_ok": validation["ok"],
+        "validation_ok": _validation_ok(validation),
         "structural_validation": validation,
         "processor_output_dir": str(fixture_processor_dir),
         "processor_results": processor_results,
@@ -254,7 +254,7 @@ def _compatibility_chart(size: int = 64) -> np.ndarray:
 
 
 def _structural_matrix_entry(fixture: dict[str, Any]) -> dict[str, str]:
-    result = "passed" if fixture["validation_ok"] else "failed"
+    result = "passed" if _fixture_validation_ok(fixture) else "failed"
     return {
         "fixture": fixture["slug"],
         "tool": "image2dng validate",
@@ -291,11 +291,13 @@ def _processor_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, object]
 
 def _append_failures(report: dict[str, Any]) -> None:
     for fixture in _fixtures(report):
-        if not fixture["validation_ok"]:
+        if not _fixture_validation_ok(fixture):
             _errors(report).append(f"{fixture['slug']} structural validation failed")
     for entry in _matrix(report):
-        if entry["result"] == "failed":
-            _errors(report).append(f"{entry['fixture']} failed {entry['tool']}: {entry['notes']}")
+        if _matrix_result(entry) == "failed":
+            _errors(report).append(
+                f"{entry['fixture']} failed {entry['tool']}: {_matrix_notes(entry)}"
+            )
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
@@ -373,6 +375,20 @@ def _fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
     return fixtures
 
 
+def _validation_ok(validation: dict[str, Any]) -> bool:
+    ok = validation["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("validation ok must be a boolean")
+    return ok
+
+
+def _fixture_validation_ok(fixture: dict[str, Any]) -> bool:
+    validation_ok = fixture["validation_ok"]
+    if not isinstance(validation_ok, bool):
+        raise TypeError("fixture validation_ok must be a boolean")
+    return validation_ok
+
+
 def _tools(report: dict[str, Any]) -> dict[str, Any]:
     tools = report["tools"]
     if not isinstance(tools, dict):
@@ -387,6 +403,20 @@ def _matrix(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not all(isinstance(entry, dict) for entry in matrix):
         raise TypeError("report matrix must contain objects")
     return matrix
+
+
+def _matrix_result(entry: dict[str, Any]) -> str:
+    result = entry["result"]
+    if not isinstance(result, str):
+        raise TypeError("matrix result must be a string")
+    return result
+
+
+def _matrix_notes(entry: dict[str, Any]) -> str:
+    notes = entry["notes"]
+    if not isinstance(notes, str):
+        raise TypeError("matrix notes must be a string")
+    return notes
 
 
 def _errors(report: dict[str, Any]) -> list[Any]:

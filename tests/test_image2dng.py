@@ -1675,6 +1675,20 @@ def test_compatibility_evidence_fails_when_available_processor_fails(tmp_path, m
     assert all("missing_output_artifacts" in entry for entry in failed_entries)
 
 
+def test_compatibility_evidence_rejects_malformed_fixture_validation_flag():
+    module = _load_script_module("generate_compatibility_evidence")
+
+    with pytest.raises(TypeError, match="fixture validation_ok must be a boolean"):
+        module._structural_matrix_entry(
+            {
+                "validation_ok": "yes",
+                "slug": "sample",
+                "dng": "sample.dng",
+                "validation_json": "sample.validation.json",
+            }
+        )
+
+
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-success")
     monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)
