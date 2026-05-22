@@ -671,7 +671,7 @@ def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, An
         "output_dir": str(root),
         "scene_count": len(scenes),
         "all_validations_ok": all(
-            report["ok"] for scene in scenes for report in scene.validations.values()
+            _validation_ok(report) for scene in scenes for report in scene.validations.values()
         ),
         "samples": [_sample_index_scene(scene) for scene in scenes],
     }
@@ -686,7 +686,7 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
         "prompt_hash": scene.prompt_hash,
         "artifacts": scene.outputs,
         "validation_ok": {
-            name: report["ok"] for name, report in scene.validations.items()
+            name: _validation_ok(report) for name, report in scene.validations.items()
         },
         "raw_data_unique_ids": scene.raw_data_unique_ids,
     }
@@ -746,6 +746,13 @@ def _validation_summary(report: dict[str, Any]) -> dict[str, Any]:
     if missing:
         raise ValueError(f"validation report missing keys: {', '.join(missing)}")
     return {key: report[key] for key in required_keys}
+
+
+def _validation_ok(report: dict[str, Any]) -> bool:
+    ok = _validation_summary(report)["ok"]
+    if not isinstance(ok, bool):
+        raise ValueError("validation report ok must be a boolean")
+    return ok
 
 
 def _external_scene_from_manifest_item(
