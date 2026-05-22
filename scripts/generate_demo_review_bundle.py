@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--skip-baseline-quality-gates",
         action="store_true",
-        help="write a lightweight baseline report without recursively running pytest/ruff",
+        help="write a lightweight baseline report without recursively running quality gates",
     )
     args = parser.parse_args(argv)
 

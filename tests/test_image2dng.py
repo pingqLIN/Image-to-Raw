@@ -3317,6 +3317,18 @@ def test_demo_review_bundle_rejects_malformed_command_status():
         module._has_command_failure({"commands": [{"status": False}]})
 
 
+def test_demo_review_bundle_skip_baseline_help_is_gate_oriented(capsys):
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--help"])
+
+    assert exc_info.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "without recursively running quality gates" in help_text
+    assert "without recursively running pytest/ruff" not in help_text
+
+
 def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch):
     module = _load_script_module("audit_raw_processor_setup")
 
