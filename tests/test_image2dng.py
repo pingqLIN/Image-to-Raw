@@ -3143,6 +3143,31 @@ def test_real_raw_sample_audit_rejects_malformed_tiff_metadata_shape():
         )
 
 
+def test_real_raw_sample_audit_does_not_treat_boolean_tags_as_ifd_markers():
+    module = _load_script_module("audit_real_raw_sample")
+    detected = module._detected_metadata(
+        {
+            "status": "passed",
+            "warnings": [],
+            "tags": {
+                "NewSubfileType": False,
+                "254": [True],
+            },
+            "preview_ifd_present": module._preview_ifd_present(
+                [{"NewSubfileType": False, "254": [True]}]
+            ),
+            "raw_ifd_present": module._raw_ifd_present(
+                [{"NewSubfileType": False, "254": [True]}]
+            ),
+            "subifd_present": False,
+        },
+        {"result": "skipped", "metadata": {}},
+    )
+
+    assert detected["preview_ifd_present"] is False
+    assert detected["raw_ifd_present"] is False
+
+
 def test_real_raw_sample_audit_rejects_malformed_tool_summary():
     module = _load_script_module("audit_real_raw_sample")
 

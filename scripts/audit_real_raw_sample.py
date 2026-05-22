@@ -310,9 +310,14 @@ def _raw_ifd_present(page_tags: list[dict[str, Any]]) -> bool:
 
 def _tag_int(tags: dict[str, Any], name: str) -> int | None:
     value = tags.get(name)
-    if isinstance(value, int):
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
-    if isinstance(value, list) and value and isinstance(value[0], int):
+    if (
+        isinstance(value, list)
+        and value
+        and isinstance(value[0], int)
+        and not isinstance(value[0], bool)
+    ):
         return value[0]
     return None
 
