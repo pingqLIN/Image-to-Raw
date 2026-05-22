@@ -620,7 +620,7 @@ def _record_callable_command(
         exit_code = int(function())
         status = "passed" if exit_code == 0 else "failed"
         error = None
-    except Exception as exc:  # pragma: no cover - exercised by failure path tests if needed.
+    except Exception as exc:
         exit_code = 1
         status = "failed"
         error = str(exc)

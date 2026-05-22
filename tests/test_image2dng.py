@@ -3166,6 +3166,31 @@ def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     assert f"--output-dir '{output_dir}'" in index
 
 
+def test_demo_review_bundle_records_callable_exception():
+    module = _load_script_module("generate_demo_review_bundle")
+    report = {"commands": [], "errors": []}
+
+    def fail():
+        raise RuntimeError("synthetic callable failure")
+
+    module._record_callable_command(
+        report,
+        name="synthetic-step",
+        command=["synthetic", "command"],
+        function=fail,
+    )
+
+    assert len(report["commands"]) == 1
+    command = report["commands"][0]
+    assert command["name"] == "synthetic-step"
+    assert command["command"] == ["synthetic", "command"]
+    assert command["exit_code"] == 1
+    assert isinstance(command["duration_seconds"], float)
+    assert command["status"] == "failed"
+    assert command["error"] == "synthetic callable failure"
+    assert report["errors"] == ["synthetic-step failed: synthetic callable failure"]
+
+
 def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch):
     module = _load_script_module("audit_raw_processor_setup")
 
