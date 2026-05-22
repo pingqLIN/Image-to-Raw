@@ -2995,6 +2995,43 @@ def test_real_raw_sample_audit_rejects_malformed_tiff_metadata():
         )
 
 
+def test_real_raw_sample_audit_rejects_malformed_tiff_metadata_shape():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="tifffile metadata warnings must be a string list"):
+        module._redaction_report(
+            sample_id="bad-warnings",
+            input_path=Path("sample.dng"),
+            input_sha256="sha256:unit",
+            raw_format="dng",
+            tiff_metadata={
+                "status": "passed",
+                "warnings": ["ok", 3],
+                "tags": {},
+                "preview_ifd_present": False,
+                "raw_ifd_present": True,
+                "subifd_present": False,
+            },
+            exiftool={"result": "skipped", "metadata": {}},
+        )
+
+    with pytest.raises(
+        TypeError,
+        match="tifffile metadata preview_ifd_present must be a boolean or null",
+    ):
+        module._detected_metadata(
+            {
+                "status": "passed",
+                "warnings": [],
+                "tags": {},
+                "preview_ifd_present": "yes",
+                "raw_ifd_present": True,
+                "subifd_present": False,
+            },
+            {"result": "skipped", "metadata": {}},
+        )
+
+
 def test_real_raw_sample_audit_rejects_malformed_tool_summary():
     module = _load_script_module("audit_real_raw_sample")
 
