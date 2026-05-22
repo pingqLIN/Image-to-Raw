@@ -3064,6 +3064,13 @@ def test_semantic_physics_manifest_builder_records_invalid_sidecar(tmp_path):
     )
 
 
+def test_semantic_physics_manifest_builder_rejects_malformed_validation_flag():
+    module = _load_script_module("build_semantic_physics_manifest")
+
+    with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
+        module._all_validations_ok([{"validation_ok": "yes"}])
+
+
 def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path):
     module = _load_script_module("generate_fivek_semantic_physics_sample")
     fivek_dir = tmp_path / "fivek-smoke"

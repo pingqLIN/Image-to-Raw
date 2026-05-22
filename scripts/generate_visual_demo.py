@@ -493,7 +493,7 @@ def make_sensor_effect_sheet(source: np.ndarray, root: Path) -> ManifestSheet:
         manifest={
             "source": str(temp_input),
             "samples": samples,
-            "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+            "all_validations_ok": _all_validations_ok(samples),
         },
     )
 
@@ -542,7 +542,7 @@ def make_cfa_pattern_sheet(
             "source": str(temp_input),
             "patterns": list(CFA_PATTERNS),
             "samples": samples,
-            "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+            "all_validations_ok": _all_validations_ok(samples),
         },
     )
 
@@ -562,6 +562,17 @@ def write_png_rgb8(path: Path, image: np.ndarray) -> None:
         rows = image.reshape(image.shape[0], image.shape[1] * 3).tolist()
     with path.open("wb") as handle:
         writer.write(handle, rows)
+
+
+def _all_validations_ok(samples: list[dict[str, Any]]) -> bool:
+    return all(_sample_validation_ok(sample) for sample in samples)
+
+
+def _sample_validation_ok(sample: dict[str, Any]) -> bool:
+    validation_ok = sample["validation_ok"]
+    if not isinstance(validation_ok, bool):
+        raise TypeError("sample validation_ok must be a boolean")
+    return validation_ok
 
 
 if __name__ == "__main__":

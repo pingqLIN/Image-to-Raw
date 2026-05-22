@@ -283,7 +283,7 @@ def _manifest(output_dir: Path, semantic_paths: list[Path]) -> dict[str, Any]:
         },
         "output_dir": str(output_dir),
         "sample_count": len(samples),
-        "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+        "all_validations_ok": _all_validations_ok(samples),
         "samples": samples,
     }
 
@@ -314,6 +314,17 @@ def _sample_record(path: Path) -> dict[str, Any]:
             ),
         },
     }
+
+
+def _all_validations_ok(samples: list[dict[str, Any]]) -> bool:
+    return all(_sample_validation_ok(sample) for sample in samples)
+
+
+def _sample_validation_ok(sample: dict[str, Any]) -> bool:
+    validation_ok = sample["validation_ok"]
+    if not isinstance(validation_ok, bool):
+        raise TypeError("sample validation_ok must be a boolean")
+    return validation_ok
 
 
 def _relative_path(path: Path, base: Path) -> str:
