@@ -30,7 +30,7 @@ That keeps the design direction grounded in a few rules:
 - write synthetic provenance and simulated camera metadata honestly;
 - use `LinearRaw` as the interoperable MVP first;
 - keep CFA as an explicit opt-in simulated mode;
-- leave noise, depth, semantic masks, and more research-oriented inverse-ISP / raw-generation paths outside the core LinearRaw MVP.
+- keep depth and more research-oriented inverse-ISP / raw-generation paths outside the core LinearRaw MVP; allow noise and semantic masks only through explicit opt-in, deterministic, traceable sidecar/helper paths that do not claim full sensor simulation.
 
 ## RAW-native node pipeline direction
 
@@ -123,6 +123,10 @@ Phase 3 adds optional deterministic sensor-effect controls for demos and compati
 - `sensor_effect_seed`: deterministic seed for reproducible sample generation.
 
 These effects are applied in virtual camera RGB before quantization or CFA mosaicing. XMP records `xmpAI:sensorNoiseModel="synthetic-simple-v1"` plus the enabled parameters. The model is intentionally simple; it is not a physical sensor simulator and should not be used to impersonate real camera behavior.
+
+## Semantic sidecar and reaction boundaries
+
+The RAW-native pipeline can validate and preserve `image2dng.semantic_scene.v1` sidecars. By default, it only performs preservation + validation; only when an external scene manifest explicitly sets `apply_semantic_reaction: true` does it modify a copied scene-linear input with deterministic `semantic-reaction-chain-v1` helpers. The current helpers cover region exposure masks and highlight clipping policy, and remain traceable raw value mapping rather than a full physical sensor model.
 
 ## DNG tag layout
 

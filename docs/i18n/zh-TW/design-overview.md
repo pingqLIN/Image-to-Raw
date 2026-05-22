@@ -30,7 +30,7 @@ English public baseline: [docs/design.md](../../design.md)
 - 先把 synthetic provenance 與 simulated camera metadata 寫誠實；
 - 先以 `LinearRaw` 作為可互通的 MVP；
 - CFA 必須是明確 opt-in 的 simulated mode；
-- noise、depth、semantic mask，以及更接近研究型 inverse-ISP / raw-generation 的方向，不屬於 LinearRaw MVP。
+- depth 與更接近研究型 inverse-ISP / raw-generation 的方向仍不屬於 LinearRaw MVP；noise 與 semantic mask 只以明確 opt-in、deterministic、可追溯的 sidecar/helper 形式進入 pipeline，不宣稱完整 sensor simulation。
 
 ## RAW-native node pipeline direction
 
@@ -123,6 +123,10 @@ Phase 3 adds optional deterministic sensor-effect controls for demos and compati
 - `sensor_effect_seed`: deterministic seed for reproducible sample generation。
 
 These effects are applied in virtual camera RGB before quantization or CFA mosaicing. XMP records `xmpAI:sensorNoiseModel="synthetic-simple-v1"` plus the enabled parameters. The model is intentionally simple; it is not a physical sensor simulator and should not be used to impersonate real camera behavior.
+
+## Semantic sidecar and reaction boundaries
+
+RAW-native pipeline 可驗證並保存 `image2dng.semantic_scene.v1` sidecar。預設只做 preservation + validation；只有 external scene manifest 明確設定 `apply_semantic_reaction: true` 時，才會用 deterministic `semantic-reaction-chain-v1` helpers 修改複製後的 scene-linear input。目前 helper 包含 region exposure mask 與 highlight clipping policy，仍只是可追溯的 raw value mapping，不是完整物理 sensor model。
 
 ## DNG tag layout
 
