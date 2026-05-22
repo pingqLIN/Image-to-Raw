@@ -370,10 +370,11 @@ def _fixture_root_record(root: Path, repo_root: Path) -> dict[str, Any]:
 
 
 def _summary_counts(results: list[dict[str, Any]], *, selected_count: int) -> dict[str, int]:
-    passed = sum(1 for result in results if result["status"] == "passed")
-    failed = sum(1 for result in results if result["status"] == "failed")
-    timed_out = sum(1 for result in results if result["status"] == "timeout")
-    marker_blocked = sum(1 for result in results if result["status"] == "marker-blocked")
+    statuses = [_result_status(result) for result in results]
+    passed = statuses.count("passed")
+    failed = statuses.count("failed")
+    timed_out = statuses.count("timeout")
+    marker_blocked = statuses.count("marker-blocked")
     return {
         "selected": selected_count,
         "passed": passed,
@@ -611,8 +612,13 @@ def _result_fixture_repo_relative(result: dict[str, Any]) -> str | None:
 
 def _result_status(result: dict[str, Any]) -> str:
     status = result["status"]
-    if not isinstance(status, str):
-        raise TypeError("result status must be a string")
+    if not isinstance(status, str) or status not in {
+        "passed",
+        "failed",
+        "timeout",
+        "marker-blocked",
+    }:
+        raise TypeError("result status must be passed, failed, timeout, or marker-blocked")
     return status
 
 

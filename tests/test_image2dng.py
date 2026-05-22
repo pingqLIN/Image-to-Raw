@@ -3016,7 +3016,10 @@ def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
     malformed = result_report | {
         "results": [result_report["results"][0] | {"status": []}]
     }
-    with pytest.raises(TypeError, match="result status must be a string"):
+    with pytest.raises(
+        TypeError,
+        match="result status must be passed, failed, timeout, or marker-blocked",
+    ):
         module._summary_markdown(malformed)
 
     malformed = result_report | {
@@ -3036,6 +3039,39 @@ def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
     }
     with pytest.raises(TypeError, match="result duration_seconds must be numeric"):
         module._summary_markdown(malformed)
+
+
+def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_count_status():
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+
+    assert module._summary_counts(
+        [
+            {"status": "passed"},
+            {"status": "failed"},
+            {"status": "timeout"},
+            {"status": "marker-blocked"},
+        ],
+        selected_count=4,
+    ) == {
+        "selected": 4,
+        "passed": 1,
+        "failed": 1,
+        "marker_blocked": 1,
+        "timeout": 1,
+        "skipped": 0,
+    }
+
+    with pytest.raises(
+        TypeError,
+        match="result status must be passed, failed, timeout, or marker-blocked",
+    ):
+        module._summary_counts([{"status": "skipped"}], selected_count=1)
+
+    with pytest.raises(
+        TypeError,
+        match="result status must be passed, failed, timeout, or marker-blocked",
+    ):
+        module._summary_counts([{"status": False}], selected_count=1)
 
 
 def test_run_adobe_dng_sdk_validation_blocks_version_probe_timeout_with_version_text(
