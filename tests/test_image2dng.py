@@ -2840,6 +2840,32 @@ def test_real_raw_sample_audit_rejects_malformed_tiff_metadata():
         )
 
 
+def test_real_raw_sample_audit_rejects_malformed_tool_summary():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="tool duration_seconds must be numeric"):
+        module._tool_summary(
+            {
+                "available": True,
+                "discovery": None,
+                "command": [],
+                "exit_code": None,
+                "duration_seconds": True,
+                "result": "skipped",
+                "stdout_tail": [],
+                "stderr_tail": [],
+                "notes": "tool not found",
+            }
+        )
+
+
+def test_real_raw_sample_audit_rejects_malformed_redaction_status():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="redaction status must be a string"):
+        module._next_actions({"status": []}, redistribution_allowed=True)
+
+
 def test_real_raw_sample_audit_rejects_missing_input(tmp_path):
     module = _load_script_module("audit_real_raw_sample")
 

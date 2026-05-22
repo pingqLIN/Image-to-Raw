@@ -196,7 +196,7 @@ def build_reports(
         "raw_format": raw_format,
         "metadata_summary_path": str(output_dir / "metadata-summary.json"),
         "redaction_report_path": str(output_dir / "redaction-report.json"),
-        "redaction_status": redaction["status"],
+        "redaction_status": _redaction_status(redaction),
         "detected_metadata": detected_metadata,
         "optional_tools": {
             "exiftool": _tool_summary(exiftool),
@@ -550,16 +550,79 @@ def _optional_bool(value: Any, field_name: str) -> bool | None:
 
 def _tool_summary(tool: dict[str, Any]) -> dict[str, Any]:
     return {
-        "available": tool["available"],
-        "discovery": tool["discovery"],
-        "command": tool["command"],
-        "exit_code": tool["exit_code"],
-        "duration_seconds": tool["duration_seconds"],
-        "result": tool["result"],
-        "stdout_tail": tool["stdout_tail"],
-        "stderr_tail": tool["stderr_tail"],
-        "notes": tool["notes"],
+        "available": _tool_available(tool),
+        "discovery": _tool_discovery(tool),
+        "command": _tool_command(tool),
+        "exit_code": _tool_exit_code(tool),
+        "duration_seconds": _tool_duration_seconds(tool),
+        "result": _tool_result(tool),
+        "stdout_tail": _tool_tail(tool, "stdout_tail"),
+        "stderr_tail": _tool_tail(tool, "stderr_tail"),
+        "notes": _tool_notes(tool),
     }
+
+
+def _tool_available(tool: dict[str, Any]) -> bool:
+    available = tool["available"]
+    if not isinstance(available, bool):
+        raise TypeError("tool available must be a boolean")
+    return available
+
+
+def _tool_discovery(tool: dict[str, Any]) -> str | None:
+    discovery = tool["discovery"]
+    if isinstance(discovery, str) or discovery is None:
+        return discovery
+    raise TypeError("tool discovery must be a string or null")
+
+
+def _tool_command(tool: dict[str, Any]) -> list[str]:
+    command = tool["command"]
+    if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
+        raise TypeError("tool command must be a string list")
+    return command
+
+
+def _tool_exit_code(tool: dict[str, Any]) -> int | None:
+    exit_code = tool["exit_code"]
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("tool exit_code must be an integer or null")
+
+
+def _tool_duration_seconds(tool: dict[str, Any]) -> float:
+    duration = tool["duration_seconds"]
+    if isinstance(duration, int | float) and not isinstance(duration, bool):
+        return float(duration)
+    raise TypeError("tool duration_seconds must be numeric")
+
+
+def _tool_result(tool: dict[str, Any]) -> str:
+    result = tool["result"]
+    if not isinstance(result, str):
+        raise TypeError("tool result must be a string")
+    return result
+
+
+def _tool_tail(tool: dict[str, Any], field_name: str) -> list[str]:
+    tail = tool[field_name]
+    if not isinstance(tail, list) or not all(isinstance(item, str) for item in tail):
+        raise TypeError(f"tool {field_name} must be a string list")
+    return tail
+
+
+def _tool_notes(tool: dict[str, Any]) -> str:
+    notes = tool["notes"]
+    if not isinstance(notes, str):
+        raise TypeError("tool notes must be a string")
+    return notes
+
+
+def _redaction_status(redaction: dict[str, Any]) -> str:
+    status = redaction["status"]
+    if not isinstance(status, str):
+        raise TypeError("redaction status must be a string")
+    return status
 
 
 def _has_value(mapping: dict[str, Any], key: str) -> bool:
@@ -577,7 +640,7 @@ def _first_present(*mappings: dict[str, Any], keys: tuple[str, ...]) -> Any:
 
 def _next_actions(redaction: dict[str, Any], redistribution_allowed: bool) -> list[str]:
     actions = []
-    if redaction["status"] != "no-sensitive-fields-detected":
+    if _redaction_status(redaction) != "no-sensitive-fields-detected":
         actions.append(
             "complete manual redaction review before using this sample in public evidence"
         )
