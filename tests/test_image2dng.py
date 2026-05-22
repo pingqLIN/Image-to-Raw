@@ -3134,8 +3134,148 @@ def test_verify_adobe_validation_stack_rejects_malformed_summary_findings(tmp_pa
         runner=_FakeAdobeValidationStackRunner(),
     )
 
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["ok"] = "false"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["run_id"] = []
+    with pytest.raises(TypeError, match="report run_id must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["output_dir"] = []
+    with pytest.raises(TypeError, match="report output_dir must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["output_dir"]["display"] = False
+    with pytest.raises(TypeError, match="report output_dir display must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
     report["blocking_findings"] = [False]
     with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["name"] = []
+    with pytest.raises(TypeError, match="step name must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["status"] = False
+    with pytest.raises(TypeError, match="step status must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["exit_code"] = True
+    with pytest.raises(TypeError, match="step exit_code must be an integer or null"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["child_report_path"]["display"] = []
+    with pytest.raises(TypeError, match="child report display must be a string"):
         module._summary_markdown(report)
 
     report = module.build_report(

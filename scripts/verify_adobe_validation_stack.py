@@ -626,11 +626,11 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Adobe Validation Stack",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Run ID: `{report['run_id']}`",
-        f"- Output: `{report['output_dir']['display']}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Run ID: `{_run_id(report)}`",
+        f"- Output: `{_output_dir_display(report)}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
         "",
         "## Summary",
         "",
@@ -645,17 +645,55 @@ def _summary_markdown(report: dict[str, Any]) -> str:
         lines.append("- none")
     lines.extend(["", "## Steps", ""])
     for step in _steps(report):
-        lines.append(f"- `{step['name']}`: `{step['status']}`")
-        lines.append(f"  - Exit code: `{step['exit_code']}`")
+        lines.append(f"- `{_step_name(step)}`: `{_step_status(step)}`")
+        lines.append(f"  - Exit code: `{_step_exit_code(step)}`")
         child_report_path = step.get("child_report_path")
         if isinstance(child_report_path, dict):
-            lines.append(f"  - Child report: `{child_report_path['display']}`")
+            lines.append(f"  - Child report: `{_child_report_display(child_report_path)}`")
         step_findings = _step_blocking_findings(step)
         if step_findings:
             lines.append("  - Findings:")
             lines.extend(f"    - {finding}" for finding in step_findings)
     lines.append("")
     return "\n".join(lines)
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _run_id(report: dict[str, Any]) -> str:
+    run_id = report["run_id"]
+    if not isinstance(run_id, str):
+        raise TypeError("report run_id must be a string")
+    return run_id
+
+
+def _output_dir_display(report: dict[str, Any]) -> str:
+    output_dir = report["output_dir"]
+    if not isinstance(output_dir, dict):
+        raise TypeError("report output_dir must be an object")
+    display = output_dir["display"]
+    if not isinstance(display, str):
+        raise TypeError("report output_dir display must be a string")
+    return display
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
 
 
 def _summary(report: dict[str, Any]) -> dict[str, Any]:
@@ -686,6 +724,36 @@ def _step_blocking_findings(step: dict[str, Any]) -> list[str]:
     if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
         raise TypeError("step blocking_findings must be a string list")
     return findings
+
+
+def _step_name(step: dict[str, Any]) -> str:
+    name = step["name"]
+    if not isinstance(name, str):
+        raise TypeError("step name must be a string")
+    return name
+
+
+def _step_status(step: dict[str, Any]) -> str:
+    status = step["status"]
+    if not isinstance(status, str):
+        raise TypeError("step status must be a string")
+    return status
+
+
+def _step_exit_code(step: dict[str, Any]) -> int | None:
+    exit_code = step["exit_code"]
+    if isinstance(exit_code, bool):
+        raise TypeError("step exit_code must be an integer or null")
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("step exit_code must be an integer or null")
+
+
+def _child_report_display(child_report_path: dict[str, Any]) -> str:
+    display = child_report_path["display"]
+    if not isinstance(display, str):
+        raise TypeError("child report display must be a string")
+    return display
 
 
 def _resolve_from_repo(path: Path, repo_root: Path) -> Path:
