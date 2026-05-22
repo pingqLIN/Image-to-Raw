@@ -2109,7 +2109,10 @@ def test_adobe_local_resource_audit_writes_readiness_report(tmp_path):
     assert resource_hashes["dng_sdk_1_7_1_2573_20260512.zip"] == _sha256_test_file(
         adobe_dir / "dng_sdk_1_7_1_2573_20260512.zip"
     )
-    assert (output_dir / "adobe-local-resource-summary.md").exists()
+    summary = (output_dir / "adobe-local-resource-summary.md").read_text(encoding="utf-8")
+    assert resource_hashes["AdobeDNGConverter_x64_18_3_1.exe"] in summary
+    assert resource_hashes["DNG_Spec_1_7_1_0.pdf"] in summary
+    assert resource_hashes["dng_sdk_1_7_1_2573_20260512.zip"] in summary
 
 
 def test_adobe_local_resource_audit_refuses_tracked_output(tmp_path):

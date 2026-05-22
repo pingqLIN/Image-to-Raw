@@ -293,7 +293,8 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines.extend(["", "## Resources", ""])
     for resource in report["resources"]:
         lines.append(
-            f"- `{resource['name']}`: `{resource['kind']}`, {resource['size_bytes']} bytes"
+            f"- `{resource['name']}`: `{resource['kind']}`, "
+            f"{resource['size_bytes']} bytes, `{resource['sha256']}`"
         )
     lines.extend(["", "## Policy", ""])
     for key, value in _policy(report).items():
