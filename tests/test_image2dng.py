@@ -4144,6 +4144,37 @@ def test_raw_processor_setup_audit_rejects_malformed_runbook_tool_state(tmp_path
         module._runbook_markdown(report)
 
 
+def test_raw_processor_setup_audit_rejects_malformed_report_accessors(tmp_path):
+    module = _load_script_module("audit_raw_processor_setup")
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["tools"] = []
+    with pytest.raises(TypeError, match="report tools must be an object"):
+        module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["policy"] = []
+    with pytest.raises(TypeError, match="report policy must be an object"):
+        module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["rerun_commands"] = ["uv run", 7]
+    with pytest.raises(TypeError, match="report rerun_commands must be a string list"):
+        module._runbook_markdown(report)
+
+
 def test_raw_processor_setup_audit_rejects_malformed_package_search(tmp_path):
     module = _load_script_module("audit_raw_processor_setup")
     report = module._build_report(
