@@ -4284,6 +4284,16 @@ def test_development_baseline_validation_artifact_rejects_malformed_metadata(tmp
         module._validation_artifact_record("linearraw_validation", validation_path)
 
 
+def test_development_baseline_rejects_malformed_report_accessors():
+    module = _load_script_module("verify_development_baseline")
+
+    with pytest.raises(TypeError, match="report steps must contain objects"):
+        module._steps({"steps": ["not-a-step"]})
+
+    with pytest.raises(TypeError, match="report errors must be a list"):
+        module._errors({"errors": "none"})
+
+
 def test_development_baseline_rejects_external_batch_artifact_paths(tmp_path):
     module = _load_script_module("verify_development_baseline")
     repo_root = tmp_path / "repo"
