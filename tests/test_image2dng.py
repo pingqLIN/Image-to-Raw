@@ -3568,6 +3568,13 @@ def test_semantic_physics_manifest_builder_rejects_malformed_validation_flag():
         module._all_validations_ok([{"validation_ok": "yes"}])
 
 
+def test_generate_fivek_semantic_physics_sample_rejects_malformed_validation_flag():
+    module = _load_script_module("generate_fivek_semantic_physics_sample")
+
+    with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
+        module._all_validations_ok([{"validation_ok": "yes"}])
+
+
 def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path):
     module = _load_script_module("generate_fivek_semantic_physics_sample")
     fivek_dir = tmp_path / "fivek-smoke"
@@ -3669,6 +3676,13 @@ def test_generate_fivek_semantic_physics_sample_refuses_tracked_output(tmp_path)
 
     assert exit_code == 2
     assert not output_dir.exists()
+
+
+def test_generate_visual_demo_rejects_malformed_validation_flag():
+    module = _load_script_module("generate_visual_demo")
+
+    with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
+        module._all_validations_ok([{"validation_ok": "yes"}])
 
 
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
