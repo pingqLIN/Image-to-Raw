@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -50,6 +51,7 @@ def main() -> int:
     steps = [
         ("pytest", ["uv", "run", "pytest"]),
         ("ruff", ["uv", "run", "ruff", "check"]),
+        ("build", ["uv", "build"]),
         (
             "raw-native-batch",
             [
@@ -69,6 +71,12 @@ def main() -> int:
         if result["status"] == "failed":
             _write_report(output_dir, report)
             return 1
+
+    wheel_smoke = _run_wheel_smoke_step(output_dir=output_dir, repo_root=repo_root)
+    _append_step(report, wheel_smoke)
+    if wheel_smoke["status"] == "failed":
+        _write_report(output_dir, report)
+        return 1
 
     try:
         report["batch"] = _inspect_batch(output_dir / "raw-native-node-batch", repo_root)
@@ -95,6 +103,87 @@ def _run_step(name: str, command: list[str], cwd: Path) -> dict[str, object]:
         "stdout_tail": _tail(completed.stdout),
         "stderr_tail": _tail(completed.stderr),
     }
+
+
+def _run_wheel_smoke_step(*, output_dir: Path, repo_root: Path) -> dict[str, object]:
+    wheel = _latest_wheel(repo_root)
+    venv = output_dir / "wheel-smoke-venv"
+    if venv.exists():
+        shutil.rmtree(venv)
+
+    python_executable = _venv_python(venv)
+    image2dng_executable = _venv_script(venv, "image2dng")
+    commands = [
+        ["uv", "venv", str(venv)],
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python_executable),
+            str(wheel),
+        ],
+        [str(image2dng_executable), "--help"],
+        [str(image2dng_executable), "validate", "--help"],
+    ]
+
+    started = time.perf_counter()
+    stdout = []
+    stderr = []
+    for command in commands:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        stdout.extend(_tail(completed.stdout, max_lines=12))
+        stderr.extend(_tail(completed.stderr, max_lines=12))
+        if completed.returncode != 0:
+            duration = round(time.perf_counter() - started, 3)
+            return {
+                "name": "wheel-install-smoke",
+                "command": commands,
+                "exit_code": completed.returncode,
+                "duration_seconds": duration,
+                "status": "failed",
+                "stdout_tail": stdout[-40:],
+                "stderr_tail": stderr[-40:],
+            }
+
+    duration = round(time.perf_counter() - started, 3)
+    return {
+        "name": "wheel-install-smoke",
+        "command": commands,
+        "exit_code": 0,
+        "duration_seconds": duration,
+        "status": "passed",
+        "stdout_tail": stdout[-40:],
+        "stderr_tail": stderr[-40:],
+    }
+
+
+def _venv_python(venv: Path) -> Path:
+    if platform.system() == "Windows":
+        return venv / "Scripts" / "python.exe"
+    return venv / "bin" / "python"
+
+
+def _latest_wheel(repo_root: Path) -> Path:
+    wheels = sorted(
+        (repo_root / "dist").glob("image2dng-*.whl"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if not wheels:
+        raise FileNotFoundError("no built image2dng wheel found under dist/")
+    return wheels[-1]
+
+
+def _venv_script(venv: Path, name: str) -> Path:
+    if platform.system() == "Windows":
+        return venv / "Scripts" / f"{name}.exe"
+    return venv / "bin" / name
 
 
 def _append_step(report: dict[str, object], step: dict[str, object]) -> None:

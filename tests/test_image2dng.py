@@ -3437,6 +3437,35 @@ def test_raw_processor_setup_audit_ignores_non_exact_version_hints(tmp_path, mon
     assert rawtherapee_choco["version_hint"] == "5.8.0"
 
 
+def test_development_baseline_wheel_smoke_uses_built_wheel(tmp_path, monkeypatch):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    dist_dir = repo_root / "dist"
+    dist_dir.mkdir(parents=True)
+    wheel = dist_dir / "image2dng-0.2.0-py3-none-any.whl"
+    wheel.write_bytes(b"fake wheel")
+    output_dir = tmp_path / "baseline-output"
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module.platform, "system", lambda: "Windows")
+
+    step = module._run_wheel_smoke_step(output_dir=output_dir, repo_root=repo_root)
+
+    assert step["status"] == "passed"
+    assert [command[:2] for command in calls] == [
+        ["uv", "venv"],
+        ["uv", "pip"],
+        [str(output_dir / "wheel-smoke-venv" / "Scripts" / "image2dng.exe"), "--help"],
+        [str(output_dir / "wheel-smoke-venv" / "Scripts" / "image2dng.exe"), "validate"],
+    ]
+    assert str(wheel) in calls[1]
+
+
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):
     input_path = tmp_path / "sensor-effects.tif"
     output_a = tmp_path / "sensor-effects-a.dng"
