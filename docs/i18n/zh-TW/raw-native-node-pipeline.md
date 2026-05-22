@@ -128,9 +128,8 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
-## 下一個 gate
+## Boundary notes
 
-1. 用代表樣本持續驗證 `preview-subifd` layout 在 RAW tools 中的行為；這是格式實驗，不直接宣稱完整 Adobe 相容。
-2. 在已驗證的 semantic sidecar contract 上，設計語意、材質、光照、mask/depth 等如何進入 photon/sensor-response mapping。
-3. 在 bridge project 中原型化 ComfyUI custom node：輸入 prompt/scene-linear tensor/semantic sidecar，輸出 DNG path、sidecar JPEG path、manifest。
-4. 若 ComfyUI custom node 穩定，再於 bridge project 加入 ComfyUI 安裝與 smoke workflow 文件；核心 repo 仍只保留 generic external manifest contract。
+- `preview-subifd` layout 的 RAW tool 行為應由 compatibility evidence 驗證；目前仍是格式實驗，不宣稱完整 Adobe 相容。
+- Semantic sidecar reaction 只描述 deterministic helper 如何映射 raw values；不宣稱 photon/sensor-response model 已完成。
+- ComfyUI custom node、ComfyUI 安裝、model 下載與 smoke workflow 屬於外部 bridge project；核心 repo 只保留 generic external manifest contract。

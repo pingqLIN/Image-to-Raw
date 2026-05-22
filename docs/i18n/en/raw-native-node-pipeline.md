@@ -128,9 +128,8 @@ The current scene generator is deterministic and procedural, not the final AI di
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
-## Next Gate
+## Boundary Notes
 
-1. Continue validating the `preview-subifd` layout with representative samples in RAW tools; this is a format experiment, not a full Adobe compatibility claim.
-2. Build on the validated semantic sidecar contract and define how semantics, material, lighting, mask, and depth data enter photon/sensor-response mapping.
-3. Prototype a ComfyUI custom node in the bridge project that accepts prompt, scene-linear tensor, and semantic sidecar input and returns DNG path, sidecar JPEG path, and manifest.
-4. Add ComfyUI installation and smoke workflow docs in the bridge project after the custom node is stable; the core repository should keep only the generic external manifest contract.
+- `preview-subifd` layout behavior in RAW tools should be validated through compatibility evidence; it remains a format experiment, not a full Adobe compatibility claim.
+- Semantic sidecar reaction describes only how deterministic helpers map raw values; it does not claim a completed photon/sensor-response model.
+- ComfyUI custom nodes, ComfyUI installation, model downloads, and smoke workflows belong in the external bridge project; the core repository keeps only the generic external manifest contract.
