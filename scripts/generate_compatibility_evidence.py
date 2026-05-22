@@ -283,6 +283,7 @@ def _processor_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, object]
                 "exit_code": processor["exit_code"],
                 "duration_seconds": processor["duration_seconds"],
                 "output_artifacts": processor["output_artifacts"],
+                "missing_output_artifacts": processor["missing_output_artifacts"],
             }
         )
     return entries

@@ -128,5 +128,5 @@ image2dng.compatibility_evidence.v2
 - `tools`：工具 availability、version command、version、timeout、dry-run install hint。
 - `install_policy`：不自動安裝、missing tool policy、available tool failure policy。
 - `fixtures`：每個 fixture 的 input、DNG、DNG layout、raw IFD location、IFD0 preview flag、validation JSON、validation status、processor result records。
-- `matrix`：fixture/tool/result/evidence/notes/exit code/duration/output artifacts evidence matrix。
+- `matrix`：fixture/tool/result/evidence/notes/exit code/duration/output artifacts/missing output artifacts evidence matrix。
 - `ok` / `errors`：整體 gate 結果。

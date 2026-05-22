@@ -1536,6 +1536,7 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     assert {entry["result"] for entry in optional_entries} == {"skipped"}
     assert all(entry["notes"] == "skipped: not found" for entry in optional_entries)
     assert all(entry["exit_code"] is None for entry in optional_entries)
+    assert all(entry["missing_output_artifacts"] == [] for entry in optional_entries)
 
     adobe_entries = [entry for entry in report["matrix"] if entry["tool"] == "adobe-dng-sdk"]
     assert adobe_entries
@@ -1567,6 +1568,7 @@ def test_compatibility_evidence_fails_when_available_processor_fails(tmp_path, m
     failed_entries = [entry for entry in report["matrix"] if entry["result"] == "failed"]
     assert failed_entries
     assert {entry["exit_code"] for entry in failed_entries} == {7}
+    assert all("missing_output_artifacts" in entry for entry in failed_entries)
 
 
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
@@ -3033,6 +3035,8 @@ def test_processor_compatibility_fails_when_export_output_is_missing(tmp_path, m
     assert payload["exiftool"]["result"] == "passed"
     assert payload["dcraw"]["result"] == "failed"
     assert "missing output artifact" in payload["dcraw"]["notes"]
+    assert payload["dcraw"]["missing_output_artifacts"]
+    assert payload["dcraw"]["output_artifacts"] == []
 
 
 def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):

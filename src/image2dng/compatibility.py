@@ -4,7 +4,7 @@ import platform
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -38,6 +38,7 @@ class ProcessorCompatibilityResult:
     stderr_tail: list[str]
     output_artifacts: list[str]
     notes: str
+    missing_output_artifacts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -51,6 +52,7 @@ class ProcessorCompatibilityResult:
             "stdout_tail": self.stdout_tail,
             "stderr_tail": self.stderr_tail,
             "output_artifacts": self.output_artifacts,
+            "missing_output_artifacts": self.missing_output_artifacts,
             "notes": self.notes,
         }
 
@@ -420,6 +422,7 @@ def _run_processor_command(
         stdout_tail=stdout_tail,
         stderr_tail=stderr_tail,
         output_artifacts=existing_outputs,
+        missing_output_artifacts=missing_outputs,
         notes=notes,
     )
 

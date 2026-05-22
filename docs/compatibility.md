@@ -129,6 +129,6 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 - tool inventory: availability, executable path, version command, version, timeout policy, and dry-run install hint;
 - install policy: no automatic installation, missing tool policy, and available tool failure policy;
 - fixtures: input path, DNG path, DNG layout, raw IFD location, IFD0 preview flag, validation JSON path, structural validation status, and processor result records;
-- matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, and output artifacts.
+- matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, output artifacts, and missing output artifacts.
 
 Adobe DNG SDK remains `manual-only` until a reproducible local SDK validation path exists.
