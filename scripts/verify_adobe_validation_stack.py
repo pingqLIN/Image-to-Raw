@@ -483,10 +483,9 @@ def _inspect_project_dng_fixtures(
         errors.append("project fixture sample index schema mismatch")
     if not _sample_index_all_validations_ok(sample_index):
         errors.append("project fixture sample index reports validation failure")
-    scenes = manifest.get("scenes")
-    if not isinstance(scenes, list) or not scenes:
+    scenes = _project_fixture_scenes(manifest)
+    if not scenes:
         errors.append("project fixture manifest has no scenes")
-        scenes = []
     inspection["scene_count"] = len(scenes)
     inspection["all_validations_ok"] = _sample_index_all_validations_ok(sample_index)
 
@@ -647,6 +646,15 @@ def _project_fixture_sample_index_schema(sample_index: dict[str, Any]) -> str | 
     if not isinstance(schema, str):
         raise TypeError("project fixture sample index schema must be a string")
     return schema
+
+
+def _project_fixture_scenes(manifest: dict[str, Any]) -> list[Any]:
+    scenes = manifest.get("scenes")
+    if scenes is None:
+        return []
+    if not isinstance(scenes, list):
+        raise TypeError("project fixture manifest scenes must be a list")
+    return scenes
 
 
 def _project_fixture_output_path(outputs: dict[str, Any], key: str) -> str | None:
