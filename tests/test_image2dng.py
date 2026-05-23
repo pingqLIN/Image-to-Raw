@@ -4939,6 +4939,32 @@ def test_demo_review_bundle_rejects_malformed_compatibility_fixture_rows():
         )
 
 
+def test_demo_review_bundle_rejects_malformed_raw_native_scene_rows():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(
+        ValueError,
+        match="raw-native manifest scenes must be an object list",
+    ):
+        module._collect_raw_native_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            raw_manifest={"scenes": ["not-a-scene"]},
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="sample: raw-native scene outputs must be an object",
+    ):
+        module._collect_raw_native_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            raw_manifest={"scenes": [{"slug": "sample", "outputs": []}]},
+        )
+
+
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
     report = {

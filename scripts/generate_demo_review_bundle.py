@@ -343,16 +343,12 @@ def _collect_raw_native_representatives(
     report: dict[str, Any],
     raw_manifest: dict[str, Any],
 ) -> None:
-    scenes = raw_manifest.get("scenes")
-    if not isinstance(scenes, list) or not scenes:
+    scenes = _object_list(raw_manifest, "scenes", "raw-native manifest")
+    if not scenes:
         raise ValueError("raw-native manifest contains no scenes")
     for scene in scenes:
-        if not isinstance(scene, dict):
-            raise ValueError("raw-native scene must be an object")
         slug = _string(scene, "slug")
-        outputs = scene.get("outputs")
-        if not isinstance(outputs, dict):
-            raise ValueError(f"{slug}: missing outputs")
+        outputs = _object(scene, "outputs", f"{slug}: raw-native scene")
         for key in ("linearraw_dng", "cfa_dng"):
             source = _resolve_source_path(_string(outputs, key), paths.raw_native_dir, repo_root)
             _copy_artifact(
