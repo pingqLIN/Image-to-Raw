@@ -5236,7 +5236,13 @@ def test_demo_review_bundle_rejects_malformed_report_accessors():
     malformed = report | {
         "commands": [report["commands"][0] | {"duration_seconds": "slow"}]
     }
-    with pytest.raises(TypeError, match="command duration_seconds must be numeric"):
+    with pytest.raises(TypeError, match="command duration_seconds must be finite numeric"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {
+        "commands": [report["commands"][0] | {"duration_seconds": float("nan")}]
+    }
+    with pytest.raises(TypeError, match="command duration_seconds must be finite numeric"):
         module._write_index(Path.cwd(), malformed)
 
     malformed = report | {"artifacts": [report["artifacts"][0] | {"kind": False}]}

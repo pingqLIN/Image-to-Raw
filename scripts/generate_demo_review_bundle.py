@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -1046,8 +1047,12 @@ def _command_exit_code(command: dict[str, Any]) -> int | None:
 
 def _command_duration_seconds(command: dict[str, Any]) -> float | int:
     duration = command["duration_seconds"]
-    if isinstance(duration, bool) or not isinstance(duration, int | float):
-        raise TypeError("command duration_seconds must be numeric")
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, int | float)
+        or not math.isfinite(duration)
+    ):
+        raise TypeError("command duration_seconds must be finite numeric")
     return duration
 
 
