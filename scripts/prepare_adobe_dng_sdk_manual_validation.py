@@ -247,7 +247,8 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             )
     lines.extend(["", "## Manual Steps", ""])
     for item in _manual_step_records(report):
-        lines.append(f"- `{item['step']}`: `{item['command_template']}`")
+        _manual_step_manual_only(item)
+        lines.append(f"- `{_manual_step_name(item)}`: `{_manual_step_command_template(item)}`")
     lines.append("")
     return "\n".join(lines)
 
@@ -327,6 +328,29 @@ def _manual_step_records(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(steps, list) or not all(isinstance(item, dict) for item in steps):
         raise TypeError("report manual_steps must be an object list")
     return steps
+
+
+def _manual_step_name(step: dict[str, Any]) -> str:
+    name = step["step"]
+    if not isinstance(name, str):
+        raise TypeError("manual step name must be a string")
+    return name
+
+
+def _manual_step_manual_only(step: dict[str, Any]) -> bool:
+    manual_only = step["manual_only"]
+    if not isinstance(manual_only, bool):
+        raise TypeError("manual step manual_only must be a boolean")
+    if not manual_only:
+        raise TypeError("manual step manual_only must be true")
+    return manual_only
+
+
+def _manual_step_command_template(step: dict[str, Any]) -> str:
+    command_template = step["command_template"]
+    if not isinstance(command_template, str):
+        raise TypeError("manual step command_template must be a string")
+    return command_template
 
 
 def _fixture_directory(fixture: dict[str, Any]) -> str:

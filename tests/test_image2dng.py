@@ -3112,6 +3112,26 @@ def test_prepare_adobe_dng_sdk_manual_validation_rejects_malformed_summary_recor
     with pytest.raises(TypeError, match="sample sha256 must be a string"):
         module._summary_markdown(report)
 
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["step"] = []
+    with pytest.raises(TypeError, match="manual step name must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["manual_only"] = "yes"
+    with pytest.raises(TypeError, match="manual step manual_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["manual_only"] = False
+    with pytest.raises(TypeError, match="manual step manual_only must be true"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["command_template"] = []
+    with pytest.raises(TypeError, match="manual step command_template must be a string"):
+        module._summary_markdown(report)
+
     report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
     report["manual_steps"] = ["not-a-step"]
     with pytest.raises(TypeError, match="report manual_steps must be an object list"):
