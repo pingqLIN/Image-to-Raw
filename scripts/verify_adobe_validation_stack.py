@@ -608,12 +608,11 @@ def _validation_ok(validation: dict[str, Any], label: str) -> bool:
 
 
 def _extend_blocking_findings(blocking_findings: list[str], step: dict[str, Any]) -> None:
-    for finding in step.get("blocking_findings", []):
-        blocking_findings.append(str(finding))
+    blocking_findings.extend(_step_blocking_findings(step))
 
 
 def _finalize_step_status(step: dict[str, Any]) -> None:
-    step["blocking_findings"] = _dedupe([str(item) for item in step["blocking_findings"]])
+    step["blocking_findings"] = _dedupe(_step_blocking_findings(step))
     step["status"] = "passed" if not step["blocking_findings"] else "failed"
 
 
