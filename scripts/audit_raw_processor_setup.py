@@ -16,6 +16,7 @@ from image2dng.compatibility import processor_tool_inventory
 REPORT_SCHEMA = "image2dng.raw_processor_setup_audit.v1"
 TARGET_TOOLS = ("dcraw", "darktable-cli", "rawtherapee-cli")
 PACKAGE_MANAGERS = ("winget", "scoop", "choco")
+PACKAGE_SEARCH_STATUSES = {"completed", "failed", "not-found", "not-run", "skipped"}
 
 TOOL_QUERIES = {
     "dcraw": {
@@ -543,8 +544,10 @@ def _search_query(search: dict[str, Any]) -> str:
 
 def _search_status(search: dict[str, Any]) -> str:
     status = search["status"]
-    if not isinstance(status, str):
-        raise TypeError("package search status must be a string")
+    if not isinstance(status, str) or status not in PACKAGE_SEARCH_STATUSES:
+        raise TypeError(
+            "package search status must be completed, failed, not-found, not-run, or skipped"
+        )
     return status
 
 

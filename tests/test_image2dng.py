@@ -5628,6 +5628,19 @@ def test_raw_processor_setup_audit_rejects_malformed_package_search(tmp_path):
         timeout_seconds=1,
         skip_package_search=True,
     )
+    report["tools"]["darktable-cli"]["package_searches"][0]["status"] = "unknown"
+
+    with pytest.raises(
+        TypeError,
+        match="package search status must be completed, failed, not-found, not-run, or skipped",
+    ):
+        module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
     report["tools"]["darktable-cli"]["package_searches"][0]["version_hint"] = []
 
     with pytest.raises(TypeError, match="package search version_hint must be a string or null"):
