@@ -658,11 +658,11 @@ def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
             _string(artifact, "bundle_path"),
         )
         artifact_paths.add(artifact["bundle_path"])
-        if artifact.get("path") != artifact["bundle_path"]:
+        if _artifact_path(artifact) != artifact["bundle_path"]:
             raise ValueError("artifact path must match bundle_path")
-        if artifact.get("bytes") != artifact_path.stat().st_size:
+        if _artifact_bytes(artifact) != artifact_path.stat().st_size:
             raise ValueError(f"artifact byte count mismatch: {artifact['bundle_path']}")
-        if artifact.get("sha256") != _sha256(artifact_path):
+        if _artifact_sha256(artifact) != _sha256(artifact_path):
             raise ValueError(f"artifact sha256 mismatch: {artifact['bundle_path']}")
     for value in _source_reports(report).values():
         source_path = str(value)
@@ -1058,6 +1058,27 @@ def _artifact_bundle_path(artifact: dict[str, Any]) -> str:
     if not isinstance(bundle_path, str):
         raise TypeError("artifact bundle_path must be a string")
     return bundle_path
+
+
+def _artifact_path(artifact: dict[str, Any]) -> str:
+    path = artifact["path"]
+    if not isinstance(path, str):
+        raise TypeError("artifact path must be a string")
+    return path
+
+
+def _artifact_bytes(artifact: dict[str, Any]) -> int:
+    bytes_value = artifact["bytes"]
+    if isinstance(bytes_value, bool) or not isinstance(bytes_value, int):
+        raise TypeError("artifact bytes must be an integer")
+    return bytes_value
+
+
+def _artifact_sha256(artifact: dict[str, Any]) -> str:
+    sha256 = artifact["sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("artifact sha256 must be a string")
+    return sha256
 
 
 def _source_reports(report: dict[str, Any]) -> dict[str, Any]:

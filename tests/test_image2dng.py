@@ -5093,6 +5093,37 @@ def test_demo_review_bundle_rejects_artifact_path_alias(tmp_path):
         module._validate_bundle_report(output_dir, report)
 
 
+def test_demo_review_bundle_rejects_malformed_artifact_integrity_metadata(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("x", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {},
+    }
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"path": []}]}
+    with pytest.raises(TypeError, match="artifact path must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"bytes": True}]}
+    with pytest.raises(TypeError, match="artifact bytes must be an integer"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"sha256": []}]}
+    with pytest.raises(TypeError, match="artifact sha256 must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+
 def test_demo_review_bundle_rejects_unsafe_manifest_paths(tmp_path):
     module = _load_script_module("generate_demo_review_bundle")
     output_dir = tmp_path / "review-bundle"
