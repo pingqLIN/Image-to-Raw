@@ -800,13 +800,18 @@ def _external_scene_from_manifest_item(
     apply_semantic_reaction = item.get("apply_semantic_reaction", False)
     if not isinstance(apply_semantic_reaction, bool):
         raise ValueError(f"{slug}: apply_semantic_reaction must be boolean when present")
-    producer_metadata = item.get("producer_metadata", item.get("comfyui"))
-    if producer_metadata is not None and not isinstance(producer_metadata, dict):
-        raise ValueError(f"{slug}: producer_metadata must be an object when present")
+    producer_metadata = _optional_alias_object(
+        item,
+        ("producer_metadata", "comfyui"),
+        slug,
+        "producer metadata",
+    )
     producer_metadata_manifest = _optional_manifest_path(
         item,
         ("producer_metadata_manifest", "comfyui_metadata"),
         base,
+        slug=slug,
+        label="producer metadata manifest",
     )
     return ExternalSceneLinearInput(
         slug=slug,
@@ -995,13 +1000,38 @@ def _optional_manifest_path(
     item: dict[str, object],
     keys: str | tuple[str, ...],
     base: Path,
+    *,
+    slug: str | None = None,
+    label: str | None = None,
 ) -> Path | None:
     manifest_keys = (keys,) if isinstance(keys, str) else keys
+    present_keys = [key for key in manifest_keys if key in item and item[key] is not None]
+    if len(present_keys) > 1:
+        prefix = f"{slug}: " if slug else ""
+        field_label = label or "manifest path"
+        raise ValueError(f"{prefix}use only one {field_label} field")
     for key in manifest_keys:
         if key not in item or item[key] is None:
             continue
         return _manifest_path(item, key, base)
     return None
+
+
+def _optional_alias_object(
+    item: dict[str, object],
+    keys: tuple[str, ...],
+    slug: str,
+    label: str,
+) -> dict[str, Any] | None:
+    present_keys = [key for key in keys if key in item and item[key] is not None]
+    if len(present_keys) > 1:
+        raise ValueError(f"{slug}: use only one {label} field")
+    if not present_keys:
+        return None
+    value = item[present_keys[0]]
+    if not isinstance(value, dict):
+        raise ValueError(f"{slug}: {label} must be an object when present")
+    return value
 
 
 def _external_prompt_hash(

@@ -1852,6 +1852,57 @@ def test_external_scene_manifest_loader_rejects_empty_optional_paths(tmp_path):
         load_external_scene_manifest(manifest_path)
 
 
+def test_external_scene_manifest_loader_rejects_ambiguous_producer_metadata_aliases(
+    tmp_path,
+):
+    source_path = tmp_path / "manifest-scene.tif"
+    metadata_path = tmp_path / "producer-metadata.json"
+    manifest_path = tmp_path / "external-scenes.json"
+    tifffile.imwrite(source_path, _gradient_image(8, 8), photometric="rgb")
+    metadata_path.write_text("{}", encoding="utf-8")
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "image2dng.external_scene_linear_sources.v1",
+                "scenes": [
+                    {
+                        "slug": "manifest-scene",
+                        "path": source_path.name,
+                        "producer_metadata": {"seed": 1},
+                        "comfyui": {"seed": 2},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="manifest-scene: use only one producer metadata field"):
+        load_external_scene_manifest(manifest_path)
+
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "image2dng.external_scene_linear_sources.v1",
+                "scenes": [
+                    {
+                        "slug": "manifest-scene",
+                        "path": source_path.name,
+                        "producer_metadata_manifest": metadata_path.name,
+                        "comfyui_metadata": metadata_path.name,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match="manifest-scene: use only one producer metadata manifest field",
+    ):
+        load_external_scene_manifest(manifest_path)
+
+
 def test_raw_native_batch_cli_reports_manifest_errors_without_traceback(tmp_path, capsys):
     module = _load_script_module("generate_raw_native_batch")
     manifest_path = tmp_path / "external-scenes.json"
