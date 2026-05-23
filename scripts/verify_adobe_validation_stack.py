@@ -749,8 +749,8 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     for step in _steps(report):
         lines.append(f"- `{_step_name(step)}`: `{_step_status(step)}`")
         lines.append(f"  - Exit code: `{_step_exit_code(step)}`")
-        child_report_path = step.get("child_report_path")
-        if isinstance(child_report_path, dict):
+        child_report_path = _step_child_report_path(step)
+        if child_report_path is not None:
             lines.append(f"  - Child report: `{_child_report_display(child_report_path)}`")
         step_findings = _step_blocking_findings(step)
         if step_findings:
@@ -849,6 +849,15 @@ def _step_exit_code(step: dict[str, Any]) -> int | None:
     if isinstance(exit_code, int) or exit_code is None:
         return exit_code
     raise TypeError("step exit_code must be an integer or null")
+
+
+def _step_child_report_path(step: dict[str, Any]) -> dict[str, Any] | None:
+    child_report_path = step.get("child_report_path")
+    if child_report_path is None:
+        return None
+    if not isinstance(child_report_path, dict):
+        raise TypeError("step child_report_path must be an object")
+    return child_report_path
 
 
 def _child_report_display(child_report_path: dict[str, Any]) -> str:
