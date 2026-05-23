@@ -541,7 +541,7 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
         )
 
     lines.extend(["", "## Reports And Manifests", ""])
-    for key, value in _source_reports(report).items():
+    for key, value in _source_report_paths(report).items():
         lines.append(f"- `{key}`: [{value}]({value})")
 
     lines.extend(
@@ -664,8 +664,7 @@ def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
             raise ValueError(f"artifact byte count mismatch: {artifact['bundle_path']}")
         if _artifact_sha256(artifact) != _sha256(artifact_path):
             raise ValueError(f"artifact sha256 mismatch: {artifact['bundle_path']}")
-    for value in _source_reports(report).values():
-        source_path = str(value)
+    for source_path in _source_report_paths(report).values():
         _validate_relative_existing_path(output_dir, source_path)
         if source_path not in artifact_paths:
             raise ValueError(f"source report is not a registered artifact: {source_path}")
@@ -1086,6 +1085,17 @@ def _source_reports(report: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(source_reports, dict):
         raise TypeError("report source_reports must be an object")
     return source_reports
+
+
+def _source_report_paths(report: dict[str, Any]) -> dict[str, str]:
+    paths: dict[str, str] = {}
+    for key, value in _source_reports(report).items():
+        if not isinstance(key, str):
+            raise TypeError("source report name must be a string")
+        if not isinstance(value, str):
+            raise TypeError("source report path must be a string")
+        paths[key] = value
+    return paths
 
 
 def _errors(report: dict[str, Any]) -> list[Any]:

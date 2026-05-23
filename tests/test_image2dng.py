@@ -5038,6 +5038,14 @@ def test_demo_review_bundle_rejects_malformed_report_accessors():
     with pytest.raises(TypeError, match="report source_reports must be an object"):
         module._source_reports({"source_reports": []})
 
+    malformed = report | {"source_reports": {False: "artifacts/reports/report.txt"}}
+    with pytest.raises(TypeError, match="source report name must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"source_reports": {"development_baseline_report": []}}
+    with pytest.raises(TypeError, match="source report path must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
     with pytest.raises(TypeError, match="report errors must be a list"):
         module._errors({"errors": "none"})
 
@@ -5121,6 +5129,35 @@ def test_demo_review_bundle_rejects_malformed_artifact_integrity_metadata(tmp_pa
 
     malformed = report | {"artifacts": [report["artifacts"][0] | {"sha256": []}]}
     with pytest.raises(TypeError, match="artifact sha256 must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+
+def test_demo_review_bundle_rejects_malformed_source_report_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("x", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {
+            "development_baseline_report": "artifacts/reports/report.txt",
+        },
+    }
+
+    malformed = report | {"source_reports": {False: "artifacts/reports/report.txt"}}
+    with pytest.raises(TypeError, match="source report name must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"source_reports": {"development_baseline_report": []}}
+    with pytest.raises(TypeError, match="source report path must be a string"):
         module._validate_bundle_report(output_dir, malformed)
 
 
