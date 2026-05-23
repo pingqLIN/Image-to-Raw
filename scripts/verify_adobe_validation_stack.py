@@ -422,8 +422,8 @@ def _load_current_child_report(
         errors.append(
             f"child report schema mismatch: expected {expected_schema}, got {schema}"
         )
-    generated_at = report.get("generated_at")
-    if not isinstance(generated_at, str):
+    generated_at = _child_report_generated_at(report)
+    if generated_at is None:
         errors.append("child report missing generated_at")
     else:
         child_generated_at = _parse_datetime(generated_at)
@@ -586,6 +586,15 @@ def _child_report_schema(report: dict[str, Any]) -> str:
     if not isinstance(schema, str):
         raise TypeError("child report schema must be a string")
     return schema
+
+
+def _child_report_generated_at(report: dict[str, Any]) -> str | None:
+    generated_at = report.get("generated_at")
+    if generated_at is None:
+        return None
+    if not isinstance(generated_at, str):
+        raise TypeError("child report generated_at must be a string")
+    return generated_at
 
 
 def _child_report_string_list(report: dict[str, Any], key: str) -> list[str]:

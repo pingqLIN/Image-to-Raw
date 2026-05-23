@@ -3846,6 +3846,11 @@ def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
     with pytest.raises(TypeError, match="child report schema must be a string"):
         module._child_report_schema({"schema": False})
 
+    with pytest.raises(TypeError, match="child report generated_at must be a string"):
+        module._child_report_generated_at({"generated_at": False})
+
+    assert module._child_report_generated_at({}) is None
+
     with pytest.raises(
         TypeError,
         match="child report blocking_findings must be a string list",
