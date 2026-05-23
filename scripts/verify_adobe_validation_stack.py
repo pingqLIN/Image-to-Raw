@@ -171,11 +171,7 @@ def build_report(
     )
     steps.append(project_step)
     _extend_blocking_findings(blocking_findings, project_step)
-    project_fixture_roots = [
-        Path(record["absolute"])
-        for record in project_step.get("project_fixture_roots", [])
-        if isinstance(record, dict) and isinstance(record.get("absolute"), str)
-    ]
+    project_fixture_roots = _project_fixture_roots(project_step)
 
     converter_command = [
         sys.executable,
@@ -564,6 +560,13 @@ def _sdk_fixture_roots(
     return roots
 
 
+def _project_fixture_roots(step: dict[str, Any]) -> list[Path]:
+    records = step.get("project_fixture_roots", [])
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise TypeError("step project_fixture_roots must be an object list")
+    return [Path(_path_record_absolute(record)) for record in records]
+
+
 def _child_blocking_findings(report: dict[str, Any]) -> list[str]:
     findings = _child_report_string_list(report, "blocking_findings")
     if findings:
@@ -786,6 +789,13 @@ def _child_report_display(child_report_path: dict[str, Any]) -> str:
     if not isinstance(display, str):
         raise TypeError("child report display must be a string")
     return display
+
+
+def _path_record_absolute(path_record: dict[str, Any]) -> str:
+    absolute = path_record["absolute"]
+    if not isinstance(absolute, str):
+        raise TypeError("path record absolute must be a string")
+    return absolute
 
 
 def _resolve_from_repo(path: Path, repo_root: Path) -> Path:

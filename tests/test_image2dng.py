@@ -3862,6 +3862,16 @@ def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
     with pytest.raises(TypeError, match="step blocking_findings must be a string list"):
         module._finalize_step_status({"blocking_findings": [False]})
 
+    with pytest.raises(TypeError, match="step project_fixture_roots must be an object list"):
+        module._project_fixture_roots({"project_fixture_roots": ["not-a-root-record"]})
+
+    with pytest.raises(TypeError, match="path record absolute must be a string"):
+        module._project_fixture_roots({"project_fixture_roots": [{"absolute": []}]})
+
+    assert module._project_fixture_roots(
+        {"project_fixture_roots": [{"absolute": str(Path.cwd())}]}
+    ) == [Path.cwd()]
+
     with pytest.raises(
         TypeError,
         match="project fixture sample index all_validations_ok must be a boolean",
