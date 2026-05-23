@@ -2948,8 +2948,46 @@ def test_prepare_adobe_dng_sdk_manual_validation_rejects_malformed_summary_recor
         module._summary_markdown(report)
 
     report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["status"] = "ready"
+    with pytest.raises(
+        TypeError,
+        match="report status must be missing-sdk-validate-project or prepared",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
     report["local_only"] = "yes"
     with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["archive_extraction"] = False
+    with pytest.raises(TypeError, match="report policy archive_extraction must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["archive_extraction"] = "auto"
+    with pytest.raises(TypeError, match="report policy archive_extraction must be not-attempted"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["sdk_build"] = "automatic"
+    with pytest.raises(TypeError, match="report policy sdk_build must be manual-only"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["sdk_execution"] = "queued"
+    with pytest.raises(TypeError, match="report policy sdk_execution must be not-attempted"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["ci_gate"] = "false"
+    with pytest.raises(TypeError, match="report policy ci_gate must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["ci_gate"] = True
+    with pytest.raises(TypeError, match="report policy ci_gate must be false"):
         module._summary_markdown(report)
 
     report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))

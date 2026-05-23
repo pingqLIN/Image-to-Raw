@@ -12,6 +12,12 @@ from typing import Any
 from image2dng import __version__
 
 REPORT_SCHEMA = "image2dng.adobe_dng_sdk_manual_validation_plan.v1"
+REPORT_STATUSES = {"missing-sdk-validate-project", "prepared"}
+POLICY_VALUES = {
+    "archive_extraction": {"not-attempted"},
+    "sdk_build": {"manual-only"},
+    "sdk_execution": {"not-attempted"},
+}
 
 DEFAULT_FIXTURE_CANDIDATES = (
     Path("demo-output/review-bundle/artifacts/representative-dng"),
@@ -264,6 +270,8 @@ def _report_status(report: dict[str, Any]) -> str:
     status = report["status"]
     if not isinstance(status, str):
         raise TypeError("report status must be a string")
+    if status not in REPORT_STATUSES:
+        raise TypeError("report status must be missing-sdk-validate-project or prepared")
     return status
 
 
@@ -278,6 +286,18 @@ def _policy(report: dict[str, Any]) -> dict[str, Any]:
     policy = report["policy"]
     if not isinstance(policy, dict):
         raise TypeError("report policy must be an object")
+    for key, allowed_values in POLICY_VALUES.items():
+        value = policy[key]
+        if not isinstance(value, str):
+            raise TypeError(f"report policy {key} must be a string")
+        if value not in allowed_values:
+            allowed = " or ".join(sorted(allowed_values))
+            raise TypeError(f"report policy {key} must be {allowed}")
+    ci_gate = policy["ci_gate"]
+    if not isinstance(ci_gate, bool):
+        raise TypeError("report policy ci_gate must be a boolean")
+    if ci_gate:
+        raise TypeError("report policy ci_gate must be false")
     return policy
 
 
