@@ -5107,6 +5107,9 @@ def test_demo_review_bundle_rejects_malformed_command_status():
     with pytest.raises(TypeError, match="command status must be a string"):
         module._has_command_failure({"commands": [{"status": False}]})
 
+    with pytest.raises(TypeError, match="command status must be passed or failed"):
+        module._has_command_failure({"commands": [{"status": "skipped"}]})
+
 
 def test_demo_review_bundle_rejects_malformed_source_report_schema(tmp_path):
     module = _load_script_module("generate_demo_review_bundle")

@@ -24,6 +24,7 @@ COMPATIBILITY_SCHEMAS = {
     "image2dng.compatibility_evidence.v1",
     "image2dng.compatibility_evidence.v2",
 }
+COMMAND_STATUSES = {"failed", "passed"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1033,6 +1034,8 @@ def _command_status(command: dict[str, Any]) -> str:
     status = command["status"]
     if not isinstance(status, str):
         raise TypeError("command status must be a string")
+    if status not in COMMAND_STATUSES:
+        raise TypeError("command status must be passed or failed")
     return status
 
 
