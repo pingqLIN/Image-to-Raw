@@ -251,12 +251,12 @@ def _blocking_findings(
 
 def _converter_resource_state(resources: list[dict[str, Any]]) -> str:
     converter_resources = [
-        resource for resource in resources if resource.get("kind") == "dng-converter-resource"
+        resource for resource in resources if _resource_kind(resource) == "dng-converter-resource"
     ]
     if not converter_resources:
         return "missing"
     if any(
-        str(resource.get("name", "")).lower() in INSTALLED_CONVERTER_FILENAMES
+        _resource_name(resource).lower() in INSTALLED_CONVERTER_FILENAMES
         for resource in converter_resources
     ):
         return "installed-executable"
