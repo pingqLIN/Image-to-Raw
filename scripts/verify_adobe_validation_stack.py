@@ -417,9 +417,10 @@ def _load_current_child_report(
     if not isinstance(report, dict):
         return None, [f"child report is not an object: {_display_path(report_path, repo_root)}"]
     errors = []
-    if report.get("schema") != expected_schema:
+    schema = _child_report_schema(report)
+    if schema != expected_schema:
         errors.append(
-            f"child report schema mismatch: expected {expected_schema}, got {report.get('schema')}"
+            f"child report schema mismatch: expected {expected_schema}, got {schema}"
         )
     generated_at = report.get("generated_at")
     if not isinstance(generated_at, str):
@@ -578,6 +579,13 @@ def _child_blocking_findings(report: dict[str, Any]) -> list[str]:
     if isinstance(status, str) and status not in {"passed", "dry-run"}:
         return [f"child report status is {status}"]
     return ["child report ok is false"]
+
+
+def _child_report_schema(report: dict[str, Any]) -> str:
+    schema = report.get("schema")
+    if not isinstance(schema, str):
+        raise TypeError("child report schema must be a string")
+    return schema
 
 
 def _child_report_string_list(report: dict[str, Any], key: str) -> list[str]:
