@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         _matrix(report).extend(_processor_matrix_entries(fixture))
 
     _append_failures(report)
-    report["ok"] = not _errors(report)
+    report["ok"] = not _error_messages(report)
 
     report_path = root / "compatibility-report.json"
     summary_path = root / "compatibility-summary.md"
@@ -381,6 +381,11 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             "- Install hints are dry-run guidance only.",
         ]
     )
+    error_messages = _error_messages(report)
+    if error_messages:
+        lines.extend(["", "## Errors", ""])
+        for error in error_messages:
+            lines.append(f"- {error}")
     lines.append("")
     return "\n".join(lines)
 
@@ -575,6 +580,13 @@ def _errors(report: dict[str, Any]) -> list[Any]:
     errors = report["errors"]
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
+    return errors
+
+
+def _error_messages(report: dict[str, Any]) -> list[str]:
+    errors = _errors(report)
+    if not all(isinstance(error, str) for error in errors):
+        raise TypeError("report errors must be a string list")
     return errors
 
 

@@ -2250,6 +2250,14 @@ def test_compatibility_evidence_rejects_malformed_report_accessors():
     with pytest.raises(TypeError, match="report errors must be a list"):
         module._errors({"errors": "none"})
 
+    malformed = report | {"errors": [False]}
+    with pytest.raises(TypeError, match="report errors must be a string list"):
+        module._summary_markdown(malformed)
+
+    summary = module._summary_markdown(report | {"ok": False, "errors": ["synthetic failure"]})
+    assert "## Errors" in summary
+    assert "- synthetic failure" in summary
+
 
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-success")
