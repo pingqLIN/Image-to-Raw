@@ -577,8 +577,8 @@ def _child_blocking_findings(report: dict[str, Any]) -> list[str]:
     errors = _child_report_string_list(report, "errors")
     if errors:
         return errors
-    status = report.get("status")
-    if isinstance(status, str) and status not in {"passed", "dry-run"}:
+    status = _child_report_status(report)
+    if status is not None and status not in {"passed", "dry-run"}:
         return [f"child report status is {status}"]
     return ["child report ok is false"]
 
@@ -597,6 +597,15 @@ def _child_report_generated_at(report: dict[str, Any]) -> str | None:
     if not isinstance(generated_at, str):
         raise TypeError("child report generated_at must be a string")
     return generated_at
+
+
+def _child_report_status(report: dict[str, Any]) -> str | None:
+    status = report.get("status")
+    if status is None:
+        return None
+    if not isinstance(status, str):
+        raise TypeError("child report status must be a string")
+    return status
 
 
 def _child_report_string_list(report: dict[str, Any], key: str) -> list[str]:
