@@ -4866,6 +4866,25 @@ def test_demo_review_bundle_rejects_malformed_source_report_schema(tmp_path):
         module._read_json(report_path, "example.schema.v1")
 
 
+def test_demo_review_bundle_rejects_malformed_visual_manifest_lists():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(ValueError, match="visual manifest contact_sheets must be an object list"):
+        module._collect_contact_sheets(
+            paths=None,
+            report={},
+            visual_manifest={"contact_sheets": ["not-a-sheet"]},
+        )
+
+    with pytest.raises(ValueError, match="visual manifest assets must be an object list"):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={"assets": ["not-an-asset"]},
+        )
+
+
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
     report = {

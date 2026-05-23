@@ -275,7 +275,7 @@ def _collect_contact_sheets(
     report: dict[str, Any],
     visual_manifest: dict[str, Any],
 ) -> None:
-    for sheet in visual_manifest.get("contact_sheets", []):
+    for sheet in _object_list(visual_manifest, "contact_sheets", "visual manifest"):
         path_value = _string(sheet, "path")
         source = _join_reported_path(paths.visual_dir, path_value)
         name = _portable_stem(path_value)
@@ -297,8 +297,7 @@ def _collect_visual_representatives(
 ) -> None:
     assets = {
         _string(asset, "slug"): asset
-        for asset in visual_manifest.get("assets", [])
-        if isinstance(asset, dict)
+        for asset in _object_list(visual_manifest, "assets", "visual manifest")
     }
     chart = assets.get("chart-gradient")
     if not isinstance(chart, dict):
@@ -938,6 +937,13 @@ def _string(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _object_list(payload: dict[str, Any], key: str, label: str) -> list[dict[str, Any]]:
+    value = payload.get(key)
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError(f"{label} {key} must be an object list")
     return value
 
 
