@@ -676,6 +676,8 @@ def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
             _string(artifact, "bundle_path"),
         )
         artifact_paths.add(artifact["bundle_path"])
+        if _artifact_category(artifact) != _category_for_kind(_artifact_kind(artifact)):
+            raise ValueError("artifact category must match kind")
         if _artifact_path(artifact) != artifact["bundle_path"]:
             raise ValueError("artifact path must match bundle_path")
         if _artifact_bytes(artifact) != artifact_path.stat().st_size:
@@ -1092,6 +1094,13 @@ def _artifact_kind(artifact: dict[str, Any]) -> str:
             "representative-dng, or validation-json"
         )
     return kind
+
+
+def _artifact_category(artifact: dict[str, Any]) -> str:
+    category = artifact["category"]
+    if not isinstance(category, str):
+        raise TypeError("artifact category must be a string")
+    return category
 
 
 def _artifact_name(artifact: dict[str, Any]) -> str:
