@@ -295,10 +295,11 @@ def _collect_visual_representatives(
     report: dict[str, Any],
     visual_manifest: dict[str, Any],
 ) -> None:
-    assets = {
-        _string(asset, "slug"): asset
-        for asset in _object_list(visual_manifest, "assets", "visual manifest")
-    }
+    assets = _object_map_by_string_key(
+        _object_list(visual_manifest, "assets", "visual manifest"),
+        "slug",
+        "visual manifest asset",
+    )
     chart = assets.get("chart-gradient")
     if not isinstance(chart, dict):
         raise ValueError("visual manifest missing chart-gradient asset")
@@ -948,6 +949,20 @@ def _object_list(payload: dict[str, Any], key: str, label: str) -> list[dict[str
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise ValueError(f"{label} {key} must be an object list")
     return value
+
+
+def _object_map_by_string_key(
+    rows: list[dict[str, Any]],
+    key: str,
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    mapped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        value = _string(row, key)
+        if value in mapped:
+            raise ValueError(f"duplicate {label} {key}: {value}")
+        mapped[value] = row
+    return mapped
 
 
 def _require(condition: bool, message: str) -> None:

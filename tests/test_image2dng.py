@@ -4890,6 +4890,22 @@ def test_demo_review_bundle_rejects_malformed_visual_chart_fields():
 
     with pytest.raises(
         ValueError,
+        match="duplicate visual manifest asset slug: chart-gradient",
+    ):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={
+                "assets": [
+                    {"slug": "chart-gradient"},
+                    {"slug": "chart-gradient"},
+                ]
+            },
+        )
+
+    with pytest.raises(
+        ValueError,
         match="visual chart-gradient asset outputs must be an object",
     ):
         module._collect_visual_representatives(
