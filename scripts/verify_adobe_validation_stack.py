@@ -308,7 +308,7 @@ def _run_project_dng_fixture_step(
     )
     inspection, inspection_errors = _inspect_project_dng_fixtures(output_dir, repo_root)
     step["project_fixture_inspection"] = inspection
-    step["project_fixture_roots"] = inspection.get("fixture_roots", [])
+    step["project_fixture_roots"] = _project_fixture_inspection_roots(inspection)
     step["blocking_findings"].extend(inspection_errors)
     _finalize_step_status(step)
     return step
@@ -567,6 +567,15 @@ def _project_fixture_roots(step: dict[str, Any]) -> list[Path]:
     if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
         raise TypeError("step project_fixture_roots must be an object list")
     return [Path(_path_record_absolute(record)) for record in records]
+
+
+def _project_fixture_inspection_roots(inspection: dict[str, Any]) -> list[dict[str, Any]]:
+    records = inspection.get("fixture_roots")
+    if records is None:
+        return []
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise TypeError("project fixture inspection fixture_roots must be an object list")
+    return records
 
 
 def _child_blocking_findings(report: dict[str, Any]) -> list[str]:

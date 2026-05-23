@@ -3901,6 +3901,14 @@ def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
 
     with pytest.raises(
         TypeError,
+        match="project fixture inspection fixture_roots must be an object list",
+    ):
+        module._project_fixture_inspection_roots({"fixture_roots": ["not-a-root-record"]})
+
+    assert module._project_fixture_inspection_roots({}) == []
+
+    with pytest.raises(
+        TypeError,
         match="project fixture manifest schema must be a string",
     ):
         module._project_fixture_manifest_schema({"schema": False})
