@@ -530,8 +530,8 @@ def _recommendation_rationale(recommendation: dict[str, Any]) -> str:
 
 def _search_manager(search: dict[str, Any]) -> str:
     manager = search["manager"]
-    if not isinstance(manager, str):
-        raise TypeError("package search manager must be a string")
+    if not isinstance(manager, str) or manager not in PACKAGE_MANAGERS:
+        raise TypeError("package search manager must be winget, scoop, or choco")
     return manager
 
 

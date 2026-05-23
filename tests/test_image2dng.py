@@ -5628,6 +5628,16 @@ def test_raw_processor_setup_audit_rejects_malformed_package_search(tmp_path):
         timeout_seconds=1,
         skip_package_search=True,
     )
+    report["tools"]["darktable-cli"]["package_searches"][0]["manager"] = "apt"
+
+    with pytest.raises(TypeError, match="package search manager must be winget, scoop, or choco"):
+        module._runbook_markdown(report)
+
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
     report["tools"]["darktable-cli"]["package_searches"][0]["status"] = "unknown"
 
     with pytest.raises(
