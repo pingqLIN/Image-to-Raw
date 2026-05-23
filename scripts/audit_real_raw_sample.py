@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import subprocess
 import time
@@ -597,9 +598,13 @@ def _tool_exit_code(tool: dict[str, Any]) -> int | None:
 
 def _tool_duration_seconds(tool: dict[str, Any]) -> float:
     duration = tool["duration_seconds"]
-    if isinstance(duration, int | float) and not isinstance(duration, bool):
+    if (
+        isinstance(duration, int | float)
+        and not isinstance(duration, bool)
+        and math.isfinite(duration)
+    ):
         return float(duration)
-    raise TypeError("tool duration_seconds must be numeric")
+    raise TypeError("tool duration_seconds must be finite numeric")
 
 
 def _tool_result(tool: dict[str, Any]) -> str:

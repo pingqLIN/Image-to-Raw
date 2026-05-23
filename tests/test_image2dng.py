@@ -4384,7 +4384,7 @@ def test_real_raw_sample_audit_rejects_malformed_tool_summary():
             }
         )
 
-    with pytest.raises(TypeError, match="tool duration_seconds must be numeric"):
+    with pytest.raises(TypeError, match="tool duration_seconds must be finite numeric"):
         module._tool_summary(
             {
                 "available": True,
@@ -4392,6 +4392,21 @@ def test_real_raw_sample_audit_rejects_malformed_tool_summary():
                 "command": [],
                 "exit_code": None,
                 "duration_seconds": True,
+                "result": "skipped",
+                "stdout_tail": [],
+                "stderr_tail": [],
+                "notes": "tool not found",
+            }
+        )
+
+    with pytest.raises(TypeError, match="tool duration_seconds must be finite numeric"):
+        module._tool_summary(
+            {
+                "available": True,
+                "discovery": None,
+                "command": [],
+                "exit_code": None,
+                "duration_seconds": float("inf"),
                 "result": "skipped",
                 "stdout_tail": [],
                 "stderr_tail": [],
