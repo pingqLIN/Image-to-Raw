@@ -521,8 +521,8 @@ def _inspect_project_dng_fixtures(
             errors.append("project fixture scene validations missing")
             continue
         for key in ("linearraw", "cfa"):
-            validation = validations.get(key)
-            if not isinstance(validation, dict) or not _validation_ok(
+            validation = _project_fixture_validation_record(validations, key)
+            if validation is None or not _validation_ok(
                 validation,
                 f"project fixture validation {key}",
             ):
@@ -647,6 +647,18 @@ def _project_fixture_output_path(outputs: dict[str, Any], key: str) -> str | Non
     if not isinstance(value, str):
         raise TypeError(f"project fixture output {key} must be a string")
     return value
+
+
+def _project_fixture_validation_record(
+    validations: dict[str, Any],
+    key: str,
+) -> dict[str, Any] | None:
+    validation = validations.get(key)
+    if validation is None:
+        return None
+    if not isinstance(validation, dict):
+        raise TypeError(f"project fixture validation {key} must be an object")
+    return validation
 
 
 def _validation_ok(validation: dict[str, Any], label: str) -> bool:
