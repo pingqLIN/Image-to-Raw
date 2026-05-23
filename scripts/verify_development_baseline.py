@@ -84,7 +84,7 @@ def main() -> int:
     except ValueError as exc:
         _append_error(report, str(exc))
 
-    report["ok"] = not _errors(report) and all(
+    report["ok"] = not _error_messages(report) and all(
         _step_status(step) == "passed" for step in _steps(report)
     )
     _write_report(output_dir, report)
@@ -471,6 +471,13 @@ def _errors(report: dict[str, object]) -> list[object]:
     errors = report["errors"]
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
+    return errors
+
+
+def _error_messages(report: dict[str, object]) -> list[str]:
+    errors = _errors(report)
+    if not all(isinstance(error, str) for error in errors):
+        raise TypeError("report errors must be a string list")
     return errors
 
 

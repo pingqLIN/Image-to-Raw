@@ -5614,6 +5614,13 @@ def test_development_baseline_rejects_malformed_report_accessors():
     with pytest.raises(TypeError, match="report errors must be a list"):
         module._errors({"errors": "none"})
 
+    with pytest.raises(TypeError, match="report errors must be a string list"):
+        module._error_messages({"errors": ["ok", 7]})
+
+    assert module._error_messages({"errors": ["synthetic failure"]}) == [
+        "synthetic failure"
+    ]
+
 
 def test_development_baseline_rejects_malformed_step_records():
     module = _load_script_module("verify_development_baseline")
