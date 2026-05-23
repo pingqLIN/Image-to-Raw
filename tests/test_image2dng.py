@@ -2652,6 +2652,17 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
         module._summary_markdown(report)
 
     report = module.build_report(adobe_dir)
+    report["readiness"]["dng_converter_resource_state"] = "unknown"
+    with pytest.raises(
+        TypeError,
+        match=(
+            "readiness dng_converter_resource_state must be installed-executable, "
+            "missing, or resource-present-not-installed"
+        ),
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
     report["missing_required_kinds"] = ["dng-sdk-archive", 7]
     with pytest.raises(
         TypeError,

@@ -23,6 +23,11 @@ INSTALLED_CONVERTER_FILENAMES = {
     "adobe dng converter.exe",
 }
 CONVERTER_RESOURCE_EXTENSIONS = {".exe", ".msi"}
+CONVERTER_RESOURCE_STATES = {
+    "installed-executable",
+    "missing",
+    "resource-present-not-installed",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -342,7 +347,20 @@ def _readiness(report: dict[str, Any]) -> dict[str, Any]:
         for key, value in readiness.items()
     ):
         raise TypeError("report readiness must be an object")
+    _readiness_converter_resource_state(readiness)
     return readiness
+
+
+def _readiness_converter_resource_state(readiness: dict[str, Any]) -> str:
+    state = readiness["dng_converter_resource_state"]
+    if not isinstance(state, str):
+        raise TypeError("readiness dng_converter_resource_state must be a string")
+    if state not in CONVERTER_RESOURCE_STATES:
+        raise TypeError(
+            "readiness dng_converter_resource_state must be installed-executable, "
+            "missing, or resource-present-not-installed"
+        )
+    return state
 
 
 def _policy(report: dict[str, Any]) -> dict[str, Any]:
