@@ -2104,6 +2104,48 @@ def test_compatibility_evidence_rejects_malformed_fixture_validation_flag():
         )
 
 
+def test_compatibility_evidence_failure_aggregation_uses_matrix_accessors():
+    module = _load_script_module("generate_compatibility_evidence")
+    report = {
+        "fixtures": [
+            {
+                "slug": "sample",
+                "validation_ok": True,
+            }
+        ],
+        "matrix": [
+            {
+                "fixture": "sample",
+                "tool": "image2dng validate",
+                "result": "failed",
+                "notes": "simulated failure",
+            }
+        ],
+        "errors": [],
+    }
+
+    module._append_failures(report)
+    assert report["errors"] == ["sample failed image2dng validate: simulated failure"]
+
+    malformed = report | {
+        "matrix": [
+            report["matrix"][0] | {"fixture": []},
+        ],
+        "errors": [],
+    }
+    with pytest.raises(TypeError, match="matrix fixture must be a string"):
+        module._append_failures(malformed)
+
+    malformed = report | {
+        "matrix": [
+            report["matrix"][0] | {"tool": False},
+        ],
+        "errors": [],
+    }
+    with pytest.raises(TypeError, match="matrix tool must be a string"):
+        module._append_failures(malformed)
+
+
 def test_compatibility_evidence_rejects_malformed_report_accessors():
     module = _load_script_module("generate_compatibility_evidence")
     report = {

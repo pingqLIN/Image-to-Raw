@@ -301,11 +301,11 @@ def _processor_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, object]
 def _append_failures(report: dict[str, Any]) -> None:
     for fixture in _fixtures(report):
         if not _fixture_validation_ok(fixture):
-            _errors(report).append(f"{fixture['slug']} structural validation failed")
+            _errors(report).append(f"{_fixture_slug(fixture)} structural validation failed")
     for entry in _matrix(report):
         if _matrix_result(entry) == "failed":
             _errors(report).append(
-                f"{entry['fixture']} failed {entry['tool']}: {_matrix_notes(entry)}"
+                f"{_matrix_fixture(entry)} failed {_matrix_tool(entry)}: {_matrix_notes(entry)}"
             )
 
 
