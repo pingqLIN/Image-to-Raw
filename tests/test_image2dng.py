@@ -3925,6 +3925,14 @@ def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
 
     with pytest.raises(
         TypeError,
+        match="project fixture scene outputs must be an object",
+    ):
+        module._project_fixture_scene_outputs({"outputs": []})
+
+    assert module._project_fixture_scene_outputs({}) is None
+
+    with pytest.raises(
+        TypeError,
         match="project fixture output linearraw_dng must be a string",
     ):
         module._project_fixture_output_path({"linearraw_dng": []}, "linearraw_dng")

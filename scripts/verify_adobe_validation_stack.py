@@ -495,9 +495,9 @@ def _inspect_project_dng_fixtures(
         if not isinstance(scene, dict):
             errors.append("project fixture scene entry is not an object")
             continue
-        outputs = scene.get("outputs")
+        outputs = _project_fixture_scene_outputs(scene)
         validations = scene.get("validations")
-        if not isinstance(outputs, dict):
+        if outputs is None:
             errors.append("project fixture scene outputs missing")
             continue
         for key in ("linearraw_dng", "cfa_dng"):
@@ -655,6 +655,15 @@ def _project_fixture_scenes(manifest: dict[str, Any]) -> list[Any]:
     if not isinstance(scenes, list):
         raise TypeError("project fixture manifest scenes must be a list")
     return scenes
+
+
+def _project_fixture_scene_outputs(scene: dict[str, Any]) -> dict[str, Any] | None:
+    outputs = scene.get("outputs")
+    if outputs is None:
+        return None
+    if not isinstance(outputs, dict):
+        raise TypeError("project fixture scene outputs must be an object")
+    return outputs
 
 
 def _project_fixture_output_path(outputs: dict[str, Any], key: str) -> str | None:
