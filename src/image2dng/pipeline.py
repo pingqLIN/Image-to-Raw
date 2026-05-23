@@ -793,9 +793,7 @@ def _external_scene_from_manifest_item(
         raise ValueError("external scene manifest entries must be objects")
     slug = _manifest_string(item, "slug")
     source_path = _manifest_path(item, "path", base)
-    semantic_manifest = (
-        _manifest_path(item, "semantic_manifest", base) if item.get("semantic_manifest") else None
-    )
+    semantic_manifest = _optional_manifest_path(item, "semantic_manifest", base)
     input_space = _optional_manifest_string(item, "input_space", "linear-rec709")
     if input_space not in {"srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"}:
         raise ValueError(f"{slug}: unsupported input_space: {input_space}")
@@ -995,12 +993,14 @@ def _manifest_path(item: dict[str, object], key: str, base: Path) -> Path:
 
 def _optional_manifest_path(
     item: dict[str, object],
-    keys: tuple[str, ...],
+    keys: str | tuple[str, ...],
     base: Path,
 ) -> Path | None:
-    for key in keys:
-        if item.get(key):
-            return _manifest_path(item, key, base)
+    manifest_keys = (keys,) if isinstance(keys, str) else keys
+    for key in manifest_keys:
+        if key not in item or item[key] is None:
+            continue
+        return _manifest_path(item, key, base)
     return None
 
 

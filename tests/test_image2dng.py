@@ -1825,6 +1825,33 @@ def test_external_scene_manifest_loader_rejects_malformed_input_space(tmp_path):
         load_external_scene_manifest(manifest_path)
 
 
+def test_external_scene_manifest_loader_rejects_empty_optional_paths(tmp_path):
+    source_path = tmp_path / "manifest-scene.tif"
+    manifest_path = tmp_path / "external-scenes.json"
+    tifffile.imwrite(source_path, _gradient_image(8, 8), photometric="rgb")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "image2dng.external_scene_linear_sources.v1",
+                "scenes": [
+                    {
+                        "slug": "manifest-scene",
+                        "path": source_path.name,
+                        "semantic_manifest": "",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="external scene manifest entry missing string field: semantic_manifest",
+    ):
+        load_external_scene_manifest(manifest_path)
+
+
 def test_raw_native_batch_cli_reports_manifest_errors_without_traceback(tmp_path, capsys):
     module = _load_script_module("generate_raw_native_batch")
     manifest_path = tmp_path / "external-scenes.json"
