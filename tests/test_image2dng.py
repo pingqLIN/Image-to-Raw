@@ -2676,6 +2676,25 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
     with pytest.raises(TypeError, match="resource name must be a string"):
         module._converter_resource_state([{"kind": "dng-converter-resource", "name": []}])
 
+    with pytest.raises(TypeError, match="resource zip must be an object"):
+        module._zip_findings([{"kind": "dng-sdk-archive", "zip": []}])
+
+    with pytest.raises(TypeError, match="resource zip findings must be an object"):
+        module._zip_findings([{"kind": "dng-sdk-archive", "zip": {"findings": []}}])
+
+    with pytest.raises(
+        TypeError,
+        match="resource zip finding dng_validate_solution must be a boolean",
+    ):
+        module._zip_findings(
+            [
+                {
+                    "kind": "dng-sdk-archive",
+                    "zip": {"findings": {"dng_validate_solution": "yes"}},
+                }
+            ]
+        )
+
 
 def test_adobe_local_resource_audit_recognizes_spaced_converter_name(tmp_path):
     module = _load_script_module("audit_adobe_local_resources")

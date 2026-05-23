@@ -223,16 +223,12 @@ def _zip_summary(path: Path, *, entry_limit: int) -> dict[str, Any]:
 def _zip_findings(resources: list[dict[str, Any]]) -> dict[str, bool]:
     dng_sdk_validate_project_detected = False
     for resource in resources:
-        if resource.get("kind") != "dng-sdk-archive":
+        if _resource_kind(resource) != "dng-sdk-archive":
             continue
-        zip_summary = resource.get("zip")
-        if not isinstance(zip_summary, dict):
-            continue
-        findings = zip_summary.get("findings")
-        if not isinstance(findings, dict):
-            continue
+        zip_summary = _resource_zip(resource)
         dng_sdk_validate_project_detected = dng_sdk_validate_project_detected or bool(
-            findings.get("dng_validate_solution") and findings.get("dng_validate_project")
+            _zip_finding(zip_summary, "dng_validate_solution")
+            and _zip_finding(zip_summary, "dng_validate_project")
         )
     return {"dng_sdk_validate_project_detected": dng_sdk_validate_project_detected}
 
@@ -403,6 +399,23 @@ def _resource_sha256(resource: dict[str, Any]) -> str:
     if not isinstance(sha256, str):
         raise TypeError("resource sha256 must be a string")
     return sha256
+
+
+def _resource_zip(resource: dict[str, Any]) -> dict[str, Any]:
+    zip_summary = resource["zip"]
+    if not isinstance(zip_summary, dict):
+        raise TypeError("resource zip must be an object")
+    return zip_summary
+
+
+def _zip_finding(zip_summary: dict[str, Any], key: str) -> bool:
+    findings = zip_summary["findings"]
+    if not isinstance(findings, dict):
+        raise TypeError("resource zip findings must be an object")
+    value = findings.get(key, False)
+    if not isinstance(value, bool):
+        raise TypeError(f"resource zip finding {key} must be a boolean")
+    return value
 
 
 def _output_dir_is_allowed(output_dir: Path) -> bool:
