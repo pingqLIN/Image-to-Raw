@@ -3845,6 +3845,19 @@ def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
 
     with pytest.raises(
         TypeError,
+        match="child report blocking_findings must be a string list",
+    ):
+        module._child_blocking_findings({"blocking_findings": ["ok", False]})
+
+    with pytest.raises(TypeError, match="child report errors must be a string list"):
+        module._child_blocking_findings({"errors": ["ok", False]})
+
+    assert module._child_blocking_findings({"errors": ["synthetic child failure"]}) == [
+        "synthetic child failure"
+    ]
+
+    with pytest.raises(
+        TypeError,
         match="project fixture sample index all_validations_ok must be a boolean",
     ):
         module._sample_index_all_validations_ok({"all_validations_ok": "yes"})

@@ -565,16 +565,25 @@ def _sdk_fixture_roots(
 
 
 def _child_blocking_findings(report: dict[str, Any]) -> list[str]:
-    findings = report.get("blocking_findings")
-    if isinstance(findings, list) and findings:
-        return [str(finding) for finding in findings]
-    errors = report.get("errors")
-    if isinstance(errors, list) and errors:
-        return [str(error) for error in errors]
+    findings = _child_report_string_list(report, "blocking_findings")
+    if findings:
+        return findings
+    errors = _child_report_string_list(report, "errors")
+    if errors:
+        return errors
     status = report.get("status")
     if isinstance(status, str) and status not in {"passed", "dry-run"}:
         return [f"child report status is {status}"]
     return ["child report ok is false"]
+
+
+def _child_report_string_list(report: dict[str, Any], key: str) -> list[str]:
+    value = report.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise TypeError(f"child report {key} must be a string list")
+    return value
 
 
 def _child_report_ok(report: dict[str, Any]) -> bool:
