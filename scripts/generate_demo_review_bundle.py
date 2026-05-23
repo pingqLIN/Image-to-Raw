@@ -347,8 +347,11 @@ def _collect_raw_native_representatives(
     scenes = _object_list(raw_manifest, "scenes", "raw-native manifest")
     if not scenes:
         raise ValueError("raw-native manifest contains no scenes")
-    for scene in scenes:
-        slug = _string(scene, "slug")
+    for slug, scene in _object_map_by_string_key(
+        scenes,
+        "slug",
+        "raw-native scene",
+    ).items():
         outputs = _object(scene, "outputs", f"{slug}: raw-native scene")
         for key in ("linearraw_dng", "cfa_dng"):
             source = _resolve_source_path(_string(outputs, key), paths.raw_native_dir, repo_root)

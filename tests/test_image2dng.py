@@ -4980,6 +4980,22 @@ def test_demo_review_bundle_rejects_malformed_raw_native_scene_rows():
             raw_manifest={"scenes": [{"slug": "sample", "outputs": []}]},
         )
 
+    with pytest.raises(
+        ValueError,
+        match="duplicate raw-native scene slug: sample",
+    ):
+        module._collect_raw_native_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            raw_manifest={
+                "scenes": [
+                    {"slug": "sample", "outputs": {}},
+                    {"slug": "sample", "outputs": {}},
+                ]
+            },
+        )
+
 
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
