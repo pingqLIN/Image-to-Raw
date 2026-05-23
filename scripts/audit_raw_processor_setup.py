@@ -62,6 +62,7 @@ RECOMMENDED_PRIORITY = {
     "rawtherapee-cli": "recommended-second",
     "dcraw": "legacy-optional",
 }
+RECOMMENDATION_PRIORITIES = set(RECOMMENDED_PRIORITY.values())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -516,8 +517,11 @@ def _current_discovery(current: dict[str, Any]) -> str | None:
 
 def _recommendation_priority(recommendation: dict[str, Any]) -> str:
     priority = recommendation["priority"]
-    if not isinstance(priority, str):
-        raise TypeError("tool recommendation priority must be a string")
+    if not isinstance(priority, str) or priority not in RECOMMENDATION_PRIORITIES:
+        raise TypeError(
+            "tool recommendation priority must be recommended-first, "
+            "recommended-second, or legacy-optional"
+        )
     return priority
 
 

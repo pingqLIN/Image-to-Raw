@@ -5562,6 +5562,22 @@ def test_raw_processor_setup_audit_rejects_malformed_runbook_tool_state(tmp_path
     with pytest.raises(TypeError, match="tool current available must be a boolean"):
         module._runbook_markdown(report)
 
+    report = module._build_report(
+        output_dir=tmp_path,
+        timeout_seconds=1,
+        skip_package_search=True,
+    )
+    report["tools"]["darktable-cli"]["recommendation"]["priority"] = "urgent"
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "tool recommendation priority must be recommended-first, "
+            "recommended-second, or legacy-optional"
+        ),
+    ):
+        module._runbook_markdown(report)
+
 
 def test_raw_processor_setup_audit_rejects_malformed_report_accessors(tmp_path):
     module = _load_script_module("audit_raw_processor_setup")
