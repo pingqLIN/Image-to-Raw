@@ -391,13 +391,9 @@ def _collect_compatibility_representatives(
         "linear-rec709-cfa-rggb",
         "linear-rec709-cfa-rggb-noisy",
     }
-    fixtures = compatibility_report.get("fixtures")
-    if not isinstance(fixtures, list):
-        raise ValueError("compatibility report fixtures must be a list")
+    fixtures = _object_list(compatibility_report, "fixtures", "compatibility report")
     found = set()
     for fixture in fixtures:
-        if not isinstance(fixture, dict):
-            continue
         slug = _string(fixture, "slug")
         if slug not in wanted:
             continue

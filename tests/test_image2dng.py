@@ -4924,6 +4924,21 @@ def test_demo_review_bundle_rejects_malformed_visual_chart_fields():
         )
 
 
+def test_demo_review_bundle_rejects_malformed_compatibility_fixture_rows():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(
+        ValueError,
+        match="compatibility report fixtures must be an object list",
+    ):
+        module._collect_compatibility_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            compatibility_report={"fixtures": ["not-a-fixture"]},
+        )
+
+
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
     report = {
