@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import re
 import subprocess
@@ -640,8 +641,12 @@ def _result_timeout(result: dict[str, Any]) -> bool:
 
 def _result_duration_seconds(result: dict[str, Any]) -> float | int:
     duration = result["duration_seconds"]
-    if isinstance(duration, bool) or not isinstance(duration, int | float):
-        raise TypeError("result duration_seconds must be numeric")
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, int | float)
+        or not math.isfinite(duration)
+    ):
+        raise TypeError("result duration_seconds must be finite numeric")
     return duration
 
 

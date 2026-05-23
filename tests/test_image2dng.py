@@ -3324,7 +3324,13 @@ def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
     malformed = result_report | {
         "results": [result_report["results"][0] | {"duration_seconds": "slow"}]
     }
-    with pytest.raises(TypeError, match="result duration_seconds must be numeric"):
+    with pytest.raises(TypeError, match="result duration_seconds must be finite numeric"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"duration_seconds": float("nan")}]
+    }
+    with pytest.raises(TypeError, match="result duration_seconds must be finite numeric"):
         module._summary_markdown(malformed)
 
 
