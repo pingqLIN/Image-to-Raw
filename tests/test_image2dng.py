@@ -4885,6 +4885,45 @@ def test_demo_review_bundle_rejects_malformed_visual_manifest_lists():
         )
 
 
+def test_demo_review_bundle_rejects_malformed_visual_chart_fields():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(
+        ValueError,
+        match="visual chart-gradient asset outputs must be an object",
+    ):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={"assets": [{"slug": "chart-gradient", "outputs": []}]},
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="visual chart-gradient asset validations must be an object",
+    ):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={
+                "assets": [
+                    {
+                        "slug": "chart-gradient",
+                        "outputs": {
+                            "phase_15_linearraw": "a.dng",
+                            "phase_2_cfa": "b.dng",
+                            "phase_3_linearraw_noisy": "c.dng",
+                            "phase_3_cfa_noisy": "d.dng",
+                        },
+                        "validations": [],
+                    }
+                ]
+            },
+        )
+
+
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
     report = {

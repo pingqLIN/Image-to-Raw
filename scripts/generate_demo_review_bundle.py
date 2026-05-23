@@ -309,8 +309,10 @@ def _collect_visual_representatives(
         "phase_3_linearraw_noisy",
         "phase_3_cfa_noisy",
     ]
+    outputs = _object(chart, "outputs", "visual chart-gradient asset")
+    validations = _object(chart, "validations", "visual chart-gradient asset")
     for key in output_keys:
-        source = _resolve_source_path(_string(chart["outputs"], key), paths.visual_dir, repo_root)
+        source = _resolve_source_path(_string(outputs, key), paths.visual_dir, repo_root)
         _copy_artifact(
             paths=paths,
             report=report,
@@ -320,8 +322,10 @@ def _collect_visual_representatives(
             name=f"visual:{key}",
             group="visual-demo",
         )
-    for key, value in chart.get("validations", {}).items():
-        source = _resolve_source_path(str(value), paths.visual_dir, repo_root)
+    for key, value in validations.items():
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"visual chart-gradient validation path must be a string: {key}")
+        source = _resolve_source_path(value, paths.visual_dir, repo_root)
         _copy_artifact(
             paths=paths,
             report=report,
@@ -937,6 +941,13 @@ def _string(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"{key} must be a non-empty string")
+    return value
+
+
+def _object(payload: dict[str, Any], key: str, label: str) -> dict[str, Any]:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} {key} must be an object")
     return value
 
 
