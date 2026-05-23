@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from image2dng import __version__
 
 REPORT_SCHEMA = "image2dng.adobe_validation_stack_report.v1"
+STEP_STATUSES = {"failed", "passed"}
 
 DEFAULT_OUTPUT_DIR = Path("demo-output/adobe-validation-stack")
 DEFAULT_ADOBE_DIR = Path("Adobe")
@@ -874,6 +875,8 @@ def _step_status(step: dict[str, Any]) -> str:
     status = step["status"]
     if not isinstance(status, str):
         raise TypeError("step status must be a string")
+    if status not in STEP_STATUSES:
+        raise TypeError("step status must be passed or failed")
     return status
 
 
