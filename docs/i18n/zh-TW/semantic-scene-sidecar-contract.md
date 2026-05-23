@@ -2,7 +2,7 @@
 
 `image2dng.semantic_scene.v1` 是外部 renderer、AI generator、simulation engine 或 bridge project 中的 ComfyUI node 交付 scene-linear 影像時可附帶的語意 sidecar contract。
 
-v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 scene、material、light、region、mask/depth asset 與 sensor response hints。它目前不把語意資訊轉成 raw sample values，也不把 sidecar 寫入 `DNGPrivateData`。
+v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 scene、material、light、region、mask/depth asset 與 sensor response hints。預設情況下，sidecar 只會被保存與驗證；只有在 external scene manifest 明確 opt-in 時，已實作的 deterministic reaction model 才會改變 copied scene-linear input 的 raw sample values。sidecar 目前不會寫入 `DNGPrivateData`。
 
 ## 最小結構
 
@@ -111,16 +111,18 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 
 預設 `semantic_to_raw_status` 為 `preserved-not-applied`，表示 sidecar 已保存並驗證，但未參與 raw buffer 生成。
 
-若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic `region-exposure-mask-v1` prototype。這個 prototype 會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation，並在 manifest 中記錄 `semantic_reaction` summary。它只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。它不是完整物理 sensor model，也不宣稱光譜或相機模擬正確性。
+若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic reaction models。`region-exposure-mask-v1` 會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation。`highlight-clipping-policy-v1` 會讀取 `sensor_response_hints.clipping_policy`，對高亮值做 deterministic value mapping；`clip` 只記錄既有 uint16 clamp baseline，`preserve-highlights` 與 `soft-rolloff` 使用不同固定 threshold 做 rolloff。這些 reactions 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。它們不是完整物理 sensor model，也不宣稱光譜或相機模擬正確性。
 
-對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。
+對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes、`apply_semantic_reaction` flag，以及可套用的 reaction model / policy context。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。
+
+manifest 會保留 `semantic_reaction` 作為 primary summary，並在 `semantic_reactions` list 中記錄每個 applied 或 explicit no-op reaction model 的詳細 summary。這讓舊讀取端可繼續讀單一 summary，新讀取端可分辨多個 model。
 
 目前 reaction model matrix：
 
 | Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Yes | finite EV、mask-bound、linear-light only。 |
-| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` candidate | No | Yes | 未來只能是 deterministic value mapping；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
+| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` 已實作 | Yes | Yes | deterministic value mapping；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
 | `regions[].response_hints.noise_priority` | metadata / research | No | Deferred | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
 | `sensor_response_hints.target_middle_gray` | research | No | Deferred | 需要 calibration policy 才能影響 values。 |
 | `sensor_response_hints.target_white_balance_kelvin` | metadata / research | No | Deferred | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
@@ -130,8 +132,8 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 | Status | Manifest shape | 意義 |
 | --- | --- | --- |
 | `preserved-not-applied` | 有 `semantic_validation`，`semantic_reaction` 為空 | sidecar 已複製並驗證，但 raw values 仍由原始 scene-linear input 產生。 |
-| `applied` | `semantic_reaction.applied` 為 `true`，並包含 affected-region counts | opt-in `region-exposure-mask-v1` 在 RAW generation 前修改了複製後的 scene-linear input。 |
-| `no-op` | `semantic_reaction.applied` 為 `false`，並包含 `reason` | 已要求並驗證 reaction，但沒有符合條件的 exposure-mask region 造成 pixel 變更。 |
+| `applied` | `semantic_reaction.applied` 為 `true`，並可包含 `semantic_reactions` list | opt-in reaction model 在 RAW generation 前修改了複製後的 scene-linear input。 |
+| `no-op` | `semantic_reaction.applied` 為 `false`，並包含 `reason` | 已要求並驗證 reaction，但沒有符合條件的 exposure-mask/highlight policy 造成 pixel 變更，或 `clip` 僅記錄既有 clamp baseline。 |
 
 ## 驗證
 

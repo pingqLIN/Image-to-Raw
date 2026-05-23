@@ -13,6 +13,15 @@ from PIL import Image
 REGION_EXPOSURE_REACTION_MODEL = "region-exposure-mask-v1"
 HIGHLIGHT_CLIPPING_REACTION_MODEL = "highlight-clipping-policy-v1"
 SUPPORTED_REACTION_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
+HIGHLIGHT_POLICY_THRESHOLDS = {
+    "clip": 65535,
+    "preserve-highlights": 60000,
+    "soft-rolloff": 56000,
+}
+HIGHLIGHT_POLICY_FACTORS = {
+    "preserve-highlights": 0.5,
+    "soft-rolloff": 0.35,
+}
 
 
 @dataclass(frozen=True)
@@ -46,13 +55,13 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
     ),
     HIGHLIGHT_CLIPPING_REACTION_MODEL: SemanticReactionModelInfo(
         model_id=HIGHLIGHT_CLIPPING_REACTION_MODEL,
-        status="candidate",
-        current_raw_value_effect=False,
+        status="implemented",
+        current_raw_value_effect=True,
         intended_raw_value_effect=True,
         scope="deterministic highlight value mapping for explicit clipping policies",
         boundary=(
-            "not implemented; must not claim camera tone-curve, ISO response, "
-            "or preserved sensor detail"
+            "deterministic value mapping only; not a camera tone-curve, ISO response, "
+            "or proof of preserved sensor detail"
         ),
     ),
 }
@@ -63,6 +72,18 @@ def semantic_reaction_model_registry() -> dict[str, dict[str, Any]]:
         model_id: model_info.to_dict()
         for model_id, model_info in SEMANTIC_REACTION_MODEL_REGISTRY.items()
     }
+
+
+def highlight_clipping_reaction_parameters(policy: str) -> dict[str, float | int | str]:
+    if policy not in HIGHLIGHT_POLICY_THRESHOLDS:
+        raise ValueError("semantic reaction clipping_policy is unsupported")
+    payload: dict[str, float | int | str] = {
+        "policy": policy,
+        "threshold": HIGHLIGHT_POLICY_THRESHOLDS[policy],
+    }
+    if policy in HIGHLIGHT_POLICY_FACTORS:
+        payload["rolloff_factor"] = HIGHLIGHT_POLICY_FACTORS[policy]
+    return payload
 
 
 @dataclass(frozen=True)
@@ -162,6 +183,87 @@ def apply_region_exposure_reaction(
     )
 
 
+def apply_highlight_clipping_reaction(
+    image: np.ndarray,
+    *,
+    semantic_payload: dict[str, Any],
+    input_space: str | None = None,
+) -> tuple[np.ndarray, SemanticReactionResult]:
+    if image.dtype != np.uint16:
+        raise ValueError("semantic reaction input image must be uint16")
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("semantic reaction input image must be RGB")
+    if input_space is not None and input_space not in SUPPORTED_REACTION_INPUT_SPACES:
+        supported = ", ".join(sorted(SUPPORTED_REACTION_INPUT_SPACES))
+        raise ValueError(
+            "semantic reaction requires linear-light input_space; "
+            f"got {input_space!r}, supported: {supported}"
+        )
+    _validate_scene_binding(image, semantic_payload, input_space)
+
+    policy = _highlight_clipping_policy(semantic_payload)
+    if policy is None:
+        return image.copy(), SemanticReactionResult(
+            model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="no sensor_response_hints.clipping_policy",
+            regions=[],
+        )
+    parameters = highlight_clipping_reaction_parameters(policy)
+    threshold = int(parameters["threshold"])
+    if policy == "clip":
+        return image.copy(), SemanticReactionResult(
+            model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="clip policy preserves existing uint16 clamp baseline",
+            regions=[
+                {
+                    "policy": policy,
+                    "threshold": threshold,
+                    "affected_pixels": 0,
+                }
+            ],
+        )
+
+    active = np.any(image > threshold, axis=2)
+    affected_pixels = int(np.count_nonzero(active))
+    if affected_pixels == 0:
+        return image.copy(), SemanticReactionResult(
+            model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="no pixels above highlight clipping threshold",
+            regions=[
+                {
+                    "policy": policy,
+                    "threshold": threshold,
+                    "affected_pixels": 0,
+                }
+            ],
+        )
+
+    output = image.astype(np.float64, copy=True)
+    above = output > threshold
+    output[above] = threshold + (output[above] - threshold) * float(
+        parameters["rolloff_factor"]
+    )
+    return np.rint(np.clip(output, 0.0, 65535.0)).astype(np.uint16), SemanticReactionResult(
+        model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+        applied=True,
+        status="applied",
+        regions=[
+            {
+                "policy": policy,
+                "threshold": threshold,
+                "affected_pixels": affected_pixels,
+            }
+        ],
+        affected_pixels=affected_pixels,
+    )
+
+
 def load_semantic_payload(path: str | Path) -> dict[str, Any]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -256,6 +358,18 @@ def _regions_with_exposure(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return reaction_regions
+
+
+def _highlight_clipping_policy(payload: dict[str, Any]) -> str | None:
+    hints = payload.get("sensor_response_hints")
+    if not isinstance(hints, dict):
+        return None
+    policy = hints.get("clipping_policy")
+    if policy is None:
+        return None
+    if not isinstance(policy, str) or policy not in HIGHLIGHT_POLICY_THRESHOLDS:
+        raise ValueError("semantic reaction clipping_policy is unsupported")
+    return policy
 
 
 def _read_mask(path: Path) -> np.ndarray:

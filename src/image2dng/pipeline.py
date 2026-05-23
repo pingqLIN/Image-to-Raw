@@ -18,7 +18,9 @@ from image2dng.image_processing import InputSpace
 from image2dng.semantic_reaction import (
     SUPPORTED_REACTION_INPUT_SPACES,
     SemanticReactionResult,
+    apply_highlight_clipping_reaction,
     apply_region_exposure_reaction,
+    highlight_clipping_reaction_parameters,
     load_semantic_payload,
     read_scene_linear_image,
 )
@@ -91,6 +93,7 @@ class PipelineSceneResult:
     semantic_contract: str | None = None
     semantic_to_raw_status: str | None = None
     semantic_reaction: dict[str, Any] | None = None
+    semantic_reactions: list[dict[str, Any]] | None = None
     producer_metadata: dict[str, Any] | None = None
     producer_metadata_artifacts: dict[str, str] | None = None
 
@@ -330,9 +333,9 @@ def _run_external_scene_graph(
         producer_metadata_artifacts=producer_metadata_artifacts,
     )
     capture_input = target_input
-    semantic_reaction: SemanticReactionResult | None = None
+    semantic_reactions: list[SemanticReactionResult] = []
     if scene.apply_semantic_reaction:
-        capture_input, semantic_reaction = _apply_semantic_reaction(
+        capture_input, semantic_reactions = _apply_semantic_reactions(
             scene=scene,
             scene_linear_path=target_input,
             semantic_artifacts=semantic_artifacts,
@@ -381,7 +384,7 @@ def _run_external_scene_graph(
         nodes=nodes,
         semantic_artifacts=semantic_artifacts or None,
         semantic_validation=semantic_validation,
-        semantic_reaction=semantic_reaction,
+        semantic_reactions=semantic_reactions,
         producer_metadata=scene.producer_metadata,
         producer_metadata_artifacts=producer_metadata_artifacts or None,
         dng_layout=dng_layout,
@@ -408,7 +411,7 @@ def _run_capture_graph(
     nodes: list[PipelineNodeRecord],
     semantic_artifacts: dict[str, str] | None,
     semantic_validation: dict[str, Any] | None = None,
-    semantic_reaction: SemanticReactionResult | None = None,
+    semantic_reactions: list[SemanticReactionResult] | None = None,
     producer_metadata: dict[str, Any] | None = None,
     producer_metadata_artifacts: dict[str, str] | None = None,
     dng_layout: DngLayout = "preview-subifd",
@@ -537,8 +540,15 @@ def _run_capture_graph(
         semantic_contract=(
             SEMANTIC_SCENE_SCHEMA if semantic_validation is not None else None
         ),
-        semantic_to_raw_status=_semantic_to_raw_status(semantic_validation, semantic_reaction),
-        semantic_reaction=semantic_reaction.to_dict() if semantic_reaction is not None else None,
+        semantic_to_raw_status=_semantic_to_raw_status(semantic_validation, semantic_reactions),
+        semantic_reaction=(
+            semantic_reactions[0].to_dict() if semantic_reactions else None
+        ),
+        semantic_reactions=(
+            [reaction.to_dict() for reaction in semantic_reactions]
+            if semantic_reactions
+            else None
+        ),
         producer_metadata=producer_metadata,
         producer_metadata_artifacts=producer_metadata_artifacts,
     )
@@ -706,6 +716,8 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
                 else {}
             ),
         }
+    if scene.semantic_reactions is not None:
+        sample["semantic_reactions"] = scene.semantic_reactions
     if scene.producer_metadata is not None:
         sample["producer_metadata"] = scene.producer_metadata
     if scene.producer_metadata_artifacts is not None:
@@ -726,6 +738,7 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "semantic_contract": scene.semantic_contract,
         "semantic_to_raw_status": scene.semantic_to_raw_status,
         "semantic_reaction": scene.semantic_reaction or {},
+        "semantic_reactions": scene.semantic_reactions or [],
         "producer_metadata": scene.producer_metadata or {},
         "producer_metadata_artifacts": scene.producer_metadata_artifacts or {},
         "raw_data_unique_ids": scene.raw_data_unique_ids,
@@ -795,10 +808,12 @@ def _external_scene_from_manifest_item(
 
 def _semantic_to_raw_status(
     semantic_validation: dict[str, Any] | None,
-    semantic_reaction: SemanticReactionResult | None,
+    semantic_reactions: list[SemanticReactionResult] | None,
 ) -> str | None:
-    if semantic_reaction is not None:
-        return semantic_reaction.status
+    if semantic_reactions:
+        if any(reaction.applied for reaction in semantic_reactions):
+            return "applied"
+        return semantic_reactions[0].status
     if semantic_validation is not None:
         return "preserved-not-applied"
     return None
@@ -806,7 +821,7 @@ def _semantic_to_raw_status(
 
 def _external_semantic_boundary(scene: ExternalSceneLinearInput) -> str:
     if scene.apply_semantic_reaction:
-        return "semantic sidecar applied through opt-in region-exposure-mask-v1 reaction"
+        return "semantic sidecar applied through opt-in semantic reaction models"
     if scene.semantic_manifest is not None:
         return "semantic sidecar preserved and validated, but not applied to raw values"
     return "semantic sidecar absent"
@@ -825,30 +840,45 @@ def _validate_semantic_reaction_request(scene: ExternalSceneLinearInput) -> None
         )
 
 
-def _apply_semantic_reaction(
+def _apply_semantic_reactions(
     *,
     scene: ExternalSceneLinearInput,
     scene_linear_path: Path,
     semantic_artifacts: dict[str, str],
     inputs_dir: Path,
-) -> tuple[Path, SemanticReactionResult]:
+) -> tuple[Path, list[SemanticReactionResult]]:
     semantic_path_value = semantic_artifacts.get("semantic_manifest")
     if semantic_path_value is None:
         raise ValueError(f"{scene.slug}: semantic_manifest artifact missing")
     semantic_path = Path(semantic_path_value)
     payload = load_semantic_payload(semantic_path)
     image = read_scene_linear_image(scene_linear_path)
-    reacted_image, reaction = apply_region_exposure_reaction(
+    reacted_image, exposure_reaction = apply_region_exposure_reaction(
         image,
         semantic_payload=payload,
         semantic_base_dir=semantic_path.parent,
         input_space=scene.input_space,
     )
-    if not reaction.applied:
-        return scene_linear_path, reaction
+    highlight_image, highlight_reaction = apply_highlight_clipping_reaction(
+        reacted_image,
+        semantic_payload=payload,
+        input_space=scene.input_space,
+    )
+    semantic_reactions = []
+    if exposure_reaction.applied:
+        semantic_reactions.append(exposure_reaction)
+    if highlight_reaction.applied or highlight_reaction.regions:
+        semantic_reactions.append(highlight_reaction)
+    if not semantic_reactions:
+        semantic_reactions.append(exposure_reaction)
+
+    if not any(reaction.applied for reaction in semantic_reactions):
+        if highlight_reaction.regions:
+            return scene_linear_path, [highlight_reaction]
+        return scene_linear_path, [exposure_reaction]
     target = inputs_dir / f"{scene.slug}-semantic-reaction.tif"
-    tifffile.imwrite(target, reacted_image, photometric="rgb")
-    return target, reaction
+    tifffile.imwrite(target, highlight_image, photometric="rgb")
+    return target, semantic_reactions
 
 
 def _copy_semantic_manifest(
@@ -989,10 +1019,57 @@ def _external_prompt_hash(
             "producer": scene.producer,
             "input_space": scene.input_space,
             "apply_semantic_reaction": scene.apply_semantic_reaction,
+            "semantic_reaction_context": (
+                _semantic_reaction_hash_context(Path(semantic_manifest))
+                if scene.apply_semantic_reaction and semantic_manifest
+                else []
+            ),
         },
         sort_keys=True,
     ).encode("utf-8")
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+
+def _semantic_reaction_hash_context(semantic_manifest: Path) -> list[dict[str, Any]]:
+    payload = load_semantic_payload(semantic_manifest)
+    context: list[dict[str, Any]] = []
+    exposure_regions = []
+    for region in payload.get("regions", []):
+        if not isinstance(region, dict):
+            continue
+        response_hints = region.get("response_hints")
+        if not isinstance(response_hints, dict):
+            continue
+        if "exposure_bias_ev" in response_hints and isinstance(
+            region.get("mask_asset_id"), str
+        ):
+            exposure_regions.append(
+                {
+                    "region_id": region.get("id"),
+                    "mask_asset_id": region.get("mask_asset_id"),
+                    "exposure_bias_ev": response_hints.get("exposure_bias_ev"),
+                }
+            )
+    if exposure_regions:
+        context.append(
+            {
+                "model": "region-exposure-mask-v1",
+                "regions": exposure_regions,
+            }
+        )
+    sensor_response_hints = payload.get("sensor_response_hints")
+    if isinstance(sensor_response_hints, dict) and sensor_response_hints.get(
+        "clipping_policy"
+    ):
+        context.append(
+            {
+                "model": "highlight-clipping-policy-v1",
+                "parameters": highlight_clipping_reaction_parameters(
+                    sensor_response_hints["clipping_policy"]
+                ),
+            }
+        )
+    return context
 
 
 def _semantic_asset_hashes(semantic_artifacts: dict[str, str]) -> dict[str, str]:
