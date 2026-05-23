@@ -5035,6 +5035,23 @@ def test_demo_review_bundle_rejects_malformed_report_accessors():
     with pytest.raises(TypeError, match="report artifacts must contain objects"):
         module._artifacts({"artifacts": ["not-an-artifact"]})
 
+    with pytest.raises(TypeError, match="artifact bundle_path must be a string"):
+        module._append_existing_artifact(
+            output_dir=Path.cwd(),
+            report={
+                "artifacts": [
+                    {
+                        "kind": "index",
+                        "name": "index",
+                        "bundle_path": False,
+                    }
+                ]
+            },
+            source=Path.cwd() / "index.md",
+            kind="index",
+            name="index",
+        )
+
     with pytest.raises(TypeError, match="report source_reports must be an object"):
         module._source_reports({"source_reports": []})
 

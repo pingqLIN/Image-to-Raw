@@ -635,7 +635,7 @@ def _append_existing_artifact(
     name: str,
 ) -> None:
     bundle_path = _relative_posix(source, output_dir)
-    if any(artifact.get("bundle_path") == bundle_path for artifact in _artifacts(report)):
+    if any(_artifact_bundle_path(artifact) == bundle_path for artifact in _artifacts(report)):
         return
     _artifacts(report).append(
         {
