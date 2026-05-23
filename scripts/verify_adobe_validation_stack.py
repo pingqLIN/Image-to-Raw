@@ -821,6 +821,7 @@ def _output_dir_display(report: dict[str, Any]) -> str:
     output_dir = report["output_dir"]
     if not isinstance(output_dir, dict):
         raise TypeError("report output_dir must be an object")
+    _path_record_absolute(output_dir)
     display = output_dir["display"]
     if not isinstance(display, str):
         raise TypeError("report output_dir display must be a string")
@@ -895,6 +896,7 @@ def _step_child_report_path(step: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if not isinstance(child_report_path, dict):
         raise TypeError("step child_report_path must be an object")
+    _path_record_absolute(child_report_path)
     return child_report_path
 
 

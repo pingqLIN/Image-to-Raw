@@ -3911,6 +3911,20 @@ def test_verify_adobe_validation_stack_rejects_malformed_summary_findings(tmp_pa
         repo_root=repo_root,
         runner=_FakeAdobeValidationStackRunner(),
     )
+    report["output_dir"]["absolute"] = []
+    with pytest.raises(TypeError, match="path record absolute must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
     report["local_only"] = "yes"
     with pytest.raises(TypeError, match="report local_only must be a boolean"):
         module._summary_markdown(report)
@@ -4011,6 +4025,20 @@ def test_verify_adobe_validation_stack_rejects_malformed_summary_findings(tmp_pa
     )
     report["steps"][0]["child_report_path"]["display"] = []
     with pytest.raises(TypeError, match="child report display must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["child_report_path"]["absolute"] = []
+    with pytest.raises(TypeError, match="path record absolute must be a string"):
         module._summary_markdown(report)
 
     report = module.build_report(
