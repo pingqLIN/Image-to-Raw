@@ -23,6 +23,10 @@ from image2dng.image_processing import InputSpace
 from image2dng.models import CfaPattern
 from image2dng.validate import validate_dng
 
+MISSING_TOOL_POLICIES = {"skipped"}
+AVAILABLE_TOOL_FAILURE_POLICIES = {"failed"}
+MATRIX_RESULTS = {"passed", "failed", "skipped", "manual-only"}
+
 
 @dataclass(frozen=True)
 class FixtureSpec:
@@ -443,6 +447,8 @@ def _install_policy_missing_tool_policy(policy: dict[str, Any]) -> str:
     missing_tool_policy = policy["missing_tool_policy"]
     if not isinstance(missing_tool_policy, str):
         raise TypeError("install_policy missing_tool_policy must be a string")
+    if missing_tool_policy not in MISSING_TOOL_POLICIES:
+        raise TypeError("install_policy missing_tool_policy must be skipped")
     return missing_tool_policy
 
 
@@ -450,6 +456,8 @@ def _install_policy_available_tool_failure_policy(policy: dict[str, Any]) -> str
     failure_policy = policy["available_tool_failure_policy"]
     if not isinstance(failure_policy, str):
         raise TypeError("install_policy available_tool_failure_policy must be a string")
+    if failure_policy not in AVAILABLE_TOOL_FAILURE_POLICIES:
+        raise TypeError("install_policy available_tool_failure_policy must be failed")
     return failure_policy
 
 
@@ -559,6 +567,8 @@ def _matrix_result(entry: dict[str, Any]) -> str:
     result = entry["result"]
     if not isinstance(result, str):
         raise TypeError("matrix result must be a string")
+    if result not in MATRIX_RESULTS:
+        raise TypeError("matrix result must be passed, failed, skipped, or manual-only")
     return result
 
 

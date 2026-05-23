@@ -2171,12 +2171,28 @@ def test_compatibility_evidence_rejects_malformed_report_accessors():
         module._summary_markdown(malformed)
 
     malformed = report | {
+        "install_policy": report["install_policy"] | {"missing_tool_policy": "ignore"}
+    }
+    with pytest.raises(TypeError, match="install_policy missing_tool_policy must be skipped"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
         "install_policy": report["install_policy"]
         | {"available_tool_failure_policy": False}
     }
     with pytest.raises(
         TypeError,
         match="install_policy available_tool_failure_policy must be a string",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"]
+        | {"available_tool_failure_policy": "warning"}
+    }
+    with pytest.raises(
+        TypeError,
+        match="install_policy available_tool_failure_policy must be failed",
     ):
         module._summary_markdown(malformed)
 
@@ -2243,6 +2259,12 @@ def test_compatibility_evidence_rejects_malformed_report_accessors():
 
     with pytest.raises(TypeError, match="matrix result must be a string"):
         module._matrix_result({"result": False})
+
+    with pytest.raises(
+        TypeError,
+        match="matrix result must be passed, failed, skipped, or manual-only",
+    ):
+        module._matrix_result({"result": "warning"})
 
     with pytest.raises(TypeError, match="matrix notes must be a string"):
         module._matrix_notes({"notes": []})
