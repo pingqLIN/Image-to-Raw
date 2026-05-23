@@ -4954,6 +4954,22 @@ def test_demo_review_bundle_rejects_malformed_compatibility_fixture_rows():
             compatibility_report={"fixtures": ["not-a-fixture"]},
         )
 
+    with pytest.raises(
+        ValueError,
+        match="duplicate compatibility fixture slug: srgb-gradient-linearraw",
+    ):
+        module._collect_compatibility_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            compatibility_report={
+                "fixtures": [
+                    {"slug": "srgb-gradient-linearraw"},
+                    {"slug": "srgb-gradient-linearraw"},
+                ]
+            },
+        )
+
 
 def test_demo_review_bundle_rejects_malformed_raw_native_scene_rows():
     module = _load_script_module("generate_demo_review_bundle")

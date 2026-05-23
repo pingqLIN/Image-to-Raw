@@ -391,10 +391,13 @@ def _collect_compatibility_representatives(
         "linear-rec709-cfa-rggb",
         "linear-rec709-cfa-rggb-noisy",
     }
-    fixtures = _object_list(compatibility_report, "fixtures", "compatibility report")
+    fixtures = _object_map_by_string_key(
+        _object_list(compatibility_report, "fixtures", "compatibility report"),
+        "slug",
+        "compatibility fixture",
+    )
     found = set()
-    for fixture in fixtures:
-        slug = _string(fixture, "slug")
+    for slug, fixture in fixtures.items():
         if slug not in wanted:
             continue
         found.add(slug)
