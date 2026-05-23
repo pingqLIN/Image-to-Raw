@@ -25,6 +25,14 @@ COMPATIBILITY_SCHEMAS = {
     "image2dng.compatibility_evidence.v2",
 }
 COMMAND_STATUSES = {"failed", "passed"}
+ARTIFACT_KINDS = {
+    "contact-sheet",
+    "index",
+    "manifest",
+    "report",
+    "representative-dng",
+    "validation-json",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -928,14 +936,20 @@ def _portable_stem(value: str) -> str:
 
 
 def _category_for_kind(kind: str) -> str:
-    return {
+    categories = {
         "contact-sheet": "contact-sheets",
         "representative-dng": "representative-dng",
         "validation-json": "validation",
         "report": "reports",
         "manifest": "manifests",
         "index": "index",
-    }.get(kind, kind)
+    }
+    if kind not in ARTIFACT_KINDS:
+        raise TypeError(
+            "artifact kind must be contact-sheet, index, manifest, report, "
+            "representative-dng, or validation-json"
+        )
+    return categories[kind]
 
 
 def _string(payload: dict[str, Any], key: str) -> str:
@@ -1072,6 +1086,11 @@ def _artifact_kind(artifact: dict[str, Any]) -> str:
     kind = artifact["kind"]
     if not isinstance(kind, str):
         raise TypeError("artifact kind must be a string")
+    if kind not in ARTIFACT_KINDS:
+        raise TypeError(
+            "artifact kind must be contact-sheet, index, manifest, report, "
+            "representative-dng, or validation-json"
+        )
     return kind
 
 

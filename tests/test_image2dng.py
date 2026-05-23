@@ -5337,6 +5337,16 @@ def test_demo_review_bundle_rejects_malformed_report_accessors():
     with pytest.raises(TypeError, match="artifact kind must be a string"):
         module._write_index(Path.cwd(), malformed)
 
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"kind": "bundle"}]}
+    with pytest.raises(
+        TypeError,
+        match=(
+            "artifact kind must be contact-sheet, index, manifest, report, "
+            "representative-dng, or validation-json"
+        ),
+    ):
+        module._write_index(Path.cwd(), malformed)
+
     malformed = report | {"artifacts": [report["artifacts"][0] | {"name": []}]}
     with pytest.raises(TypeError, match="artifact name must be a string"):
         module._write_index(Path.cwd(), malformed)
