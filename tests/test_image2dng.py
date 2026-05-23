@@ -5049,6 +5049,9 @@ def test_demo_review_bundle_rejects_malformed_report_accessors():
     with pytest.raises(TypeError, match="report errors must be a list"):
         module._errors({"errors": "none"})
 
+    with pytest.raises(TypeError, match="report errors must be a string list"):
+        module._write_index(Path.cwd(), report | {"errors": [False]})
+
 
 def test_demo_review_bundle_rejects_stale_artifact_integrity(tmp_path):
     module = _load_script_module("generate_demo_review_bundle")

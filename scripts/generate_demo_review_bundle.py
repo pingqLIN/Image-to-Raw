@@ -565,9 +565,10 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
             f"(exit `{_command_exit_code(command)}`, {_command_duration_seconds(command)}s)"
         )
 
-    if _errors(report):
+    error_messages = _error_messages(report)
+    if error_messages:
         lines.extend(["", "## Errors", ""])
-        for error in _errors(report):
+        for error in error_messages:
             lines.append(f"- {error}")
 
     (output_dir / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1102,6 +1103,13 @@ def _errors(report: dict[str, Any]) -> list[Any]:
     errors = report["errors"]
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
+    return errors
+
+
+def _error_messages(report: dict[str, Any]) -> list[str]:
+    errors = _errors(report)
+    if not all(isinstance(error, str) for error in errors):
+        raise TypeError("report errors must be a string list")
     return errors
 
 
