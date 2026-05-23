@@ -3882,6 +3882,22 @@ def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
 
     with pytest.raises(
         TypeError,
+        match="project fixture manifest schema must be a string",
+    ):
+        module._project_fixture_manifest_schema({"schema": False})
+
+    assert module._project_fixture_manifest_schema({}) is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture sample index schema must be a string",
+    ):
+        module._project_fixture_sample_index_schema({"schema": []})
+
+    assert module._project_fixture_sample_index_schema({}) is None
+
+    with pytest.raises(
+        TypeError,
         match="project fixture sample index all_validations_ok must be a boolean",
     ):
         module._sample_index_all_validations_ok({"all_validations_ok": "yes"})

@@ -473,11 +473,13 @@ def _inspect_project_dng_fixtures(
     if not isinstance(manifest, dict) or not isinstance(sample_index, dict):
         return inspection, ["project fixture manifest and sample index must be JSON objects"]
 
-    inspection["schema"] = manifest.get("schema")
-    inspection["sample_index_schema"] = sample_index.get("schema")
-    if manifest.get("schema") != "image2dng.raw_native_node_batch.v1":
+    manifest_schema = _project_fixture_manifest_schema(manifest)
+    sample_index_schema = _project_fixture_sample_index_schema(sample_index)
+    inspection["schema"] = manifest_schema
+    inspection["sample_index_schema"] = sample_index_schema
+    if manifest_schema != "image2dng.raw_native_node_batch.v1":
         errors.append("project fixture manifest schema mismatch")
-    if sample_index.get("schema") != "image2dng.raw_native_sample_index.v1":
+    if sample_index_schema != "image2dng.raw_native_sample_index.v1":
         errors.append("project fixture sample index schema mismatch")
     if not _sample_index_all_validations_ok(sample_index):
         errors.append("project fixture sample index reports validation failure")
@@ -618,6 +620,24 @@ def _sample_index_all_validations_ok(sample_index: dict[str, Any]) -> bool:
     if not isinstance(ok, bool):
         raise TypeError("project fixture sample index all_validations_ok must be a boolean")
     return ok
+
+
+def _project_fixture_manifest_schema(manifest: dict[str, Any]) -> str | None:
+    schema = manifest.get("schema")
+    if schema is None:
+        return None
+    if not isinstance(schema, str):
+        raise TypeError("project fixture manifest schema must be a string")
+    return schema
+
+
+def _project_fixture_sample_index_schema(sample_index: dict[str, Any]) -> str | None:
+    schema = sample_index.get("schema")
+    if schema is None:
+        return None
+    if not isinstance(schema, str):
+        raise TypeError("project fixture sample index schema must be a string")
+    return schema
 
 
 def _validation_ok(validation: dict[str, Any], label: str) -> bool:
