@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import shutil
 import subprocess
@@ -200,11 +201,13 @@ def _venv_script(venv: Path, name: str) -> Path:
 
 def _append_step(report: dict[str, object], step: dict[str, object]) -> None:
     _steps(report).append(step)
-    if _step_status(step) == "failed":
+    status = _step_status(step)
+    if status == "failed":
         _append_error(
             report,
             f"{_step_name(step)} failed with exit code {_step_exit_code(step)}",
         )
+    _step_duration_seconds(step)
 
 
 def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
@@ -500,6 +503,17 @@ def _step_exit_code(step: dict[str, object]) -> int:
     if isinstance(exit_code, int) and not isinstance(exit_code, bool):
         return exit_code
     raise TypeError("step exit_code must be an integer")
+
+
+def _step_duration_seconds(step: dict[str, object]) -> float | int:
+    duration = step["duration_seconds"]
+    if (
+        isinstance(duration, int | float)
+        and not isinstance(duration, bool)
+        and math.isfinite(duration)
+    ):
+        return duration
+    raise TypeError("step duration_seconds must be finite numeric")
 
 
 def _tail(text: str, *, max_lines: int = 40) -> list[str]:

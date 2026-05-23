@@ -5854,6 +5854,17 @@ def test_development_baseline_rejects_malformed_step_records():
             {"name": "pytest", "status": "failed", "exit_code": False},
         )
 
+    with pytest.raises(TypeError, match="step duration_seconds must be finite numeric"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {
+                "name": "pytest",
+                "status": "failed",
+                "exit_code": 1,
+                "duration_seconds": float("nan"),
+            },
+        )
+
 
 def test_development_baseline_rejects_external_batch_artifact_paths(tmp_path):
     module = _load_script_module("verify_development_baseline")
