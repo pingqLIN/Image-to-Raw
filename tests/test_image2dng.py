@@ -2736,6 +2736,18 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
         module._summary_markdown(report)
 
     report = module.build_report(adobe_dir)
+    report["resources"][0]["kind"] = "unknown"
+    with pytest.raises(
+        TypeError,
+        match=(
+            "resource kind must be adobe-documentation, dng-converter-resource, "
+            "dng-profile-editor, dng-sdk-archive, dng-specification, "
+            "lens-profile-creator-archive, other, profile-sdk-archive, or tiff-reference"
+        ),
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
     report["resources"][0]["size_bytes"] = True
     with pytest.raises(TypeError, match="resource size_bytes must be an integer"):
         module._summary_markdown(report)
@@ -2747,6 +2759,18 @@ def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
 
     with pytest.raises(TypeError, match="resource kind must be a string"):
         module._converter_resource_state([{"kind": False, "name": "Adobe DNG Converter.exe"}])
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "resource kind must be adobe-documentation, dng-converter-resource, "
+            "dng-profile-editor, dng-sdk-archive, dng-specification, "
+            "lens-profile-creator-archive, other, profile-sdk-archive, or tiff-reference"
+        ),
+    ):
+        module._converter_resource_state(
+            [{"kind": "installer", "name": "Adobe DNG Converter.exe"}]
+        )
 
     with pytest.raises(TypeError, match="resource name must be a string"):
         module._converter_resource_state([{"kind": "dng-converter-resource", "name": []}])

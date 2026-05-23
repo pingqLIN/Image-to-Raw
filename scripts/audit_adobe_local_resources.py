@@ -19,6 +19,15 @@ REQUIRED_KINDS = {
     "dng-specification",
 }
 
+RESOURCE_KINDS = REQUIRED_KINDS | {
+    "adobe-documentation",
+    "dng-profile-editor",
+    "lens-profile-creator-archive",
+    "other",
+    "profile-sdk-archive",
+    "tiff-reference",
+}
+
 INSTALLED_CONVERTER_FILENAMES = {
     "adobe dng converter.exe",
 }
@@ -402,6 +411,12 @@ def _resource_kind(resource: dict[str, Any]) -> str:
     kind = resource["kind"]
     if not isinstance(kind, str):
         raise TypeError("resource kind must be a string")
+    if kind not in RESOURCE_KINDS:
+        raise TypeError(
+            "resource kind must be adobe-documentation, dng-converter-resource, "
+            "dng-profile-editor, dng-sdk-archive, dng-specification, "
+            "lens-profile-creator-archive, other, profile-sdk-archive, or tiff-reference"
+        )
     return kind
 
 
