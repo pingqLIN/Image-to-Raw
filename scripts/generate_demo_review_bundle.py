@@ -845,9 +845,10 @@ def _read_json(path: Path, schema: str) -> dict[str, Any]:
     if not path.exists():
         raise ValueError(f"missing JSON report: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
+    payload_schema = _json_payload_schema(payload, path)
     _require(
-        payload.get("schema") == schema,
-        f"unexpected schema in {path}: {payload.get('schema')}",
+        payload_schema == schema,
+        f"unexpected schema in {path}: {payload_schema}",
     )
     return payload
 
@@ -856,11 +857,21 @@ def _read_json_any(path: Path, schemas: set[str]) -> dict[str, Any]:
     if not path.exists():
         raise ValueError(f"missing JSON report: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
+    payload_schema = _json_payload_schema(payload, path)
     _require(
-        payload.get("schema") in schemas,
-        f"unexpected schema in {path}: {payload.get('schema')}",
+        payload_schema in schemas,
+        f"unexpected schema in {path}: {payload_schema}",
     )
     return payload
+
+
+def _json_payload_schema(payload: Any, path: Path) -> str:
+    if not isinstance(payload, dict):
+        raise ValueError(f"JSON report must be an object: {path}")
+    schema = payload.get("schema")
+    if not isinstance(schema, str):
+        raise ValueError(f"JSON report schema must be a string: {path}")
+    return schema
 
 
 def _resolve_under_repo(path: Path, repo_root: Path) -> Path:

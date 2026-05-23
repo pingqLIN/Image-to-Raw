@@ -4849,6 +4849,23 @@ def test_demo_review_bundle_rejects_malformed_command_status():
         module._has_command_failure({"commands": [{"status": False}]})
 
 
+def test_demo_review_bundle_rejects_malformed_source_report_schema(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    report_path = tmp_path / "report.json"
+
+    report_path.write_text(json.dumps([]), encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON report must be an object"):
+        module._read_json(report_path, "example.schema.v1")
+
+    report_path.write_text(json.dumps({"schema": False}), encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON report schema must be a string"):
+        module._read_json_any(report_path, {"example.schema.v1"})
+
+    report_path.write_text(json.dumps({"schema": "example.other.v1"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected schema"):
+        module._read_json(report_path, "example.schema.v1")
+
+
 def test_demo_review_bundle_rejects_malformed_report_accessors():
     module = _load_script_module("generate_demo_review_bundle")
     report = {
