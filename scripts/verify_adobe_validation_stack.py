@@ -502,8 +502,8 @@ def _inspect_project_dng_fixtures(
             errors.append("project fixture scene outputs missing")
             continue
         for key in ("linearraw_dng", "cfa_dng"):
-            value = outputs.get(key)
-            if not isinstance(value, str):
+            value = _project_fixture_output_path(outputs, key)
+            if value is None:
                 errors.append(f"project fixture output missing: {key}")
                 continue
             dng_path = _resolve_from_repo(Path(value), repo_root)
@@ -638,6 +638,15 @@ def _project_fixture_sample_index_schema(sample_index: dict[str, Any]) -> str | 
     if not isinstance(schema, str):
         raise TypeError("project fixture sample index schema must be a string")
     return schema
+
+
+def _project_fixture_output_path(outputs: dict[str, Any], key: str) -> str | None:
+    value = outputs.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"project fixture output {key} must be a string")
+    return value
 
 
 def _validation_ok(validation: dict[str, Any], label: str) -> bool:
