@@ -676,6 +676,8 @@ def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
             _string(artifact, "bundle_path"),
         )
         artifact_paths.add(artifact["bundle_path"])
+        _artifact_name(artifact)
+        _artifact_group(artifact)
         if _artifact_category(artifact) != _category_for_kind(_artifact_kind(artifact)):
             raise ValueError("artifact category must match kind")
         if _artifact_path(artifact) != artifact["bundle_path"]:
@@ -1108,6 +1110,13 @@ def _artifact_name(artifact: dict[str, Any]) -> str:
     if not isinstance(name, str):
         raise TypeError("artifact name must be a string")
     return name
+
+
+def _artifact_group(artifact: dict[str, Any]) -> str | None:
+    group = artifact.get("group")
+    if isinstance(group, str) or group is None:
+        return group
+    raise TypeError("artifact group must be a string or null")
 
 
 def _artifact_bundle_path(artifact: dict[str, Any]) -> str:

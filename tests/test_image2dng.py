@@ -5407,6 +5407,7 @@ def test_demo_review_bundle_rejects_stale_artifact_integrity(tmp_path):
             {
                 "kind": "report",
                 "category": "reports",
+                "name": "report",
                 "bundle_path": "artifacts/reports/report.txt",
                 "path": "artifacts/reports/report.txt",
                 "bytes": artifact_path.stat().st_size,
@@ -5438,6 +5439,7 @@ def test_demo_review_bundle_rejects_artifact_path_alias(tmp_path):
             {
                 "kind": "report",
                 "category": "reports",
+                "name": "report",
                 "bundle_path": "artifacts/reports/report.txt",
                 "path": "artifacts/reports/alias.txt",
                 "bytes": artifact_path.stat().st_size,
@@ -5462,6 +5464,7 @@ def test_demo_review_bundle_rejects_malformed_artifact_integrity_metadata(tmp_pa
             {
                 "kind": "report",
                 "category": "reports",
+                "name": "report",
                 "bundle_path": "artifacts/reports/report.txt",
                 "path": "artifacts/reports/report.txt",
                 "bytes": artifact_path.stat().st_size,
@@ -5481,6 +5484,14 @@ def test_demo_review_bundle_rejects_malformed_artifact_integrity_metadata(tmp_pa
 
     malformed = report | {"artifacts": [report["artifacts"][0] | {"category": "manifest"}]}
     with pytest.raises(ValueError, match="artifact category must match kind"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"name": []}]}
+    with pytest.raises(TypeError, match="artifact name must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"group": []}]}
+    with pytest.raises(TypeError, match="artifact group must be a string or null"):
         module._validate_bundle_report(output_dir, malformed)
 
     malformed = report | {"artifacts": [report["artifacts"][0] | {"bytes": True}]}
@@ -5503,6 +5514,7 @@ def test_demo_review_bundle_rejects_malformed_source_report_paths(tmp_path):
             {
                 "kind": "report",
                 "category": "reports",
+                "name": "report",
                 "bundle_path": "artifacts/reports/report.txt",
                 "path": "artifacts/reports/report.txt",
                 "bytes": artifact_path.stat().st_size,
@@ -5545,6 +5557,7 @@ def test_demo_review_bundle_requires_source_reports_to_be_artifacts(tmp_path):
             {
                 "kind": "report",
                 "category": "reports",
+                "name": "report",
                 "bundle_path": "artifacts/reports/report.txt",
                 "path": "artifacts/reports/report.txt",
                 "bytes": artifact_path.stat().st_size,
