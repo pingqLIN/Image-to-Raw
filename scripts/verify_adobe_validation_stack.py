@@ -496,7 +496,7 @@ def _inspect_project_dng_fixtures(
             errors.append("project fixture scene entry is not an object")
             continue
         outputs = _project_fixture_scene_outputs(scene)
-        validations = scene.get("validations")
+        validations = _project_fixture_scene_validations(scene)
         if outputs is None:
             errors.append("project fixture scene outputs missing")
             continue
@@ -664,6 +664,15 @@ def _project_fixture_scene_outputs(scene: dict[str, Any]) -> dict[str, Any] | No
     if not isinstance(outputs, dict):
         raise TypeError("project fixture scene outputs must be an object")
     return outputs
+
+
+def _project_fixture_scene_validations(scene: dict[str, Any]) -> dict[str, Any] | None:
+    validations = scene.get("validations")
+    if validations is None:
+        return None
+    if not isinstance(validations, dict):
+        raise TypeError("project fixture scene validations must be an object")
+    return validations
 
 
 def _project_fixture_output_path(outputs: dict[str, Any], key: str) -> str | None:
