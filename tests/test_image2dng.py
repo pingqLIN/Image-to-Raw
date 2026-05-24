@@ -1676,6 +1676,65 @@ def test_compatibility_evidence_fails_when_available_processor_fails(tmp_path, m
     assert {entry["exit_code"] for entry in failed_entries} == {7}
 
 
+def test_semantic_reaction_evidence_generates_report_and_summary(tmp_path):
+    module = _load_script_module("generate_semantic_reaction_evidence")
+
+    output_dir = tmp_path / "semantic-reaction-evidence"
+    assert module.main(["--output-dir", str(output_dir)]) == 0
+
+    report_path = output_dir / "semantic-reaction-evidence-report.json"
+    summary_path = output_dir / "semantic-reaction-evidence-summary.md"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["schema"] == "image2dng.semantic_reaction_evidence.v1"
+    assert report["ok"] is True
+    assert report["errors"] == []
+    assert [scenario["slug"] for scenario in report["scenarios"]] == [
+        "exposure-only",
+        "highlight-only",
+        "exposure-and-highlight",
+        "clip-noop-baseline",
+    ]
+    assert all(
+        scenario["validations"]["reacted"]["linearraw"]["ok"] is True
+        and scenario["validations"]["reacted"]["cfa"]["ok"] is True
+        for scenario in report["scenarios"]
+    )
+    assert all(
+        "copied_source" in scenario["hashes"]
+        and "copied_semantic_manifest" in scenario["hashes"]
+        for scenario in report["scenarios"]
+    )
+
+    scenarios = {scenario["slug"]: scenario for scenario in report["scenarios"]}
+    assert scenarios["exposure-only"]["semantic_to_raw_status"] == "applied"
+    assert scenarios["highlight-only"]["semantic_reaction"]["model"] == (
+        "highlight-clipping-policy-v1"
+    )
+    exposure_and_highlight = scenarios["exposure-and-highlight"]
+    assert [reaction["model"] for reaction in exposure_and_highlight["semantic_reactions"]] == [
+        "region-exposure-mask-v1",
+        "highlight-clipping-policy-v1",
+    ]
+    clip = scenarios["clip-noop-baseline"]
+    assert clip["semantic_to_raw_status"] == "no-op"
+    assert clip["raw_value_changed"] is False
+    assert clip["provenance_changed"] is True
+    assert clip["semantic_reaction"]["reason"] == (
+        "clip policy preserves existing uint16 clamp baseline"
+    )
+    assert any(
+        artifact["kind"] == "reaction-input" and artifact["path"].endswith(
+            "-semantic-reaction.tif"
+        )
+        for artifact in scenarios["highlight-only"]["artifacts"]
+    )
+
+    summary = summary_path.read_text(encoding="utf-8")
+    assert "| Scenario | Status | Raw value changed | Reactions |" in summary
+    assert "clip-noop-baseline" in summary
+
+
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:processor-success")
     monkeypatch.setattr("image2dng.compatibility.shutil.which", _fake_processor_executable)

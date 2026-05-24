@@ -155,3 +155,12 @@ uv run python scripts/generate_raw_native_batch.py `
   --output-dir demo-output/semantic-scene-v1-smoke `
   --external-manifest demo-output/semantic-scene-v1-smoke-input/external-scenes.json
 ```
+
+To generate a rerunnable local evidence pack for semantic reactions, run:
+
+```powershell
+uv run python scripts/generate_semantic_reaction_evidence.py `
+  --output-dir demo-output/semantic-reaction-evidence
+```
+
+This tool writes an ignored local report and summary for checking exposure reaction, highlight reaction, multi-model manifests, and the `clip` no-op baseline. The generated TIFF, DNG, mask, and report files are not committed fixtures.
