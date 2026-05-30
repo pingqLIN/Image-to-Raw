@@ -134,8 +134,8 @@ def build_report(adobe_dir: Path, *, zip_entry_limit: int = 40) -> dict[str, Any
                 "installed converter executable path is provided."
             ),
             (
-                "Keep Adobe DNG SDK validation manual-only unless an explicit local build path "
-                "is approved."
+                "Keep Adobe DNG SDK validation local-only/manual-resource unless an explicit "
+                "local build path is approved."
             ),
             "Do not commit Adobe binaries, archives, generated reports, or extracted SDK contents.",
         ],

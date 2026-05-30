@@ -1758,6 +1758,7 @@ def test_adobe_local_resource_audit_reports_missing_required_resources(tmp_path)
         "missing required resource kind: dng-converter-resource",
         "missing required resource kind: dng-sdk-archive",
     ]
+    assert any("local-only/manual-resource" in step for step in report["next_steps"])
 
 
 def test_adobe_local_resource_audit_recognizes_spaced_converter_name(tmp_path):
@@ -3024,6 +3025,8 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
     assert "Discovery" in runbook
     assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
     assert "Auto install is `False`" in prompt
+    assert "local-only/manual-resource" in prompt
+    assert any("local-only/manual-resource" in question for question in report["review_questions"])
 
 
 def test_raw_processor_setup_audit_records_search_version_hints(tmp_path, monkeypatch):

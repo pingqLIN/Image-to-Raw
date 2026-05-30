@@ -159,7 +159,10 @@ def _build_report(
                 "Should dcraw remain legacy-optional because maintained Windows packages "
                 "may be harder to source?"
             ),
-            "Should Adobe DNG SDK remain manual-only until a reproducible local SDK path exists?",
+            (
+                "Should Adobe DNG SDK evidence remain local-only/manual-resource while "
+                "compatibility matrix entries stay manual-only?"
+            ),
         ],
         "rerun_commands": [
             (
@@ -400,7 +403,7 @@ def _external_review_prompt(report: dict[str, Any]) -> str:
             "- Which optional RAW processor should be the first recommended smoke target.",
             "- Whether Darktable and RawTherapee provide enough independent coverage.",
             "- Whether dcraw should remain legacy-optional.",
-            "- Whether Adobe DNG SDK should remain manual-only.",
+            "- Whether Adobe DNG SDK evidence should remain local-only/manual-resource.",
             "- Whether the post-install rerun commands are sufficient evidence.",
             "- Whether package search version hints are based on exact package matches.",
             "",
