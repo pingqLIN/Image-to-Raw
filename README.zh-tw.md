@@ -137,7 +137,7 @@ uv run python scripts/verify_development_baseline.py --output-dir demo-output/de
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 ```
 
-這個流程會產生 deterministic DNG fixtures、validation JSON、`compatibility-report.json` 與 `compatibility-summary.md`。Phase 6 report schema 為 `image2dng.compatibility_evidence.v2`，會記錄 RAW processor command、exit code、stdout/stderr tail、輸出 artifact 與 dry-run install hints。缺少 optional RAW tools 時會記錄 `skipped`，不會造成失敗；已安裝工具若執行或輸出失敗會記錄 `failed`；Adobe DNG SDK 目前維持 manual-only。
+這個流程會產生 deterministic DNG fixtures、validation JSON、`compatibility-report.json` 與 `compatibility-summary.md`。Phase 6 report schema 為 `image2dng.compatibility_evidence.v2`，會記錄 RAW processor command、exit code、stdout/stderr tail、輸出 artifact 與 dry-run install hints。缺少 optional RAW tools 時會記錄 `skipped`，不會造成失敗；已安裝工具若執行或輸出失敗會記錄 `failed`；Adobe DNG SDK 在 compatibility matrix 中維持 `manual-only`，更完整的 SDK evidence 只能由使用者準備本機 resources 後透過 local-only scripts 產生。
 
 Adobe DNG Converter regression 使用獨立本機腳本：
 
