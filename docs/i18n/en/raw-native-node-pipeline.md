@@ -13,9 +13,7 @@ Rationale:
 - ComfyUI is a strong visual orchestration and model ecosystem, but it should wrap the core pipeline from a separate bridge project so RAW semantics, model workflow, and UI extension lifecycle do not become coupled too early.
 - The first validation target is to emit DNG files with IFD0 JPEG previews, sidecar JPEG previews, validation JSON, and a graph manifest. That does not require a full diffusion runtime yet.
 
-ComfyUI / Stable Diffusion integration lives in the sibling bridge project:
-
-- [image-to-raw-comfyui-sd-bridge](../../../../image-to-raw-comfyui-sd-bridge/README.md)
+ComfyUI / Stable Diffusion integration lives in the sibling bridge project `image-to-raw-comfyui-sd-bridge`.
 
 ComfyUI documentation remains useful for future bridge-side custom-node and CLI integration:
 

@@ -45,7 +45,7 @@ Key explanatory documents:
 - Design overview: [docs/design.md](docs/design.md) / [docs/i18n/zh-TW/design-overview.md](docs/i18n/zh-TW/design-overview.md)
 - Compatibility evidence: [docs/compatibility.md](docs/compatibility.md) / [docs/i18n/zh-TW/compatibility-evidence.md](docs/i18n/zh-TW/compatibility-evidence.md)
 - Demo workflow: [docs/demo.md](docs/demo.md) / [docs/i18n/zh-TW/demo-visualization-workflow.md](docs/i18n/zh-TW/demo-visualization-workflow.md)
-- Current public status: [docs/Current Status and Development Suggestions_ChatGPT.md](docs/Current%20Status%20and%20Development%20Suggestions_ChatGPT.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
+- Current public status: [docs/current-public-status.md](docs/current-public-status.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
 
 ## Install for development
 
@@ -111,9 +111,7 @@ Use a manifest when each image needs producer, prompt, lighting, or semantic sid
 
 ## ComfyUI / Stable Diffusion Bridge
 
-The ComfyUI / Stable Diffusion importer now lives in a sibling project:
-
-[image-to-raw-comfyui-sd-bridge](../image-to-raw-comfyui-sd-bridge/README.md)
+The ComfyUI / Stable Diffusion importer now lives in the sibling bridge project `image-to-raw-comfyui-sd-bridge`.
 
 The old `scripts/import_comfyui_output.py` and `image2dng.comfyui_importer` interfaces moved to that bridge project. The new CLI is:
 
@@ -152,6 +150,15 @@ uv run python scripts/verify_adobe_dng_converter.py --output-dir demo-output/ado
 ```
 
 This keeps validation layers separate: strict `image2dng` contract validation for source DNGs, external processor smoke checks for optional tools, and relaxed Adobe-converted artifact inspection for files rewritten by Adobe DNG Converter.
+
+If Adobe resources, Adobe DNG Converter, and the DNG SDK `dng_validate.exe` have already been prepared by the user on the local machine, run the local-only validation stack:
+
+```powershell
+uv run python scripts/verify_adobe_validation_stack.py --dry-run-converter
+uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/adobe-validation-stack
+```
+
+The stack only reads existing local Adobe resources, generates fresh project DNG fixtures, and consolidates the resource audit, Adobe DNG Converter regression, and DNG SDK validation reports into `adobe-validation-stack-report.json`. It does not download, install, or extract Adobe SDK files, and it does not promote SDK validation into a CI gate. Missing validators or converters are recorded as blocking findings in the local report.
 
 ## Generate a demo review bundle
 
@@ -324,7 +331,7 @@ Known limitations:
 - Sensor effects are simple synthetic controls, not a physical camera model.
 - Embedded preview is currently an IFD layout experiment, not a full Adobe compatibility claim.
 - No EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
-- Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
+- Compatibility is validated structurally and with optional local smoke tools; Adobe DNG SDK checks remain local-only/manual-resource evidence and are not a CI gate.
 
 See [docs/design.md](docs/design.md) for the design notes.
 See [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md) for the current DNG tag contract.

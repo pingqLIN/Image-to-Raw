@@ -39,9 +39,9 @@ The setup audit never installs or upgrades RAW processor tools. Package search v
 
 ## Adobe DNG SDK Manual Validation
 
-Adobe DNG SDK remains `manual-only`. It is not a CI gate, and project scripts must not download, install, or update it automatically.
+Adobe DNG SDK remains local-only/manual-resource evidence. It is not a CI gate, and project scripts must not download, install, extract, or update it automatically.
 
-Recommended manual workflow:
+When the SDK or validator has not been prepared locally yet, use this manual preparation workflow:
 
 1. Confirm the current SDK and specification versions from Adobe's DNG page.
 2. After explicit user approval, prepare the SDK or validator build in an isolated local location.
@@ -53,6 +53,24 @@ Recommended manual workflow:
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
+
+When a local `dng_validate.exe` is already available, the repo can write a repeatable local report:
+
+```powershell
+uv run python scripts/run_adobe_dng_sdk_validation.py `
+  --validator Adobe/dng_sdk_1_7_1/dng_sdk/targets/win/release64_x64/dng_validate.exe `
+  --fixture-dir demo-output/review-bundle-phase6/artifacts/representative-dng `
+  --output-dir demo-output/adobe-dng-sdk-validation
+```
+
+To consolidate the Adobe resource audit, project DNG fixture generation, Adobe DNG Converter regression, and SDK validation into one local report, run:
+
+```powershell
+uv run python scripts/verify_adobe_validation_stack.py --dry-run-converter
+uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/adobe-validation-stack
+```
+
+`--dry-run-converter` proves fixture and reporting paths only; it does not prove full Adobe readiness. Final evidence should be rerun after the user has prepared the converter and validator.
 
 Constraints:
 
@@ -131,4 +149,4 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 - fixtures: input path, DNG path, validation JSON path, structural validation status, and processor result records;
 - matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, and output artifacts.
 
-Adobe DNG SDK remains `manual-only` until a reproducible local SDK validation path exists.
+Adobe DNG SDK remains local-only/manual-resource evidence and the `compatibility-report.json` matrix entry remains `manual-only` until a reproducible public gate policy exists.

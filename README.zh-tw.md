@@ -41,7 +41,7 @@ This product includes DNG technology under license by Adobe.
 - 設計總覽：[docs/design.md](docs/design.md) / [docs/i18n/zh-TW/design-overview.md](docs/i18n/zh-TW/design-overview.md)
 - 相容性證據：[docs/compatibility.md](docs/compatibility.md) / [docs/i18n/zh-TW/compatibility-evidence.md](docs/i18n/zh-TW/compatibility-evidence.md)
 - Demo 流程：[docs/demo.md](docs/demo.md) / [docs/i18n/zh-TW/demo-visualization-workflow.md](docs/i18n/zh-TW/demo-visualization-workflow.md)
-- 目前公開狀態：[docs/Current Status and Development Suggestions_ChatGPT.md](docs/Current%20Status%20and%20Development%20Suggestions_ChatGPT.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
+- 目前公開狀態：[docs/current-public-status.md](docs/current-public-status.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
 
 ---
 
@@ -108,9 +108,7 @@ uv run python scripts/generate_raw_native_batch.py `
 
 ## ComfyUI / Stable Diffusion bridge
 
-ComfyUI / Stable Diffusion 專屬 importer 已分割到 sibling project：
-
-[image-to-raw-comfyui-sd-bridge](../image-to-raw-comfyui-sd-bridge/README.zh-tw.md)
+ComfyUI / Stable Diffusion 專屬 importer 已分割到 sibling bridge project `image-to-raw-comfyui-sd-bridge`。
 
 原本位於本 repo 的 `scripts/import_comfyui_output.py` 與 `image2dng.comfyui_importer` 已搬到該 bridge 專案。新的 CLI 是：
 
@@ -149,6 +147,15 @@ uv run python scripts/verify_adobe_dng_converter.py --output-dir demo-output/ado
 ```
 
 此流程會分開三層驗證：本專案輸出來源 DNG 使用嚴格 `image2dng` contract validation；optional tools 使用 external processor smoke checks；Adobe DNG Converter 改寫後的檔案使用較寬鬆的 Adobe-converted artifact inspection。
+
+若本機已由使用者自行準備 Adobe resources、Adobe DNG Converter 與 DNG SDK `dng_validate.exe`，可以執行 local-only validation stack：
+
+```powershell
+uv run python scripts/verify_adobe_validation_stack.py --dry-run-converter
+uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/adobe-validation-stack
+```
+
+這個 stack 只讀取本機已存在的 Adobe resources，產生新的 project DNG fixtures，並把 resource audit、Adobe DNG Converter regression 與 DNG SDK validation report 收斂成 `adobe-validation-stack-report.json`。它不下載、不安裝、不解壓 Adobe SDK，也不把 SDK validation 升級成 CI gate；缺少 validator 或 converter 會以 blocking finding 記錄在本機 report。
 
 ## 產生 demo review bundle
 
@@ -308,7 +315,7 @@ uv run ruff check
 - Sensor effects 是簡化 synthetic controls，不是物理相機模型。
 - Embedded preview 目前是 IFD layout experiment，不代表完整 Adobe 相容承諾。
 - 尚未支援 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
-- 相容性目前以結構驗證與 optional local smoke tools 為主，尚未納入 Adobe DNG SDK 自動驗證。
+- 相容性目前以結構驗證與 optional local smoke tools 為主；Adobe DNG SDK 維持 local-only/manual resource 模式，不作為 CI gate。
 
 設計說明見 [docs/design.md](docs/design.md)。
 目前 DNG tag contract 見 [docs/i18n/zh-TW/dng-tag-contract.md](docs/i18n/zh-TW/dng-tag-contract.md)。

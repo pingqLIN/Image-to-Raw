@@ -1,6 +1,6 @@
 # Image-to-DNG RAW Generator 目前公開狀態
 
-English public baseline: [docs/Current Status and Development Suggestions_ChatGPT.md](../../Current%20Status%20and%20Development%20Suggestions_ChatGPT.md)
+English public baseline: [docs/current-public-status.md](../../current-public-status.md)
 
 本文件記錄目前可對外說明的工程基線，不包含內部規劃筆記、時程或未公開的優先順序。
 
@@ -31,7 +31,7 @@ English public baseline: [docs/Current Status and Development Suggestions_ChatGP
 
 參考文件：
 
-- [README.md](../../README.md)
+- [README.md](../../../README.md)
 - [docs/design.md](../../design.md)
 - [docs/compatibility.md](../../compatibility.md)
 - [docs/demo.md](../../demo.md)

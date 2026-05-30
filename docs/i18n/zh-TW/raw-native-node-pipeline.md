@@ -13,9 +13,7 @@
 - ComfyUI 很適合視覺化節點編排與生成模型生態，但應由獨立 bridge project 包覆核心 pipeline，避免 RAW 格式語意、模型工作流、UI extension 生命週期過早耦合。
 - 第一批驗證目標是產生含 IFD0 JPEG preview 的 DNG、sidecar JPEG preview、validation JSON 與 graph manifest，不需要先引入大型 diffusion runtime。
 
-ComfyUI / Stable Diffusion 整合位於 sibling bridge project：
-
-- [image-to-raw-comfyui-sd-bridge](../../../../image-to-raw-comfyui-sd-bridge/README.zh-tw.md)
+ComfyUI / Stable Diffusion 整合位於 sibling bridge project `image-to-raw-comfyui-sd-bridge`。
 
 ComfyUI 官方文件仍是 bridge project 後續 custom-node / CLI 整合的參考：
 

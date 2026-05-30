@@ -10,7 +10,7 @@ English public baseline: [docs/compatibility.md](../../compatibility.md)
 
 - `image2dng validate` structural validation；
 - optional RAW processor command/export evidence；
-- Adobe DNG SDK manual-only validation；
+- Adobe DNG SDK local-only/manual-resource validation；
 - 工具不存在時的 `skipped` 狀態。
 
 目前 required DNG tags 與 mode-specific contract 見 [DNG tag contract](dng-tag-contract.md)。Compatibility evidence 應依照這份 contract 解讀：缺少 optional tool 是環境狀態；缺少必要 tag 則是 structural failure。
@@ -49,11 +49,11 @@ uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-
 
 若使用者後續批准安裝其中一個工具，再重跑 setup audit、compatibility evidence 與 review bundle，讓安裝前決策與安裝後 evidence 清楚分開。
 
-## Adobe DNG SDK manual validation
+## Adobe DNG SDK local-only/manual-resource validation
 
-Adobe DNG SDK 目前維持 `manual-only`，不作為 CI gate，也不由本專案腳本自動下載、安裝或更新。
+Adobe DNG SDK 目前維持 local-only/manual-resource 模式，不作為 CI gate，也不由本專案腳本自動下載、安裝、解壓或更新。
 
-建議人工驗證流程：
+若本機尚未準備 SDK 或 validator，建議人工準備流程：
 
 1. 從 Adobe DNG 官方頁面確認目前 SDK 與 specification 版本。
 2. 由使用者明確批准後，在本機隔離位置準備 SDK 或 validator build。
@@ -65,6 +65,24 @@ Adobe DNG SDK 目前維持 `manual-only`，不作為 CI gate，也不由本專�
 uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
+
+若本機已經有可執行的 `dng_validate.exe`，可使用本 repo 的 local-only runner 產生可重跑 report：
+
+```powershell
+uv run python scripts/run_adobe_dng_sdk_validation.py `
+  --validator Adobe/dng_sdk_1_7_1/dng_sdk/targets/win/release64_x64/dng_validate.exe `
+  --fixture-dir demo-output/review-bundle-phase6/artifacts/representative-dng `
+  --output-dir demo-output/adobe-dng-sdk-validation
+```
+
+若要同時收斂 Adobe resource audit、project DNG fixture generation、Adobe DNG Converter regression 與 SDK validation，可使用：
+
+```powershell
+uv run python scripts/verify_adobe_validation_stack.py --dry-run-converter
+uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/adobe-validation-stack
+```
+
+`--dry-run-converter` 只證明 fixture 與報告路徑，不代表完整 Adobe readiness；正式 evidence 應在使用者已準備 converter 與 validator 後重跑一次。
 
 限制：
 
@@ -112,7 +130,7 @@ Validation 分層如下：
 - optional tool 不存在時記錄 `skipped: not found`，不造成失敗。
 - optional tool 若實際執行但 parse/open/export 失敗，或成功 exit 但沒有產出預期 artifact，report 會標示 failure，script exit code 也會是 non-zero。
 - 本流程只輸出 dry-run install hints，不會自動安裝任何 RAW processor。
-- Adobe DNG SDK 目前維持 `manual-only`，不作為 CI gate。
+- Adobe DNG SDK 維持 local-only/manual-resource 模式，不作為 CI gate；`compatibility-report.json` 的 matrix entry 仍維持 `manual-only`，直到有可重現的公開 gate 政策。
 
 ## Report Schema
 
