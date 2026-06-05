@@ -4124,6 +4124,21 @@ def test_core_raw_model_rejects_out_of_range_white_level():
         CoreRawModel.for_linearraw(width=8, height=8, white_level=70000)
 
 
+def test_core_raw_model_rejects_default_crop_outside_image_bounds():
+    with pytest.raises(ValueError, match="default crop must stay within image bounds"):
+        CoreRawModel(
+            width=8,
+            height=8,
+            default_crop_origin=(2, 0),
+            default_crop_size=(7, 8),
+        )
+
+
+def test_core_raw_model_rejects_active_area_outside_image_bounds():
+    with pytest.raises(ValueError, match="active_area must stay within image bounds"):
+        CoreRawModel(width=8, height=8, active_area=(0, 0, 9, 8))
+
+
 def test_ai_metadata_model_rejects_non_positive_capture_values():
     with pytest.raises(ValueError, match="iso must be positive"):
         AIMetadataModel(iso=0)

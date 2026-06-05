@@ -70,6 +70,39 @@ class CoreRawModel:
             raise ValueError("white levels must be <= 65535")
         if any(min(self.white_level) <= black for black in self.black_level):
             raise ValueError("white levels must be greater than black levels")
+        self._validate_geometry_tags()
+
+    def _validate_geometry_tags(self) -> None:
+        if len(self.default_crop_origin) != 2 or any(
+            not isinstance(value, Integral) for value in self.default_crop_origin
+        ):
+            raise ValueError("default_crop_origin must contain two integer values")
+        if any(value < 0 for value in self.default_crop_origin):
+            raise ValueError("default_crop_origin must be non-negative")
+        if self.default_crop_size is not None:
+            if len(self.default_crop_size) != 2 or any(
+                not isinstance(value, Integral) for value in self.default_crop_size
+            ):
+                raise ValueError("default_crop_size must contain two integer values")
+            crop_width, crop_height = self.default_crop_size
+            if crop_width <= 0 or crop_height <= 0:
+                raise ValueError("default_crop_size values must be positive")
+            origin_x, origin_y = self.default_crop_origin
+            if origin_x + crop_width > self.width or origin_y + crop_height > self.height:
+                raise ValueError("default crop must stay within image bounds")
+        if self.active_area is None:
+            return
+        if len(self.active_area) != 4 or any(
+            not isinstance(value, Integral) for value in self.active_area
+        ):
+            raise ValueError("active_area must contain four integer values")
+        top, left, bottom, right = self.active_area
+        if top < 0 or left < 0:
+            raise ValueError("active_area origin must be non-negative")
+        if bottom <= top or right <= left:
+            raise ValueError("active_area bottom/right must exceed top/left")
+        if bottom > self.height or right > self.width:
+            raise ValueError("active_area must stay within image bounds")
 
     @classmethod
     def for_dimensions(
