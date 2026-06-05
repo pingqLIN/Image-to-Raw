@@ -4062,6 +4062,19 @@ def test_ai_metadata_model_rejects_cfa_without_supported_pattern():
         AIMetadataModel(raw_mode="cfa")
 
 
+def test_ai_metadata_model_rejects_non_positive_capture_values():
+    with pytest.raises(ValueError, match="iso must be positive"):
+        AIMetadataModel(iso=0)
+    with pytest.raises(ValueError, match="white_balance_kelvin must be positive finite"):
+        AIMetadataModel(white_balance_kelvin=0)
+
+
+@pytest.mark.parametrize("field_name", ["shot_noise", "read_noise", "row_noise"])
+def test_ai_metadata_model_rejects_negative_noise_fields(field_name):
+    with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
+        AIMetadataModel(**{field_name: -0.1})
+
+
 def test_validate_dng_rejects_bad_cfa_tags(tmp_path):
     input_path = tmp_path / "bad-cfa-input.tif"
     output_path = tmp_path / "bad-cfa.dng"

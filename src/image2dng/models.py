@@ -177,6 +177,13 @@ class AIMetadataModel:
             raise ValueError("camera parameters must be marked simulated")
         if self.prompt_plaintext is not None and not self.prompt_plaintext.strip():
             raise ValueError("prompt_plaintext must be non-empty when provided")
+        if self.iso is not None and self.iso <= 0:
+            raise ValueError("iso must be positive")
+        if self.white_balance_kelvin is not None and (
+            not math.isfinite(float(self.white_balance_kelvin))
+            or self.white_balance_kelvin <= 0
+        ):
+            raise ValueError("white_balance_kelvin must be positive finite")
         if self.raw_mode not in {"linearraw", "cfa"}:
             raise ValueError("raw_mode must be 'linearraw' or 'cfa'")
         if self.raw_mode == "linearraw" and self.cfa_pattern is not None:
@@ -188,6 +195,13 @@ class AIMetadataModel:
             "gbrg",
         }:
             raise ValueError("cfa metadata requires a supported cfa_pattern")
+        for field_name, value in (
+            ("shot_noise", self.shot_noise),
+            ("read_noise", self.read_noise),
+            ("row_noise", self.row_noise),
+        ):
+            if value is not None and (not math.isfinite(float(value)) or value < 0):
+                raise ValueError(f"{field_name} must be non-negative finite")
 
 
 def cct_to_as_shot_neutral(kelvin: float) -> tuple[float, float, float]:
