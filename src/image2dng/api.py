@@ -126,16 +126,12 @@ def convert(
         camera = CameraProfileModel.from_white_balance(white_balance_value)
         if color_matrix_1 is not None or as_shot_neutral is not None:
             camera = CameraProfileModel(
-                color_matrix_1=(
-                    tuple(float(value) for value in color_matrix_1)
-                    if color_matrix_1 is not None
-                    else camera.color_matrix_1
-                ),
-                as_shot_neutral=(
-                    tuple(float(value) for value in as_shot_neutral)
-                    if as_shot_neutral is not None
-                    else camera.as_shot_neutral
-                ),
+                color_matrix_1=color_matrix_1
+                if color_matrix_1 is not None
+                else camera.color_matrix_1,
+                as_shot_neutral=as_shot_neutral
+                if as_shot_neutral is not None
+                else camera.as_shot_neutral,
             )
         ai = AIMetadataModel(
             model_name=model_name,

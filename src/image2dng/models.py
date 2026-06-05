@@ -207,16 +207,38 @@ class CameraProfileModel:
             or self.calibration_illuminant_1 <= 0
         ):
             raise ValueError("calibration_illuminant_1 must be a positive integer")
-        if len(self.color_matrix_1) != 9:
+        try:
+            color_matrix = tuple(self.color_matrix_1)
+        except TypeError as exc:
+            raise ValueError("color_matrix_1 must contain exactly 9 values") from exc
+        if len(color_matrix) != 9:
             raise ValueError("color_matrix_1 must contain exactly 9 values")
-        if not all(math.isfinite(value) for value in self.color_matrix_1):
+        try:
+            normalized_color_matrix = tuple(float(value) for value in color_matrix)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("color_matrix_1 values must be finite") from exc
+        if not all(math.isfinite(value) for value in normalized_color_matrix):
             raise ValueError("color_matrix_1 values must be finite")
-        if len(self.as_shot_neutral) != 3:
+        object.__setattr__(self, "color_matrix_1", normalized_color_matrix)
+        try:
+            as_shot_neutral = tuple(self.as_shot_neutral)
+        except TypeError as exc:
+            raise ValueError("as_shot_neutral must contain exactly 3 values") from exc
+        if len(as_shot_neutral) != 3:
             raise ValueError("as_shot_neutral must contain exactly 3 values")
+        try:
+            normalized_as_shot_neutral = tuple(
+                float(value) for value in as_shot_neutral
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "as_shot_neutral values must be positive finite numbers"
+            ) from exc
         if not all(
-            math.isfinite(value) and value > 0 for value in self.as_shot_neutral
+            math.isfinite(value) and value > 0 for value in normalized_as_shot_neutral
         ):
             raise ValueError("as_shot_neutral values must be positive finite numbers")
+        object.__setattr__(self, "as_shot_neutral", normalized_as_shot_neutral)
 
     @classmethod
     def from_white_balance(cls, kelvin: float) -> CameraProfileModel:

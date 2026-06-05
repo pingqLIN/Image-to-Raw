@@ -647,6 +647,30 @@ def test_camera_profile_model_rejects_bad_calibration_illuminant():
         CameraProfileModel(calibration_illuminant_1=0)
 
 
+def test_camera_profile_model_normalizes_parseable_numeric_values():
+    profile = CameraProfileModel(
+        color_matrix_1=("1", "0", "0", "0", "1", "0", "0", "0", "1"),
+        as_shot_neutral=("1.2", "1.0", "0.8"),
+    )
+
+    assert profile.color_matrix_1 == pytest.approx(
+        (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    )
+    assert profile.as_shot_neutral == pytest.approx((1.2, 1.0, 0.8))
+
+
+def test_camera_profile_model_rejects_unparseable_numeric_values():
+    with pytest.raises(ValueError, match="color_matrix_1 values must be finite"):
+        CameraProfileModel(
+            color_matrix_1=("bad", "0", "0", "0", "1", "0", "0", "0", "1")
+        )
+    with pytest.raises(
+        ValueError,
+        match="as_shot_neutral values must be positive finite numbers",
+    ):
+        CameraProfileModel(as_shot_neutral=("bad", "1", "1"))
+
+
 def test_public_convert_api_rejects_bad_camera_profile_overrides(tmp_path):
     input_path = tmp_path / "bad-profile-input.tif"
     output_path = tmp_path / "bad-profile-output.dng"
@@ -663,6 +687,12 @@ def test_public_convert_api_rejects_bad_camera_profile_overrides(tmp_path):
             input_path=input_path,
             output_path=output_path,
             as_shot_neutral=(1.0, 0.0, 1.0),
+        )
+    with pytest.raises(InvalidMetadataError, match="color_matrix_1 values must be finite"):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            color_matrix_1=("bad", "0", "0", "0", "1", "0", "0", "0", "1"),
         )
 
 
