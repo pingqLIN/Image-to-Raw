@@ -2,7 +2,7 @@
 
 `image2dng.semantic_scene.v1` is the semantic sidecar contract for external renderers, AI generators, simulation engines, and ComfyUI nodes in bridge projects that hand scene-linear images to this project.
 
-The v1 goal is semantic preservation and validation. It lets the RAW-native pipeline preserve traceable scene, material, light, region, mask/depth asset, and sensor response hint data. It does not convert semantic information into raw sample values yet, and it does not write the sidecar into `DNGPrivateData`.
+The v1 goal is semantic preservation and validation. It lets the RAW-native pipeline preserve traceable scene, material, light, region, mask/depth asset, and sensor response hint data. Preservation remains the default behavior; implemented deterministic reaction models modify the copied scene-linear input only when the external scene manifest explicitly sets `apply_semantic_reaction: true`. The sidecar is not currently written into `DNGPrivateData`.
 
 ## Minimal Shape
 
@@ -111,16 +111,21 @@ When `semantic_manifest` is present, the pipeline:
 
 By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation yet.
 
-When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable the deterministic `region-exposure-mask-v1` prototype. This prototype reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, applies EV modulation to 16-bit scene-linear RGB values inside the mask, and records a `semantic_reaction` summary in the manifests. It only supports linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. It is not a full physical sensor model and does not claim spectral or camera-simulation accuracy.
+When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable deterministic reaction models:
 
-For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input.
+- `region-exposure-mask-v1` reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, then applies EV modulation to 16-bit scene-linear RGB values inside the mask.
+- `highlight-clipping-policy-v1` reads `sensor_response_hints.clipping_policy`. `clip` records an explicit no-op baseline; `preserve-highlights` and `soft-rolloff` apply a deterministic soft shoulder to 16-bit scene-linear RGB values above fixed thresholds.
+
+Reactions only support linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. These models are not full physical sensor models and do not claim spectral accuracy, ISO response, camera tone-curve accuracy, or recovery of real detail after sensor clipping.
+
+For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input. Manifests keep the backward-compatible `semantic_reaction` primary summary and add a `semantic_reactions` list for every reaction model evaluated during the opt-in pass.
 
 Current reaction model matrix:
 
 | Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` implemented | Yes | Yes | Finite EV, mask-bound, linear-light only. |
-| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` candidate | No | Yes | Future deterministic value mapping only; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
+| `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented | Yes | Yes | Deterministic soft shoulder; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
 | `regions[].response_hints.noise_priority` | Metadata/research | No | Deferred | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
 | `sensor_response_hints.target_middle_gray` | Research | No | Deferred | Requires calibration policy before it can affect values. |
 | `sensor_response_hints.target_white_balance_kelvin` | Metadata/research | No | Deferred | Requires a color pipeline and illuminant policy before it can affect values. |
@@ -130,8 +135,8 @@ Current reaction model matrix:
 | Status | Manifest shape | Meaning |
 | --- | --- | --- |
 | `preserved-not-applied` | `semantic_validation` is present, `semantic_reaction` is empty | Sidecar was copied and validated, but raw values were generated from the original scene-linear input. |
-| `applied` | `semantic_reaction.applied` is `true` with affected-region counts | Opt-in `region-exposure-mask-v1` modified a copied scene-linear input before RAW generation. |
-| `no-op` | `semantic_reaction.applied` is `false` with a `reason` | Reaction was requested and validated, but no eligible exposure-mask region changed pixels. |
+| `applied` | `semantic_reaction.applied` is `true`, and `semantic_reactions` records each model summary | At least one opt-in reaction modified a copied scene-linear input before RAW generation. |
+| `no-op` | `semantic_reactions` contains only no-op results with `reason` values | Reaction was requested and validated, but no eligible exposure-mask region or highlight policy changed pixels. |
 
 ## Validation
 

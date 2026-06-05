@@ -51,6 +51,7 @@ from image2dng.pipeline import (
 from image2dng.semantic_reaction import (
     HIGHLIGHT_CLIPPING_REACTION_MODEL,
     REGION_EXPOSURE_REACTION_MODEL,
+    apply_highlight_clipping_policy_reaction,
     apply_region_exposure_reaction,
     load_semantic_payload,
     semantic_reaction_model_registry,
@@ -729,17 +730,17 @@ def test_semantic_scene_validator_rejects_non_string_semantic_physics_enums(tmp_
     )
 
 
-def test_semantic_reaction_model_registry_separates_implemented_and_candidate_models():
+def test_semantic_reaction_model_registry_reports_implemented_and_deferred_models():
     registry = semantic_reaction_model_registry()
 
     assert registry[REGION_EXPOSURE_REACTION_MODEL]["status"] == "implemented"
     assert registry[REGION_EXPOSURE_REACTION_MODEL]["current_raw_value_effect"] is True
     assert registry[REGION_EXPOSURE_REACTION_MODEL]["intended_raw_value_effect"] is True
     assert "linear-light only" in registry[REGION_EXPOSURE_REACTION_MODEL]["boundary"]
-    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["status"] == "candidate"
-    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["status"] == "implemented"
+    assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["current_raw_value_effect"] is True
     assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["intended_raw_value_effect"] is True
-    assert "not implemented" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
+    assert "deterministic soft shoulder" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
     assert "camera tone-curve" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
 
 
@@ -824,6 +825,73 @@ def test_semantic_reaction_rejects_non_finite_exposure_bias(tmp_path):
         assert "semantic reaction exposure_bias_ev must be finite" in str(exc)
     else:
         raise AssertionError("expected non-finite exposure bias to fail")
+
+
+def test_highlight_clipping_policy_applies_soft_shoulder(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=4,
+        height=2,
+        exposure_bias_ev=None,
+        clipping_policy="preserve-highlights",
+    )
+    image = np.array(
+        [
+            [
+                [1000, 2000, 3000],
+                [50000, 52000, 54000],
+                [60000, 61000, 62000],
+                [65535, 65535, 65535],
+            ],
+            [
+                [4000, 5000, 6000],
+                [57000, 57000, 57000],
+                [57344, 57344, 57344],
+                [58000, 59000, 60000],
+            ],
+        ],
+        dtype=np.uint16,
+    )
+
+    reacted, result = apply_highlight_clipping_policy_reaction(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+        input_space="linear-rec709",
+    )
+
+    assert result is not None
+    assert result.model == HIGHLIGHT_CLIPPING_REACTION_MODEL
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.affected_pixels == 3
+    assert np.array_equal(reacted[:, :2], image[:, :2])
+    assert np.array_equal(reacted[1, 2], image[1, 2])
+    assert np.all(reacted[0, 2:] < image[0, 2:])
+    assert reacted.dtype == np.uint16
+    assert reacted.shape == image.shape
+
+
+def test_highlight_clipping_policy_clip_is_explicit_noop(tmp_path):
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=4,
+        height=2,
+        exposure_bias_ev=None,
+        clipping_policy="clip",
+    )
+    image = np.full((2, 4, 3), 65535, dtype=np.uint16)
+
+    reacted, result = apply_highlight_clipping_policy_reaction(
+        image,
+        semantic_payload=load_semantic_payload(semantic_path),
+        input_space="linear-rec709",
+    )
+
+    assert result is not None
+    assert result.applied is False
+    assert result.status == "no-op"
+    assert result.reason == "clipping_policy clip uses the existing uint16 clamp baseline"
+    assert np.array_equal(reacted, image)
 
 
 def test_external_scene_linear_batch_preserves_producer_boundary(tmp_path):
@@ -1037,7 +1105,7 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
         "-semantic-reaction.tif"
     )
     assert reacted_scene["nodes"][0]["parameters"]["semantic_boundary"] == (
-        "semantic sidecar applied through opt-in region-exposure-mask-v1 reaction"
+        "semantic sidecar applied through opt-in deterministic semantic reactions"
     )
     assert (
         preserved_scene["raw_data_unique_ids"]["linearraw"]
@@ -1153,6 +1221,80 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
     assert scene_manifest["semantic_reaction"]["applied"] is False
     assert scene_manifest["semantic_reaction"]["reason"] == (
         "no regions with exposure_bias_ev and mask_asset_id"
+    )
+
+
+def test_external_scene_linear_batch_applies_highlight_clipping_policy(tmp_path):
+    source_path = tmp_path / "highlight-scene.tif"
+    source = np.full((18, 20, 3), 32000, dtype=np.uint16)
+    source[:, 10:, :] = 65535
+    tifffile.imwrite(source_path, source, photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        exposure_bias_ev=None,
+        clipping_policy="soft-rolloff",
+    )
+
+    preserved = run_external_scene_linear_batch(
+        tmp_path / "preserved-highlight-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="highlight-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+            )
+        ],
+    )
+    reacted = run_external_scene_linear_batch(
+        tmp_path / "reacted-highlight-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="highlight-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    preserved_scene = json.loads(preserved.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    reacted_scene = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    reacted_input = tifffile.imread(reacted_scene["outputs"]["scene_linear_input"])
+
+    assert reacted_scene["semantic_to_raw_status"] == "applied"
+    assert reacted_scene["semantic_reaction"]["model"] == HIGHLIGHT_CLIPPING_REACTION_MODEL
+    assert reacted_scene["semantic_reactions"] == [
+        {
+            "model": REGION_EXPOSURE_REACTION_MODEL,
+            "applied": False,
+            "status": "no-op",
+            "region_count": 0,
+            "affected_pixels": 0,
+            "regions": [],
+            "reason": "no regions with exposure_bias_ev and mask_asset_id",
+        },
+        {
+            "model": HIGHLIGHT_CLIPPING_REACTION_MODEL,
+            "applied": True,
+            "status": "applied",
+            "region_count": 1,
+            "affected_pixels": 180,
+            "regions": [
+                {
+                    "policy": "soft-rolloff",
+                    "threshold": 49152,
+                    "affected_pixels": 180,
+                }
+            ],
+        },
+    ]
+    assert np.all(reacted_input[:, :10, :] == source[:, :10, :])
+    assert np.all(reacted_input[:, 10:, :] < source[:, 10:, :])
+    assert (
+        preserved_scene["raw_data_unique_ids"]["linearraw"]
+        != reacted_scene["raw_data_unique_ids"]["linearraw"]
     )
 
 
@@ -3390,6 +3532,7 @@ def _write_semantic_scene(
     include_semantic_physics: bool = False,
     exposure_bias_ev: float | None = 0.0,
     mask_columns: int | None = None,
+    clipping_policy: str | None = None,
 ) -> Path:
     mask_path = directory / "renderer-frame-001-mask.png"
     mask = np.zeros((height, width), dtype=np.uint16)
@@ -3474,7 +3617,7 @@ def _write_semantic_scene(
         "sensor_response_hints": {
             "target_white_balance_kelvin": 6500,
             "target_middle_gray": 0.18,
-            "clipping_policy": "preserve-highlights",
+            **({"clipping_policy": clipping_policy} if clipping_policy is not None else {}),
         },
     }
     if include_semantic_physics:

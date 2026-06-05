@@ -46,13 +46,13 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
     ),
     HIGHLIGHT_CLIPPING_REACTION_MODEL: SemanticReactionModelInfo(
         model_id=HIGHLIGHT_CLIPPING_REACTION_MODEL,
-        status="candidate",
-        current_raw_value_effect=False,
+        status="implemented",
+        current_raw_value_effect=True,
         intended_raw_value_effect=True,
         scope="deterministic highlight value mapping for explicit clipping policies",
         boundary=(
-            "not implemented; must not claim camera tone-curve, ISO response, "
-            "or preserved sensor detail"
+            "deterministic soft shoulder for 16-bit scene-linear RGB inputs; "
+            "not a camera tone-curve, ISO response, or proof of preserved sensor detail"
         ),
     ),
 }
@@ -159,6 +159,70 @@ def apply_region_exposure_reaction(
         status="applied",
         regions=applied_regions,
         affected_pixels=affected_total,
+    )
+
+
+def apply_highlight_clipping_policy_reaction(
+    image: np.ndarray,
+    *,
+    semantic_payload: dict[str, Any],
+    input_space: str | None = None,
+) -> tuple[np.ndarray, SemanticReactionResult | None]:
+    if image.dtype != np.uint16:
+        raise ValueError("semantic reaction input image must be uint16")
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("semantic reaction input image must be RGB")
+    _validate_scene_binding(image, semantic_payload, input_space)
+
+    sensor_hints = semantic_payload.get("sensor_response_hints")
+    if not isinstance(sensor_hints, dict):
+        return image.copy(), None
+    policy = sensor_hints.get("clipping_policy")
+    if policy is None:
+        return image.copy(), None
+    if policy not in {"clip", "preserve-highlights", "soft-rolloff"}:
+        raise ValueError(f"semantic reaction clipping_policy is unsupported: {policy}")
+    if policy == "clip":
+        return image.copy(), SemanticReactionResult(
+            model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="clipping_policy clip uses the existing uint16 clamp baseline",
+            regions=[],
+        )
+
+    threshold = 57344.0 if policy == "preserve-highlights" else 49152.0
+    white = 65535.0
+    source = image.astype(np.float64, copy=False)
+    active = source > threshold
+    affected_pixels = int(np.count_nonzero(np.any(active, axis=2)))
+    if affected_pixels == 0:
+        return image.copy(), SemanticReactionResult(
+            model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason=f"no pixels above {int(threshold)} for clipping_policy {policy}",
+            regions=[],
+        )
+
+    output = source.copy()
+    shoulder_range = white - threshold
+    highlights = output[active]
+    output[active] = threshold + shoulder_range * (
+        1.0 - np.exp(-((highlights - threshold) / shoulder_range))
+    )
+    return np.rint(np.clip(output, 0.0, white)).astype(np.uint16), SemanticReactionResult(
+        model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
+        applied=True,
+        status="applied",
+        regions=[
+            {
+                "policy": policy,
+                "threshold": int(threshold),
+                "affected_pixels": affected_pixels,
+            }
+        ],
+        affected_pixels=affected_pixels,
     )
 
 

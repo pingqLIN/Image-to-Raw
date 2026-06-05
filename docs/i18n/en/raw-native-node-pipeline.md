@@ -85,7 +85,7 @@ For multiple images or per-image metadata, use an `image2dng.external_scene_line
 
 `semantic_manifest` is a deliberate next-stage hook. When the sidecar uses `image2dng.semantic_scene.v1`, the pipeline validates it before DNG generation, copies the sidecar, copies resolvable local assets, and records a validation summary in the batch manifest and sample index. By default, the implementation still does not convert semantic information into raw sample values.
 
-When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline enables the `region-exposure-mask-v1` prototype, using region masks and `exposure_bias_ev` to apply deterministic EV modulation to 16-bit scene-linear RGB input. This only supports `linear-rec709`, `acescg`, and `xyz`; encoded `srgb` or `prophoto-rgb` inputs cannot apply the reaction directly. See [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md) for the detailed contract.
+When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline enables implemented deterministic semantic reactions: `region-exposure-mask-v1` can use region masks and `exposure_bias_ev` to apply EV modulation to 16-bit scene-linear RGB input, while `highlight-clipping-policy-v1` can apply a bounded soft shoulder from `sensor_response_hints.clipping_policy`. This only supports `linear-rec709`, `acescg`, and `xyz`; encoded `srgb` or `prophoto-rgb` inputs cannot apply the reaction directly. See [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md) for the detailed contract.
 
 ## Artifact Contract
 
