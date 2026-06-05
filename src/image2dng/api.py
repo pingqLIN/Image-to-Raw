@@ -11,7 +11,12 @@ import numpy as np
 
 from image2dng.dng_writer import DngLayout, write_dng
 from image2dng.image_processing import InputSpace, build_cfa_buffer, build_linearraw_buffer
-from image2dng.models import AIMetadataModel, CameraProfileModel, CfaPattern
+from image2dng.models import (
+    CFA_PATTERN_VALUES,
+    AIMetadataModel,
+    CameraProfileModel,
+    CfaPattern,
+)
 from image2dng.sensor_effects import SensorEffectModel
 
 OutputMode = Literal["linearraw", "cfa"]
@@ -78,6 +83,8 @@ def convert(
         raise OutputExistsError(f"output already exists: {target}")
     if mode not in {"linearraw", "cfa"}:
         raise InvalidMetadataError(f"unsupported output mode: {mode}")
+    if mode == "cfa" and cfa_pattern not in CFA_PATTERN_VALUES:
+        raise InvalidMetadataError("cfa_pattern must be one of bggr, gbrg, grbg, rggb")
     if dng_layout not in {"single-raw-ifd", "preview-subifd"}:
         raise InvalidMetadataError(f"unsupported DNG layout: {dng_layout}")
     if not isinstance(iso, Integral) or iso <= 0:

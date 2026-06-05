@@ -13,6 +13,7 @@ SYNTHETIC_CAMERA_MODEL = "Synthetic Camera v1"
 CfaPattern = Literal["rggb", "bggr", "grbg", "gbrg"]
 PhotometricName = Literal["LinearRaw", "ColorFilterArray"]
 RawMode = Literal["linearraw", "cfa"]
+CFA_PATTERN_VALUES = frozenset({"rggb", "bggr", "grbg", "gbrg"})
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,11 @@ class CoreRawModel:
             raise ValueError("CFA output expects one sample per pixel")
         if self.photometric == "ColorFilterArray" and self.cfa_pattern is None:
             raise ValueError("CFA output requires a CFA pattern")
+        if (
+            self.photometric == "ColorFilterArray"
+            and self.cfa_pattern not in CFA_PATTERN_VALUES
+        ):
+            raise ValueError("cfa_pattern must be one of bggr, gbrg, grbg, rggb")
         if self.photometric == "LinearRaw" and self.cfa_pattern is not None:
             raise ValueError("LinearRaw output must not set a CFA pattern")
         if any(level < 0 for level in self.black_level):
@@ -191,12 +197,7 @@ class AIMetadataModel:
             raise ValueError("raw_mode must be 'linearraw' or 'cfa'")
         if self.raw_mode == "linearraw" and self.cfa_pattern is not None:
             raise ValueError("linearraw metadata must not set cfa_pattern")
-        if self.raw_mode == "cfa" and self.cfa_pattern not in {
-            "rggb",
-            "bggr",
-            "grbg",
-            "gbrg",
-        }:
+        if self.raw_mode == "cfa" and self.cfa_pattern not in CFA_PATTERN_VALUES:
             raise ValueError("cfa metadata requires a supported cfa_pattern")
         for field_name, value in (
             ("shot_noise", self.shot_noise),

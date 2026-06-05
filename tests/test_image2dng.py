@@ -57,6 +57,7 @@ from image2dng.models import (
     PHOTOMETRIC_LINEAR_RAW,
     AIMetadataModel,
     CameraProfileModel,
+    CoreRawModel,
     cct_to_as_shot_neutral,
 )
 from image2dng.pipeline import (
@@ -4094,6 +4095,14 @@ def test_ai_metadata_model_rejects_cfa_without_supported_pattern():
         AIMetadataModel(raw_mode="cfa")
 
 
+def test_core_raw_model_rejects_unsupported_cfa_pattern():
+    with pytest.raises(
+        ValueError,
+        match="cfa_pattern must be one of bggr, gbrg, grbg, rggb",
+    ):
+        CoreRawModel.for_cfa(width=8, height=8, cfa_pattern="rgb")
+
+
 def test_ai_metadata_model_rejects_non_positive_capture_values():
     with pytest.raises(ValueError, match="iso must be positive"):
         AIMetadataModel(iso=0)
@@ -4314,6 +4323,23 @@ def test_public_convert_rejects_non_integer_iso(tmp_path):
 
     with pytest.raises(InvalidMetadataError, match="iso must be positive"):
         convert(input_path=input_path, output_path=output_path, iso=float("nan"))
+
+
+def test_public_convert_rejects_unsupported_cfa_pattern(tmp_path):
+    input_path = tmp_path / "unsupported-cfa-pattern.tif"
+    output_path = tmp_path / "unsupported-cfa-pattern.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(
+        InvalidMetadataError,
+        match="cfa_pattern must be one of bggr, gbrg, grbg, rggb",
+    ):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            mode="cfa",
+            cfa_pattern="rgb",
+        )
 
 
 def test_metadata_round_trip(tmp_path):
