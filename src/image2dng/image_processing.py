@@ -95,7 +95,10 @@ def normalize_to_float(image: np.ndarray) -> np.ndarray:
         max_value = float(np.iinfo(image.dtype).max)
         return image.astype(np.float64) / max_value
     if np.issubdtype(image.dtype, np.floating):
-        return image.astype(np.float64)
+        normalized = image.astype(np.float64)
+        if not np.all(np.isfinite(normalized)):
+            raise ValueError("floating-point input must contain only finite values")
+        return normalized
     raise ValueError(f"unsupported image dtype: {image.dtype}")
 
 

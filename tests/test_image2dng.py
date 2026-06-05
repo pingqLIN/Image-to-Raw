@@ -17,7 +17,7 @@ import tifffile
 from PIL import Image
 
 import image2dng.dng_writer as dng_writer
-from image2dng import InvalidMetadataError, OutputExistsError, convert
+from image2dng import InvalidMetadataError, OutputExistsError, UnsupportedInputError, convert
 from image2dng.cli import main
 from image2dng.compatibility import (
     PROCESSOR_TOOL_SPECS,
@@ -51,7 +51,11 @@ from image2dng.dng_writer import (
     TAG_WHITE_LEVEL,
     TAG_XMP,
 )
-from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
+from image2dng.image_processing import (
+    build_cfa_buffer,
+    build_linearraw_buffer,
+    normalize_to_float,
+)
 from image2dng.models import (
     PHOTOMETRIC_CFA,
     PHOTOMETRIC_LINEAR_RAW,
@@ -4178,6 +4182,17 @@ def test_cfa_mosaic_uses_requested_pattern(tmp_path):
     assert raw[1, 1] == 10000
 
 
+def test_normalize_to_float_rejects_non_finite_float_pixels():
+    image = np.ones((2, 2, 3), dtype=np.float32)
+    image[0, 0, 0] = np.nan
+
+    with pytest.raises(
+        ValueError,
+        match="floating-point input must contain only finite values",
+    ):
+        normalize_to_float(image)
+
+
 def test_ai_metadata_model_rejects_invalid_raw_mode():
     with pytest.raises(ValueError, match="raw_mode must be 'linearraw' or 'cfa'"):
         AIMetadataModel(raw_mode="jpeg")
@@ -4565,6 +4580,24 @@ def test_public_convert_rejects_unparseable_white_balance(tmp_path):
             input_path=input_path,
             output_path=output_path,
             white_balance_kelvin="bad",
+        )
+
+
+def test_public_convert_rejects_non_finite_float_input(tmp_path):
+    input_path = tmp_path / "non-finite-input.tif"
+    output_path = tmp_path / "non-finite-input.dng"
+    image = np.ones((8, 8, 3), dtype=np.float32)
+    image[0, 0, 0] = np.inf
+    tifffile.imwrite(input_path, image, photometric="rgb")
+
+    with pytest.raises(
+        UnsupportedInputError,
+        match="floating-point input must contain only finite values",
+    ):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            input_space="linear-rec709",
         )
 
 
