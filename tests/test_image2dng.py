@@ -63,6 +63,7 @@ from image2dng.models import (
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
+    dng_preview,
     load_external_scene_manifest,
     run_external_scene_linear_batch,
     run_raw_native_batch,
@@ -4401,6 +4402,19 @@ def test_public_convert_rejects_unsupported_cfa_pattern(tmp_path):
             mode="cfa",
             cfa_pattern="rgb",
         )
+
+
+def test_dng_preview_rejects_unsupported_cfa_pattern(tmp_path):
+    input_path = tmp_path / "preview-cfa-pattern.tif"
+    output_path = tmp_path / "preview-cfa-pattern.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    convert(input_path=input_path, output_path=output_path, mode="cfa")
+
+    with pytest.raises(
+        ValueError,
+        match="cfa_pattern must be one of bggr, gbrg, grbg, rggb",
+    ):
+        dng_preview(output_path, cfa_pattern="rgb")
 
 
 def test_metadata_round_trip(tmp_path):

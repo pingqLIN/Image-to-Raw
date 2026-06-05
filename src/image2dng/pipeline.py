@@ -15,6 +15,7 @@ from PIL import Image
 from image2dng.api import ConversionResult, convert
 from image2dng.dng_writer import DngLayout
 from image2dng.image_processing import InputSpace
+from image2dng.models import CFA_PATTERN_VALUES
 from image2dng.semantic_reaction import (
     SUPPORTED_REACTION_INPUT_SPACES,
     SemanticReactionResult,
@@ -1229,6 +1230,8 @@ def _tone_map(channel: np.ndarray) -> np.ndarray:
 
 
 def _cfa_false_color(mosaic: np.ndarray, cfa_pattern: str) -> np.ndarray:
+    if cfa_pattern not in CFA_PATTERN_VALUES:
+        raise ValueError("cfa_pattern must be one of bggr, gbrg, grbg, rggb")
     channels = {
         "rggb": ((0, 1), (1, 2)),
         "bggr": ((2, 1), (1, 0)),
