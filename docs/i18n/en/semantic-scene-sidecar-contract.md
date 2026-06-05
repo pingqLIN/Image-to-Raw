@@ -38,6 +38,7 @@ The v1 goal is semantic preservation and validation. It lets the RAW-native pipe
 - `capture_physics.source` and `regions[].response_hints.source`, when present, must be `measured`, `metadata`, `inferred`, `synthetic`, or `retrieved`.
 - Confidence and ratio fields must be finite numbers between 0 and 1. ISO, exposure time, aperture, white balance, lux, and white level values must be positive when present. `ev100`, when present, must be finite and may be zero or negative for low-light scenes.
 - `sensor_response_hints.target_middle_gray_policy`, when present, must be `global-gain-v1`; `sensor_response_hints.target_middle_gray_max_gain_ev`, when present, must be positive.
+- `sensor_response_hints.target_white_balance_policy`, when present, must be `channel-gain-v1`; `sensor_response_hints.target_white_balance_max_gain_ev`, when present, must be positive.
 - `camera_response.cfa_pattern`, when present, must be `rggb`, `bggr`, `grbg`, or `gbrg`. Black level values must be non-negative and less than white level.
 - `regions[].raw_statistics.mean_linear_rgb`, `p50_linear_rgb`, and `p95_linear_rgb`, when present, must be three finite non-negative numbers.
 - Unknown fields are tolerated and preserved so upstream producers can extend the sidecar.
@@ -116,9 +117,10 @@ When the external scene manifest explicitly sets `apply_semantic_reaction: true`
 
 - `region-exposure-mask-v1` reads finite `regions[].response_hints.exposure_bias_ev` values and `regions[].mask_asset_id`, then applies EV modulation to 16-bit scene-linear RGB values inside the mask.
 - `target-middle-gray-policy-v1` reads `sensor_response_hints.target_middle_gray` only when `sensor_response_hints.target_middle_gray_policy` explicitly opts in to `global-gain-v1`, then uses a bounded global gain to move scene-linear median luminance toward the target middle gray.
+- `target-white-balance-policy-v1` reads `sensor_response_hints.target_white_balance_kelvin` only when `sensor_response_hints.target_white_balance_policy` explicitly opts in to `channel-gain-v1`, then derives bounded RGB channel gains from an approximate CCT neutral.
 - `highlight-clipping-policy-v1` reads `sensor_response_hints.clipping_policy`. `clip` records an explicit no-op baseline; `preserve-highlights` and `soft-rolloff` apply a deterministic soft shoulder to 16-bit scene-linear RGB values above fixed thresholds.
 
-Reactions only support linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. These models are not full physical sensor models and do not claim spectral accuracy, ISO response, camera metering, camera tone-curve accuracy, or recovery of real detail after sensor clipping.
+Reactions only support linear-light external inputs: `linear-rec709`, `acescg`, and `xyz`. These models are not full physical sensor models and do not claim spectral adaptation, ISO response, camera metering, camera tone-curve accuracy, or recovery of real detail after sensor clipping.
 
 For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input. Manifests keep the backward-compatible `semantic_reaction` primary summary and add a `semantic_reactions` list for every reaction model evaluated during the opt-in pass.
 
@@ -132,7 +134,7 @@ Current reaction model matrix:
 | `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented | Yes | Yes | Deterministic soft shoulder; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
 | `regions[].response_hints.noise_priority` | `noise-priority-policy-v1` deferred | No | Deferred | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
 | `sensor_response_hints.target_middle_gray` + `target_middle_gray_policy: global-gain-v1` | `target-middle-gray-policy-v1` implemented | Yes | Yes | Deterministic median-luminance gain; not a real camera metering model. |
-| `sensor_response_hints.target_white_balance_kelvin` | `target-white-balance-policy-v1` deferred | No | Deferred | Requires a color pipeline and illuminant policy before it can affect values. |
+| `sensor_response_hints.target_white_balance_kelvin` + `target_white_balance_policy: channel-gain-v1` | `target-white-balance-policy-v1` implemented | Yes | Yes | Deterministic bounded RGB channel gains; not spectral adaptation. |
 
 `semantic_to_raw_status` has three current states:
 
@@ -140,7 +142,7 @@ Current reaction model matrix:
 | --- | --- | --- |
 | `preserved-not-applied` | `semantic_validation` is present, `semantic_reaction` is empty | Sidecar was copied and validated, but raw values were generated from the original scene-linear input. |
 | `applied` | `semantic_reaction.applied` is `true`, and `semantic_reactions` records each model summary | At least one opt-in reaction modified a copied scene-linear input before RAW generation. |
-| `no-op` | `semantic_reactions` contains only no-op results with `reason` values | Reaction was requested and validated, but no eligible exposure-mask region or highlight policy changed pixels. |
+| `no-op` | `semantic_reactions` contains only no-op results with `reason` values | Reaction was requested and validated, but no reaction changed pixels during this opt-in pass. |
 
 ## Validation
 

@@ -381,6 +381,14 @@ def _validate_sensor_response_hints(value: Any, errors: list[str]) -> None:
     white_balance = value.get("target_white_balance_kelvin")
     if white_balance is not None and (not _is_number(white_balance) or white_balance <= 0):
         errors.append("sensor_response_hints.target_white_balance_kelvin must be positive")
+    white_balance_policy = value.get("target_white_balance_policy")
+    if white_balance_policy is not None and white_balance_policy != "channel-gain-v1":
+        errors.append("sensor_response_hints.target_white_balance_policy is unsupported")
+    white_balance_max_gain = value.get("target_white_balance_max_gain_ev")
+    if white_balance_max_gain is not None and (
+        not _is_number(white_balance_max_gain) or white_balance_max_gain <= 0
+    ):
+        errors.append("sensor_response_hints.target_white_balance_max_gain_ev must be positive")
     middle_gray = value.get("target_middle_gray")
     if middle_gray is not None and (not _is_number(middle_gray) or not 0 < middle_gray < 1):
         errors.append("sensor_response_hints.target_middle_gray must be between 0 and 1")

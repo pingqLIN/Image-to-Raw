@@ -10,6 +10,8 @@ import numpy as np
 import tifffile
 from PIL import Image
 
+from image2dng.models import cct_to_as_shot_neutral
+
 REGION_EXPOSURE_REACTION_MODEL = "region-exposure-mask-v1"
 HIGHLIGHT_CLIPPING_REACTION_MODEL = "highlight-clipping-policy-v1"
 NOISE_PRIORITY_REACTION_MODEL = "noise-priority-policy-v1"
@@ -85,14 +87,17 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
     ),
     TARGET_WHITE_BALANCE_REACTION_MODEL: SemanticReactionModelInfo(
         model_id=TARGET_WHITE_BALANCE_REACTION_MODEL,
-        status="deferred",
-        current_raw_value_effect=False,
+        status="implemented",
+        current_raw_value_effect=True,
         intended_raw_value_effect=True,
         scope=(
-            "white-balance/color-pipeline calibration from "
+            "explicit channel-gain-v1 calibration from "
             "sensor_response_hints.target_white_balance_kelvin"
         ),
-        boundary="deferred until illuminant and color-pipeline policy are explicit and tested",
+        boundary=(
+            "deterministic bounded RGB channel gains from approximate CCT neutral; "
+            "requires explicit target_white_balance_policy; not spectral adaptation"
+        ),
     ),
 }
 
@@ -357,6 +362,90 @@ def apply_target_middle_gray_reaction(
     region["affected_pixels"] = affected_pixels
     return output, SemanticReactionResult(
         model=TARGET_MIDDLE_GRAY_REACTION_MODEL,
+        applied=True,
+        status="applied",
+        regions=[region],
+        affected_pixels=affected_pixels,
+    )
+
+
+def apply_target_white_balance_reaction(
+    image: np.ndarray,
+    *,
+    semantic_payload: dict[str, Any],
+    input_space: str | None = None,
+) -> tuple[np.ndarray, SemanticReactionResult | None]:
+    if image.dtype != np.uint16:
+        raise ValueError("semantic reaction input image must be uint16")
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("semantic reaction input image must be RGB")
+    _validate_scene_binding(image, semantic_payload, input_space)
+
+    sensor_hints = semantic_payload.get("sensor_response_hints")
+    if not isinstance(sensor_hints, dict):
+        return image.copy(), None
+    policy = sensor_hints.get("target_white_balance_policy")
+    if policy is None:
+        return image.copy(), None
+    if policy != "channel-gain-v1":
+        raise ValueError(
+            "semantic reaction target_white_balance_policy is unsupported: "
+            f"{policy}"
+        )
+
+    kelvin = sensor_hints.get("target_white_balance_kelvin")
+    if not (
+        isinstance(kelvin, int | float)
+        and not isinstance(kelvin, bool)
+        and math.isfinite(kelvin)
+        and kelvin > 0
+    ):
+        raise ValueError("semantic reaction target_white_balance_kelvin must be positive")
+    max_gain_ev = sensor_hints.get("target_white_balance_max_gain_ev", 1.0)
+    if not (
+        isinstance(max_gain_ev, int | float)
+        and not isinstance(max_gain_ev, bool)
+        and math.isfinite(max_gain_ev)
+        and max_gain_ev > 0
+    ):
+        raise ValueError("semantic reaction target_white_balance_max_gain_ev must be positive")
+
+    neutral = np.asarray(cct_to_as_shot_neutral(float(kelvin)), dtype=np.float64)
+    requested_gains = 1.0 / neutral
+    max_gain = 2.0 ** float(max_gain_ev)
+    applied_gains = np.clip(requested_gains, 1.0 / max_gain, max_gain)
+    region = {
+        "policy": policy,
+        "target_white_balance_kelvin": round(float(kelvin), 6),
+        "max_gain_ev": round(float(max_gain_ev), 6),
+        "requested_channel_gains": [round(float(value), 6) for value in requested_gains],
+        "applied_channel_gains": [round(float(value), 6) for value in applied_gains],
+    }
+    if np.allclose(applied_gains, np.ones(3), rtol=0.0, atol=1.0 / 65535.0):
+        return image.copy(), SemanticReactionResult(
+            model=TARGET_WHITE_BALANCE_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="target white balance channel gains are neutral",
+            regions=[region],
+        )
+
+    source = image.astype(np.float64, copy=False)
+    output = np.rint(np.clip(source * applied_gains.reshape(1, 1, 3), 0.0, 65535.0)).astype(
+        np.uint16
+    )
+    affected_pixels = int(np.count_nonzero(np.any(output != image, axis=2)))
+    if affected_pixels == 0:
+        return image.copy(), SemanticReactionResult(
+            model=TARGET_WHITE_BALANCE_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="target white balance gain did not change quantized pixels",
+            regions=[region],
+        )
+    region["affected_pixels"] = affected_pixels
+    return output, SemanticReactionResult(
+        model=TARGET_WHITE_BALANCE_REACTION_MODEL,
         applied=True,
         status="applied",
         regions=[region],

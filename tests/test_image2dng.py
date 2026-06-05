@@ -57,6 +57,7 @@ from image2dng.semantic_reaction import (
     apply_highlight_clipping_policy_reaction,
     apply_region_exposure_reaction,
     apply_target_middle_gray_reaction,
+    apply_target_white_balance_reaction,
     load_semantic_payload,
     semantic_reaction_model_registry,
 )
@@ -757,6 +758,23 @@ def test_semantic_scene_validator_rejects_bad_middle_gray_policy(tmp_path):
     assert "sensor_response_hints.target_middle_gray_max_gain_ev must be positive" in result.errors
 
 
+def test_semantic_scene_validator_rejects_bad_white_balance_policy(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["sensor_response_hints"]["target_white_balance_policy"] = "auto"
+    payload["sensor_response_hints"]["target_white_balance_max_gain_ev"] = 0
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "sensor_response_hints.target_white_balance_policy is unsupported" in result.errors
+    assert (
+        "sensor_response_hints.target_white_balance_max_gain_ev must be positive"
+        in result.errors
+    )
+
+
 def test_semantic_reaction_model_registry_reports_implemented_and_deferred_models():
     registry = semantic_reaction_model_registry()
 
@@ -781,10 +799,14 @@ def test_semantic_reaction_model_registry_reports_implemented_and_deferred_model
         "not a real camera metering model"
         in registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["boundary"]
     )
-    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["status"] == "deferred"
-    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["status"] == "implemented"
+    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["current_raw_value_effect"] is True
     assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["intended_raw_value_effect"] is True
-    assert "color-pipeline policy" in registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["boundary"]
+    assert (
+        "target_white_balance_policy"
+        in registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["boundary"]
+    )
+    assert "not spectral adaptation" in registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["boundary"]
 
 
 def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):
@@ -976,6 +998,53 @@ def test_target_middle_gray_policy_is_noop_without_explicit_policy(tmp_path):
     image = np.full((2, 3, 3), 6554, dtype=np.uint16)
 
     reacted, result = apply_target_middle_gray_reaction(
+        image,
+        semantic_payload=payload,
+        input_space="linear-rec709",
+    )
+
+    assert result is None
+    assert np.array_equal(reacted, image)
+
+
+def test_target_white_balance_policy_applies_bounded_channel_gains(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=3, height=2, exposure_bias_ev=None)
+    payload = load_semantic_payload(semantic_path)
+    payload["sensor_response_hints"]["target_white_balance_kelvin"] = 3200
+    payload["sensor_response_hints"]["target_white_balance_policy"] = "channel-gain-v1"
+    payload["sensor_response_hints"]["target_white_balance_max_gain_ev"] = 1.0
+    image = np.full((2, 3, 3), 10000, dtype=np.uint16)
+
+    reacted, result = apply_target_white_balance_reaction(
+        image,
+        semantic_payload=payload,
+        input_space="linear-rec709",
+    )
+
+    assert result is not None
+    assert result.model == TARGET_WHITE_BALANCE_REACTION_MODEL
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.affected_pixels == 6
+    assert result.regions == [
+        {
+            "policy": "channel-gain-v1",
+            "target_white_balance_kelvin": 3200.0,
+            "max_gain_ev": 1.0,
+            "requested_channel_gains": [0.720078, 1.0, 1.491398],
+            "applied_channel_gains": [0.720078, 1.0, 1.491398],
+            "affected_pixels": 6,
+        }
+    ]
+    assert np.all(reacted == np.array([7201, 10000, 14914], dtype=np.uint16))
+
+
+def test_target_white_balance_policy_is_noop_without_explicit_policy(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=3, height=2, exposure_bias_ev=None)
+    payload = load_semantic_payload(semantic_path)
+    image = np.full((2, 3, 3), 10000, dtype=np.uint16)
+
+    reacted, result = apply_target_white_balance_reaction(
         image,
         semantic_payload=payload,
         input_space="linear-rec709",
@@ -1378,6 +1447,70 @@ def test_external_scene_linear_batch_applies_target_middle_gray_policy(tmp_path)
         },
     ]
     assert np.all(reacted_input == 13108)
+
+
+def test_external_scene_linear_batch_applies_target_white_balance_policy(tmp_path):
+    source_path = tmp_path / "white-balance-scene.tif"
+    source = np.full((8, 10, 3), 10000, dtype=np.uint16)
+    tifffile.imwrite(source_path, source, photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=10,
+        height=8,
+        exposure_bias_ev=None,
+    )
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["sensor_response_hints"]["target_white_balance_kelvin"] = 3200
+    payload["sensor_response_hints"]["target_white_balance_policy"] = "channel-gain-v1"
+    payload["sensor_response_hints"]["target_white_balance_max_gain_ev"] = 1.0
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    reacted = run_external_scene_linear_batch(
+        tmp_path / "reacted-white-balance-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="white-balance-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    scene_manifest = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    reacted_input = tifffile.imread(scene_manifest["outputs"]["scene_linear_input"])
+
+    assert scene_manifest["semantic_to_raw_status"] == "applied"
+    assert scene_manifest["semantic_reaction"]["model"] == TARGET_WHITE_BALANCE_REACTION_MODEL
+    assert scene_manifest["semantic_reactions"] == [
+        {
+            "model": REGION_EXPOSURE_REACTION_MODEL,
+            "applied": False,
+            "status": "no-op",
+            "region_count": 0,
+            "affected_pixels": 0,
+            "regions": [],
+            "reason": "no regions with exposure_bias_ev and mask_asset_id",
+        },
+        {
+            "model": TARGET_WHITE_BALANCE_REACTION_MODEL,
+            "applied": True,
+            "status": "applied",
+            "region_count": 1,
+            "affected_pixels": 80,
+            "regions": [
+                {
+                    "policy": "channel-gain-v1",
+                    "target_white_balance_kelvin": 3200.0,
+                    "max_gain_ev": 1.0,
+                    "requested_channel_gains": [0.720078, 1.0, 1.491398],
+                    "applied_channel_gains": [0.720078, 1.0, 1.491398],
+                    "affected_pixels": 80,
+                }
+            ],
+        },
+    ]
+    assert np.all(reacted_input == np.array([7201, 10000, 14914], dtype=np.uint16))
 
 
 def test_external_scene_linear_batch_applies_highlight_clipping_policy(tmp_path):
@@ -3570,8 +3703,8 @@ def test_semantic_reactions_cli_outputs_human_readable_registry(capsys):
     assert exit_code == 0
     output = capsys.readouterr().out
     assert f"{REGION_EXPOSURE_REACTION_MODEL}: implemented" in output
-    assert f"{TARGET_WHITE_BALANCE_REACTION_MODEL}: deferred" in output
-    assert "current_raw_value_effect=False" in output
+    assert f"{TARGET_WHITE_BALANCE_REACTION_MODEL}: implemented" in output
+    assert "current_raw_value_effect=True" in output
     assert "boundary:" in output
 
 

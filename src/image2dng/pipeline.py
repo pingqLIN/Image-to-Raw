@@ -21,6 +21,7 @@ from image2dng.semantic_reaction import (
     apply_highlight_clipping_policy_reaction,
     apply_region_exposure_reaction,
     apply_target_middle_gray_reaction,
+    apply_target_white_balance_reaction,
     load_semantic_payload,
     read_scene_linear_image,
 )
@@ -897,6 +898,13 @@ def _apply_semantic_reactions(
         input_space=scene.input_space,
     )
     reactions.append(exposure_reaction)
+    reacted_image, white_balance_reaction = apply_target_white_balance_reaction(
+        reacted_image,
+        semantic_payload=payload,
+        input_space=scene.input_space,
+    )
+    if white_balance_reaction is not None:
+        reactions.append(white_balance_reaction)
     reacted_image, middle_gray_reaction = apply_target_middle_gray_reaction(
         reacted_image,
         semantic_payload=payload,
