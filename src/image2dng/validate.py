@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -598,6 +599,97 @@ def _check_xmp(page: tifffile.TiffPage, result: ValidationResult) -> None:
             )
     elif cfa_pattern is not None:
         result.errors.append("XMP cfaPattern must be absent for LinearRaw output")
+    _check_xmp_positive_integer(attrs, "simulatedISO", "XMP simulatedISO", result)
+    _check_xmp_positive_float(
+        attrs,
+        "simulatedWhiteBalanceKelvin",
+        "XMP simulatedWhiteBalanceKelvin",
+        result,
+    )
+    for name, label in (
+        ("shotNoise", "XMP shotNoise"),
+        ("readNoise", "XMP readNoise"),
+        ("rowNoise", "XMP rowNoise"),
+    ):
+        _check_xmp_non_negative_float(attrs, name, label, result)
+    _check_xmp_non_negative_integer(
+        attrs,
+        "sensorEffectSeed",
+        "XMP sensorEffectSeed",
+        result,
+    )
+
+
+def _check_xmp_positive_integer(
+    attrs: dict[str, str],
+    name: str,
+    label: str,
+    result: ValidationResult,
+) -> None:
+    raw = attrs.get(f"{{{XMP_AI_NAMESPACE}}}{name}")
+    if raw is None:
+        return
+    try:
+        value = int(raw)
+    except ValueError:
+        result.errors.append(f"{label} must be a positive integer, got {raw}")
+        return
+    if value <= 0:
+        result.errors.append(f"{label} must be a positive integer, got {raw}")
+
+
+def _check_xmp_non_negative_integer(
+    attrs: dict[str, str],
+    name: str,
+    label: str,
+    result: ValidationResult,
+) -> None:
+    raw = attrs.get(f"{{{XMP_AI_NAMESPACE}}}{name}")
+    if raw is None:
+        return
+    try:
+        value = int(raw)
+    except ValueError:
+        result.errors.append(f"{label} must be a non-negative integer, got {raw}")
+        return
+    if value < 0:
+        result.errors.append(f"{label} must be a non-negative integer, got {raw}")
+
+
+def _check_xmp_positive_float(
+    attrs: dict[str, str],
+    name: str,
+    label: str,
+    result: ValidationResult,
+) -> None:
+    raw = attrs.get(f"{{{XMP_AI_NAMESPACE}}}{name}")
+    if raw is None:
+        return
+    try:
+        value = float(raw)
+    except ValueError:
+        result.errors.append(f"{label} must be positive finite, got {raw}")
+        return
+    if not math.isfinite(value) or value <= 0:
+        result.errors.append(f"{label} must be positive finite, got {raw}")
+
+
+def _check_xmp_non_negative_float(
+    attrs: dict[str, str],
+    name: str,
+    label: str,
+    result: ValidationResult,
+) -> None:
+    raw = attrs.get(f"{{{XMP_AI_NAMESPACE}}}{name}")
+    if raw is None:
+        return
+    try:
+        value = float(raw)
+    except ValueError:
+        result.errors.append(f"{label} must be non-negative finite, got {raw}")
+        return
+    if not math.isfinite(value) or value < 0:
+        result.errors.append(f"{label} must be non-negative finite, got {raw}")
 
 
 def _check_makernote(page: tifffile.TiffPage, result: ValidationResult) -> None:

@@ -89,7 +89,7 @@ Supported Bayer patterns:
 
 ## Validation Status
 
-`image2dng validate` checks embedded preview layout when present, required raw tags, identity/version/compression tags, geometry, RawDataUniqueID digest, crop/scale raw area tags, black/white levels, camera profile tags, mode-specific CFA tags, XMP provenance/raw mode consistency, and MakerNote absence.
+`image2dng validate` checks embedded preview layout when present, required raw tags, identity/version/compression tags, geometry, RawDataUniqueID digest, crop/scale raw area tags, black/white levels, camera profile tags, mode-specific CFA tags, XMP provenance/raw mode/numeric consistency, and MakerNote absence.
 
 Optional smoke tools are compatibility evidence, not mandatory gates:
 

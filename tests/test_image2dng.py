@@ -4211,6 +4211,51 @@ def test_validate_dng_rejects_cfa_with_linearraw_xmp(tmp_path):
     assert "XMP cfaPattern must name a supported CFA pattern, got None" in result.errors
 
 
+def test_validate_dng_rejects_bad_xmp_numeric_fields(tmp_path):
+    input_path = tmp_path / "bad-xmp-numeric-input.tif"
+    output_path = tmp_path / "bad-xmp-numeric.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = dng_writer._raw_extratags(
+        raw,
+        core,
+        CameraProfileModel.from_white_balance(6500),
+        AIMetadataModel(prompt_hash="sha256:bad-xmp-numeric"),
+    )
+    tags = _replace_xmp_packet(
+        tags,
+        _test_xmp_packet(
+            raw_mode="linearraw",
+            extra_attrs={
+                "simulatedISO": "0",
+                "simulatedWhiteBalanceKelvin": "nan",
+                "shotNoise": "-0.1",
+                "sensorEffectSeed": "-1",
+            },
+        ),
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        software="image2dng test",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "XMP simulatedISO must be a positive integer, got 0" in result.errors
+    assert "XMP simulatedWhiteBalanceKelvin must be positive finite, got nan" in (
+        result.errors
+    )
+    assert "XMP shotNoise must be non-negative finite, got -0.1" in result.errors
+    assert "XMP sensorEffectSeed must be a non-negative integer, got -1" in result.errors
+
+
 def test_public_convert_refuses_existing_output_without_overwrite(tmp_path):
     input_path = tmp_path / "api-input.tif"
     output_path = tmp_path / "api-output.dng"
@@ -4470,8 +4515,16 @@ def _replace_xmp_packet(
     ]
 
 
-def _test_xmp_packet(*, raw_mode: str, cfa_pattern: str | None = None) -> bytes:
+def _test_xmp_packet(
+    *,
+    raw_mode: str,
+    cfa_pattern: str | None = None,
+    extra_attrs: dict[str, str] | None = None,
+) -> bytes:
     cfa_attr = "" if cfa_pattern is None else f' xmpAI:cfaPattern="{cfa_pattern}"'
+    extra_attr_text = "".join(
+        f'\n      xmpAI:{name}="{value}"' for name, value in (extra_attrs or {}).items()
+    )
     return f'''<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -4480,7 +4533,7 @@ def _test_xmp_packet(*, raw_mode: str, cfa_pattern: str | None = None) -> bytes:
       xmlns:xmpAI="{XMP_AI_NAMESPACE}"
       xmpAI:provenanceType="synthetic"
       xmpAI:cameraParametersAreSimulated="True"
-      xmpAI:rawMode="{raw_mode}"{cfa_attr} />
+      xmpAI:rawMode="{raw_mode}"{cfa_attr}{extra_attr_text} />
   </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>'''.encode()
