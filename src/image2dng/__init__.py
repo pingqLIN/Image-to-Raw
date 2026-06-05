@@ -30,7 +30,10 @@ from image2dng.semantic_reaction import (
     TARGET_WHITE_BALANCE_REACTION_MODEL,
     SemanticReactionModelInfo,
     SemanticReactionResult,
+    apply_highlight_clipping_policy_reaction,
     apply_region_exposure_reaction,
+    apply_target_middle_gray_reaction,
+    apply_target_white_balance_reaction,
     semantic_reaction_model_registry,
 )
 from image2dng.semantic_scene import (
@@ -66,7 +69,10 @@ __all__ = [
     "SemanticSceneValidationResult",
     "UnsupportedInputError",
     "ValidationError",
+    "apply_highlight_clipping_policy_reaction",
     "apply_region_exposure_reaction",
+    "apply_target_middle_gray_reaction",
+    "apply_target_white_balance_reaction",
     "convert",
     "inspect_adobe_converted_dng",
     "load_external_scene_manifest",

@@ -1171,6 +1171,17 @@ def test_semantic_reaction_model_registry_reports_implemented_and_deferred_model
     assert "not spectral adaptation" in registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["boundary"]
 
 
+def test_public_package_exports_implemented_semantic_reactions():
+    import image2dng
+
+    assert (
+        image2dng.apply_highlight_clipping_policy_reaction
+        is apply_highlight_clipping_policy_reaction
+    )
+    assert image2dng.apply_target_middle_gray_reaction is apply_target_middle_gray_reaction
+    assert image2dng.apply_target_white_balance_reaction is apply_target_white_balance_reaction
+
+
 def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):
     semantic_path = _write_semantic_scene(
         tmp_path,
