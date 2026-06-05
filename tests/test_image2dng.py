@@ -4061,6 +4061,19 @@ def test_sensor_effect_model_rejects_unparseable_noise(field_name):
         SensorEffectModel(**{field_name: "bad"})
 
 
+def test_sensor_effect_model_normalizes_parseable_noise():
+    effects = SensorEffectModel(
+        shot_noise="0.01",
+        read_noise="0.002",
+        row_noise="0.001",
+    )
+
+    assert effects.enabled is True
+    assert effects.shot_noise == pytest.approx(0.01)
+    assert effects.read_noise == pytest.approx(0.002)
+    assert effects.row_noise == pytest.approx(0.001)
+
+
 def test_sensor_effect_model_rejects_negative_seed():
     with pytest.raises(ValueError, match="seed must be a non-negative integer"):
         SensorEffectModel(seed=-1)
@@ -4084,6 +4097,30 @@ def test_public_convert_rejects_unparseable_sensor_noise(tmp_path):
         InvalidMetadataError, match="shot_noise must be non-negative finite"
     ):
         convert(input_path=input_path, output_path=output_path, shot_noise="bad")
+
+
+def test_public_convert_records_parseable_sensor_noise(tmp_path):
+    input_path = tmp_path / "parseable-noise.tif"
+    output_path = tmp_path / "parseable-noise.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    result = convert(
+        input_path=input_path,
+        output_path=output_path,
+        shot_noise="0.01",
+        read_noise="0.002",
+        row_noise="0.001",
+        sensor_effect_seed=7,
+    )
+
+    validation = validate_dng(result.output_path, run_smoke=False)
+    assert validation.ok, validation.errors
+    with tifffile.TiffFile(output_path) as tif:
+        xmp = _raw_page(tif).tags[TAG_XMP].value.decode("utf-8")
+    assert 'xmpAI:shotNoise="0.01"' in xmp
+    assert 'xmpAI:readNoise="0.002"' in xmp
+    assert 'xmpAI:rowNoise="0.001"' in xmp
+    assert 'xmpAI:sensorEffectSeed="7"' in xmp
 
 
 def test_cfa_mosaic_uses_requested_pattern(tmp_path):

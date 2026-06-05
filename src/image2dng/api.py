@@ -150,9 +150,9 @@ def convert(
             raw_mode=mode,
             cfa_pattern=cfa_pattern if mode == "cfa" else None,
             sensor_noise_model="synthetic-simple-v1" if sensor_effects.enabled else None,
-            shot_noise=shot_noise if shot_noise > 0 else None,
-            read_noise=read_noise if read_noise > 0 else None,
-            row_noise=row_noise if row_noise > 0 else None,
+            shot_noise=sensor_effects.shot_noise if sensor_effects.shot_noise > 0 else None,
+            read_noise=sensor_effects.read_noise if sensor_effects.read_noise > 0 else None,
+            row_noise=sensor_effects.row_noise if sensor_effects.row_noise > 0 else None,
             sensor_effect_seed=sensor_effect_seed if sensor_effects.enabled else None,
         )
     except ValueError as exc:

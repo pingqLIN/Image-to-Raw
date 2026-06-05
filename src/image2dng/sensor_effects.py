@@ -26,6 +26,7 @@ class SensorEffectModel:
                 raise ValueError(f"{field_name} must be non-negative finite") from exc
             if not math.isfinite(noise_value) or noise_value < 0:
                 raise ValueError(f"{field_name} must be non-negative finite")
+            object.__setattr__(self, field_name, noise_value)
         if self.seed is not None and (
             not isinstance(self.seed, Integral) or self.seed < 0
         ):
