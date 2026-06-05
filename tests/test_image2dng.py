@@ -4522,6 +4522,35 @@ def test_validate_dng_rejects_cfa_with_linearraw_xmp(tmp_path):
     assert "XMP cfaPattern must name a supported CFA pattern, got None" in result.errors
 
 
+def test_validate_dng_rejects_malformed_xmp_packet(tmp_path):
+    input_path = tmp_path / "bad-xmp-input.tif"
+    output_path = tmp_path / "bad-xmp.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = dng_writer._raw_extratags(
+        raw,
+        core,
+        CameraProfileModel.from_white_balance(6500),
+        AIMetadataModel(prompt_hash="sha256:bad-xmp"),
+    )
+    tags = _replace_xmp_packet(tags, b"<x:xmpmeta>")
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        software="image2dng test",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert any(error.startswith("XMP is not parseable XML:") for error in result.errors)
+
+
 def test_validate_dng_rejects_bad_xmp_numeric_fields(tmp_path):
     input_path = tmp_path / "bad-xmp-numeric-input.tif"
     output_path = tmp_path / "bad-xmp-numeric.dng"
