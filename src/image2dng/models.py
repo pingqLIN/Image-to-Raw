@@ -35,24 +35,40 @@ class CoreRawModel:
             raise ValueError("width and height must be positive")
         if self.bits_per_sample != 16:
             raise ValueError("MVP only supports 16-bit output")
+        if self.photometric not in {"LinearRaw", "ColorFilterArray"}:
+            raise ValueError("photometric must be LinearRaw or ColorFilterArray")
+        is_cfa = self.photometric == "ColorFilterArray"
         if self.photometric == "LinearRaw" and self.samples_per_pixel != 3:
             raise ValueError("LinearRaw output expects three samples per pixel")
-        if self.photometric == "ColorFilterArray" and self.samples_per_pixel != 1:
+        if is_cfa and self.samples_per_pixel != 1:
             raise ValueError("CFA output expects one sample per pixel")
-        if self.photometric == "ColorFilterArray" and self.cfa_pattern is None:
+        if is_cfa and self.cfa_pattern is None:
             raise ValueError("CFA output requires a CFA pattern")
-        if (
-            self.photometric == "ColorFilterArray"
-            and self.cfa_pattern not in CFA_PATTERN_VALUES
-        ):
+        if is_cfa and self.cfa_pattern not in CFA_PATTERN_VALUES:
             raise ValueError("cfa_pattern must be one of bggr, gbrg, grbg, rggb")
         if self.photometric == "LinearRaw" and self.cfa_pattern is not None:
             raise ValueError("LinearRaw output must not set a CFA pattern")
+        expected_black_count = 4 if is_cfa else 3
+        expected_white_count = 1 if is_cfa else 3
+        if len(self.black_level) != expected_black_count:
+            raise ValueError(
+                f"black_level must contain {expected_black_count} values for this output mode"
+            )
+        if len(self.white_level) != expected_white_count:
+            raise ValueError(
+                f"white_level must contain {expected_white_count} values for this output mode"
+            )
+        if any(not isinstance(level, Integral) for level in self.black_level):
+            raise ValueError("black levels must be integers")
+        if any(not isinstance(level, Integral) for level in self.white_level):
+            raise ValueError("white levels must be integers")
         if any(level < 0 for level in self.black_level):
             raise ValueError("black levels must be non-negative")
-        if not self.white_level:
-            raise ValueError("at least one white level is required")
-        if any(self.white_level[0] <= black for black in self.black_level):
+        if any(level <= 0 for level in self.white_level):
+            raise ValueError("white levels must be positive")
+        if any(level > 65535 for level in self.white_level):
+            raise ValueError("white levels must be <= 65535")
+        if any(min(self.white_level) <= black for black in self.black_level):
             raise ValueError("white levels must be greater than black levels")
 
     @classmethod

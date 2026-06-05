@@ -4103,6 +4103,27 @@ def test_core_raw_model_rejects_unsupported_cfa_pattern():
         CoreRawModel.for_cfa(width=8, height=8, cfa_pattern="rgb")
 
 
+def test_core_raw_model_rejects_unsupported_photometric_name():
+    with pytest.raises(
+        ValueError,
+        match="photometric must be LinearRaw or ColorFilterArray",
+    ):
+        CoreRawModel(width=8, height=8, photometric="RGB")
+
+
+def test_core_raw_model_rejects_mode_mismatched_level_counts():
+    with pytest.raises(
+        ValueError,
+        match="black_level must contain 3 values for this output mode",
+    ):
+        CoreRawModel(width=8, height=8, black_level=(0,), white_level=(65535,) * 3)
+
+
+def test_core_raw_model_rejects_out_of_range_white_level():
+    with pytest.raises(ValueError, match="white levels must be <= 65535"):
+        CoreRawModel.for_linearraw(width=8, height=8, white_level=70000)
+
+
 def test_ai_metadata_model_rejects_non_positive_capture_values():
     with pytest.raises(ValueError, match="iso must be positive"):
         AIMetadataModel(iso=0)
