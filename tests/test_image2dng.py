@@ -418,7 +418,7 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "raw_ifd_location": "Raw SubIFD referenced from IFD0",
         "external_scene_linear_boundary": "available",
         "semantic_boundary": (
-            "semantic sidecar is preserved by default; opt-in region-exposure-mask-v1 "
+            "semantic sidecar is preserved by default; opt-in implemented semantic reactions "
             "can affect raw values"
         ),
     }

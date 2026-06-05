@@ -33,7 +33,7 @@ from image2dng.validate import find_raw_image_page, validate_dng
 SceneStyle = Literal["chart-ramp", "portrait-light-study", "material-still-life"]
 
 SEMANTIC_BOUNDARY = (
-    "semantic sidecar is preserved by default; opt-in region-exposure-mask-v1 "
+    "semantic sidecar is preserved by default; opt-in implemented semantic reactions "
     "can affect raw values"
 )
 
