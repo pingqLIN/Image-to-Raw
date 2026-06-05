@@ -313,7 +313,7 @@ uv run ruff check
 - 明確 opt-in 的 simulated CFA mosaic mode。
 - 預設 `preview-subifd` DNG layout：IFD0 JPEG preview 加上 Raw SubIFD。
 - 內建最小 RAW-native node pipeline，可產生 DNG、sidecar JPEG preview、validation JSON 與 graph manifest。
-- `image2dng.semantic_scene.v1` sidecar validation / preservation，以及 opt-in `region-exposure-mask-v1` reaction prototype。
+- `image2dng.semantic_scene.v1` sidecar validation / preservation，以及 opt-in deterministic reaction prototypes。
 - 可選 deterministic synthetic sensor effects，供 demo 與 compatibility testing 使用。
 - RGB input normalization 與 simple virtual camera transform。
 - XMP custom namespace：`https://example.org/ns/xmp/ai/1.0/`。
@@ -323,7 +323,7 @@ uv run ruff check
 
 - Sensor effects 是簡化 synthetic controls，不是物理相機模型。
 - Embedded preview 目前是 IFD layout experiment，不代表完整 Adobe 相容承諾。
-- 尚未支援 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload。
+- 尚未支援 EXIF IFD、semantic mask IFD、depth IFD，或 `DNGPrivateData` payload；RAW-native batch manifest 會以 `graph.dng_payload_boundary` 明確記錄這個邊界。
 - 相容性目前以結構驗證與 optional local smoke tools 為主；Adobe DNG SDK 維持 local-only/manual resource 模式，不作為 CI gate。
 
 設計說明見 [docs/design.md](docs/design.md)。

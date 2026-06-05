@@ -329,7 +329,7 @@ Current MVP:
 - Explicit simulated CFA mosaic mode.
 - Default `preview-subifd` DNG layout with an IFD0 JPEG preview and Raw SubIFD.
 - Built-in minimal RAW-native node pipeline that emits DNG, sidecar JPEG preview, validation JSON, and graph manifest artifacts.
-- `image2dng.semantic_scene.v1` sidecar validation / preservation plus the opt-in `region-exposure-mask-v1` reaction prototype.
+- `image2dng.semantic_scene.v1` sidecar validation / preservation plus opt-in deterministic reaction prototypes.
 - Optional deterministic synthetic sensor effects for demos and compatibility testing.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.
@@ -339,7 +339,7 @@ Known limitations:
 
 - Sensor effects are simple synthetic controls, not a physical camera model.
 - Embedded preview is currently an IFD layout experiment, not a full Adobe compatibility claim.
-- No EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
+- No EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet; RAW-native batch manifests record this boundary in `graph.dng_payload_boundary`.
 - Compatibility is validated structurally and with optional local smoke tools; Adobe DNG SDK checks remain local-only/manual-resource evidence and are not a CI gate.
 
 See [docs/design.md](docs/design.md) for the design notes.
