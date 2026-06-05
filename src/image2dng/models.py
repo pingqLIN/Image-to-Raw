@@ -16,6 +16,13 @@ RawMode = Literal["linearraw", "cfa"]
 CFA_PATTERN_VALUES = frozenset({"rggb", "bggr", "grbg", "gbrg"})
 
 
+def _tuple_from(value: object, message: str) -> tuple[object, ...]:
+    try:
+        return tuple(value)  # type: ignore[arg-type]
+    except TypeError as exc:
+        raise ValueError(message) from exc
+
+
 @dataclass(frozen=True)
 class CoreRawModel:
     width: int
@@ -56,6 +63,16 @@ class CoreRawModel:
             raise ValueError("LinearRaw output must not set a CFA pattern")
         expected_black_count = 4 if is_cfa else 3
         expected_white_count = 1 if is_cfa else 3
+        black_level = _tuple_from(
+            self.black_level,
+            f"black_level must contain {expected_black_count} values for this output mode",
+        )
+        white_level = _tuple_from(
+            self.white_level,
+            f"white_level must contain {expected_white_count} values for this output mode",
+        )
+        object.__setattr__(self, "black_level", black_level)
+        object.__setattr__(self, "white_level", white_level)
         if len(self.black_level) != expected_black_count:
             raise ValueError(
                 f"black_level must contain {expected_black_count} values for this output mode"
@@ -79,6 +96,11 @@ class CoreRawModel:
         self._validate_geometry_tags()
 
     def _validate_geometry_tags(self) -> None:
+        default_crop_origin = _tuple_from(
+            self.default_crop_origin,
+            "default_crop_origin must contain two integer values",
+        )
+        object.__setattr__(self, "default_crop_origin", default_crop_origin)
         if len(self.default_crop_origin) != 2 or any(
             not isinstance(value, Integral) for value in self.default_crop_origin
         ):
@@ -86,6 +108,11 @@ class CoreRawModel:
         if any(value < 0 for value in self.default_crop_origin):
             raise ValueError("default_crop_origin must be non-negative")
         if self.default_crop_size is not None:
+            default_crop_size = _tuple_from(
+                self.default_crop_size,
+                "default_crop_size must contain two integer values",
+            )
+            object.__setattr__(self, "default_crop_size", default_crop_size)
             if len(self.default_crop_size) != 2 or any(
                 not isinstance(value, Integral) for value in self.default_crop_size
             ):
@@ -98,6 +125,11 @@ class CoreRawModel:
                 raise ValueError("default crop must stay within image bounds")
         if self.active_area is None:
             return
+        active_area = _tuple_from(
+            self.active_area,
+            "active_area must contain four integer values",
+        )
+        object.__setattr__(self, "active_area", active_area)
         if len(self.active_area) != 4 or any(
             not isinstance(value, Integral) for value in self.active_area
         ):

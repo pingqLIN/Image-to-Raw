@@ -4229,6 +4229,37 @@ def test_core_raw_model_rejects_mode_mismatched_level_counts():
         CoreRawModel(width=8, height=8, black_level=(0,), white_level=(65535,) * 3)
 
 
+def test_core_raw_model_normalizes_sequence_fields():
+    core = CoreRawModel(
+        width=8,
+        height=8,
+        black_level=[512, 512, 512],
+        white_level=[65535, 65535, 65535],
+        default_crop_origin=[0, 0],
+        default_crop_size=[8, 8],
+        active_area=[0, 0, 8, 8],
+    )
+
+    assert core.black_level == (512, 512, 512)
+    assert core.white_level == (65535, 65535, 65535)
+    assert core.default_crop_origin == (0, 0)
+    assert core.default_crop_size == (8, 8)
+    assert core.active_area == (0, 0, 8, 8)
+
+
+def test_core_raw_model_rejects_non_sequence_level_metadata():
+    with pytest.raises(
+        ValueError,
+        match="black_level must contain 3 values for this output mode",
+    ):
+        CoreRawModel(width=8, height=8, black_level=512)
+    with pytest.raises(
+        ValueError,
+        match="white_level must contain 3 values for this output mode",
+    ):
+        CoreRawModel(width=8, height=8, white_level=65535)
+
+
 def test_core_raw_model_rejects_out_of_range_white_level():
     with pytest.raises(ValueError, match="white levels must be <= 65535"):
         CoreRawModel.for_linearraw(width=8, height=8, white_level=70000)
@@ -4242,6 +4273,21 @@ def test_core_raw_model_rejects_default_crop_outside_image_bounds():
             default_crop_origin=(2, 0),
             default_crop_size=(7, 8),
         )
+
+
+def test_core_raw_model_rejects_non_sequence_geometry_metadata():
+    with pytest.raises(
+        ValueError,
+        match="default_crop_origin must contain two integer values",
+    ):
+        CoreRawModel(width=8, height=8, default_crop_origin=None)
+    with pytest.raises(
+        ValueError,
+        match="default_crop_size must contain two integer values",
+    ):
+        CoreRawModel(width=8, height=8, default_crop_size=8)
+    with pytest.raises(ValueError, match="active_area must contain four integer values"):
+        CoreRawModel(width=8, height=8, active_area=8)
 
 
 def test_core_raw_model_rejects_active_area_outside_image_bounds():
