@@ -3413,6 +3413,27 @@ def test_validate_json_output(tmp_path, capsys):
     assert report["smoke_tests"] == {}
 
 
+def test_semantic_reactions_cli_outputs_registry_json(capsys):
+    exit_code = main(["semantic-reactions", "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[REGION_EXPOSURE_REACTION_MODEL]["status"] == "implemented"
+    assert payload[TARGET_MIDDLE_GRAY_REACTION_MODEL]["status"] == "deferred"
+    assert payload[TARGET_MIDDLE_GRAY_REACTION_MODEL]["current_raw_value_effect"] is False
+
+
+def test_semantic_reactions_cli_outputs_human_readable_registry(capsys):
+    exit_code = main(["semantic-reactions"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert f"{REGION_EXPOSURE_REACTION_MODEL}: implemented" in output
+    assert f"{TARGET_WHITE_BALANCE_REACTION_MODEL}: deferred" in output
+    assert "current_raw_value_effect=False" in output
+    assert "boundary:" in output
+
+
 def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:smoke-skipped")
     monkeypatch.setattr(

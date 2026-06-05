@@ -7,6 +7,7 @@ from pathlib import Path
 
 from image2dng import __version__
 from image2dng.api import Image2DNGError, convert
+from image2dng.semantic_reaction import semantic_reaction_model_registry
 from image2dng.validate import validate_dng
 
 
@@ -15,6 +16,9 @@ def main(argv: list[str] | None = None) -> int:
     if tokens and tokens[0] == "validate":
         args = build_validate_parser().parse_args(tokens[1:])
         return _run_validate(args)
+    if tokens and tokens[0] == "semantic-reactions":
+        args = build_semantic_reactions_parser().parse_args(tokens[1:])
+        return _run_semantic_reactions(args)
     args = build_generate_parser().parse_args(tokens)
     return _run_generate(args)
 
@@ -81,6 +85,19 @@ def build_validate_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_semantic_reactions_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="image2dng semantic-reactions",
+        description="List semantic-to-RAW reaction model boundaries.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="write the semantic reaction model registry as JSON",
+    )
+    return parser
+
+
 def _run_generate(args: argparse.Namespace) -> int:
     try:
         result = convert(
@@ -130,3 +147,21 @@ def _run_validate(args: argparse.Namespace) -> int:
     for error in result.errors:
         print(f"error: {error}")
     return 2 if result.has_smoke_failure else 1
+
+
+def _run_semantic_reactions(args: argparse.Namespace) -> int:
+    registry = semantic_reaction_model_registry()
+    if args.json:
+        print(json.dumps(registry, indent=2, sort_keys=True))
+        return 0
+
+    for model_id in sorted(registry):
+        entry = registry[model_id]
+        print(
+            f"{model_id}: {entry['status']}; "
+            f"current_raw_value_effect={entry['current_raw_value_effect']}; "
+            f"intended_raw_value_effect={entry['intended_raw_value_effect']}"
+        )
+        print(f"  scope: {entry['scope']}")
+        print(f"  boundary: {entry['boundary']}")
+    return 0
