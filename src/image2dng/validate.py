@@ -141,6 +141,7 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             _check_required_tags(page, result)
             _check_geometry(page, result)
             _check_levels(page, result)
+            _check_camera_profile_tags(page, result)
             _check_cfa_tags(page, result)
             _check_xmp(page, result)
             _check_makernote(page, result)
@@ -390,6 +391,30 @@ def _check_levels(page: tifffile.TiffPage, result: ValidationResult) -> None:
             result.errors.append(f"WhiteLevel must be <= 65535, got {white}")
 
 
+def _check_camera_profile_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
+    color_matrix = _rational_tag_values(
+        _tag_value(page, TAG_COLOR_MATRIX_1),
+        "ColorMatrix1",
+        result,
+    )
+    if color_matrix and len(color_matrix) != 9:
+        result.errors.append(
+            f"ColorMatrix1 must contain 9 rational values, got {len(color_matrix)}"
+        )
+    as_shot_neutral = _rational_tag_values(
+        _tag_value(page, TAG_AS_SHOT_NEUTRAL),
+        "AsShotNeutral",
+        result,
+    )
+    if as_shot_neutral and len(as_shot_neutral) != 3:
+        result.errors.append(
+            f"AsShotNeutral must contain 3 rational values, got {len(as_shot_neutral)}"
+        )
+    for value in as_shot_neutral:
+        if value <= 0:
+            result.errors.append(f"AsShotNeutral values must be positive, got {value:g}")
+
+
 def _check_cfa_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
     photometric = _tag_value(page, TAG_PHOTOMETRIC)
     if photometric is None or int(photometric) != PHOTOMETRIC_CFA:
@@ -633,6 +658,27 @@ def _as_tuple(value) -> tuple:
     if isinstance(value, list):
         return tuple(value)
     return (value,)
+
+
+def _rational_tag_values(
+    value,
+    tag_name: str,
+    result: ValidationResult,
+) -> list[float]:
+    raw_values = _as_tuple(value)
+    if not raw_values:
+        return []
+    if len(raw_values) % 2:
+        result.errors.append(f"{tag_name} must use numerator/denominator pairs")
+        return []
+    values: list[float] = []
+    for numerator, denominator in zip(raw_values[::2], raw_values[1::2], strict=True):
+        denominator = int(denominator)
+        if denominator == 0:
+            result.errors.append(f"{tag_name} denominator must not be zero")
+            continue
+        values.append(float(numerator) / denominator)
+    return values
 
 
 def _expand_to_three(values: list[int]) -> tuple[int, int, int]:

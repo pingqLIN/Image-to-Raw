@@ -37,8 +37,8 @@ Both LinearRaw and simulated CFA outputs must include:
 | `ActiveArea` | `0,0,height,width` |
 | `DefaultCropOrigin` | `0,0` |
 | `DefaultCropSize` | `width,height` |
-| `ColorMatrix1` | Virtual camera XYZ-to-native matrix |
-| `AsShotNeutral` | White-balance neutral normalized to green |
+| `ColorMatrix1` | Virtual camera XYZ-to-native matrix; must contain 9 rational values |
+| `AsShotNeutral` | White-balance neutral normalized to green; must contain 3 positive rational values |
 | `CalibrationIlluminant1` | `21` (`D65`) |
 | `RawDataUniqueID` | 16-byte deterministic ID derived from the raw image buffer |
 | `Software` | `image2dng <version>` |
@@ -89,7 +89,7 @@ Supported Bayer patterns:
 
 ## Validation Status
 
-`image2dng validate` checks embedded preview layout when present, required raw tags, geometry, black/white levels, mode-specific CFA tags, XMP provenance, and MakerNote absence.
+`image2dng validate` checks embedded preview layout when present, required raw tags, geometry, black/white levels, camera profile tags, mode-specific CFA tags, XMP provenance, and MakerNote absence.
 
 Optional smoke tools are compatibility evidence, not mandatory gates:
 

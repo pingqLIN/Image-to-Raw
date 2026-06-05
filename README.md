@@ -246,7 +246,7 @@ uv run image2dng validate output.dng
 uv run image2dng validate output.dng --json
 ```
 
-The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. The current tag contract is documented in [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md). If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available through `PATH` or an adapter-supported common install path, it also attempts smoke tests.
+The validator checks required DNG tags, XMP parseability, black/white level sanity, camera profile tags, image geometry, synthetic provenance, and absence of MakerNote. The current tag contract is documented in [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md). If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available through `PATH` or an adapter-supported common install path, it also attempts smoke tests.
 
 Validation exit codes:
 

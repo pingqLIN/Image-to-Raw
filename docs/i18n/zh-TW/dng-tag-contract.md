@@ -37,8 +37,8 @@ LinearRaw 與 simulated CFA 輸出都必須包含：
 | `ActiveArea` | `0,0,height,width` |
 | `DefaultCropOrigin` | `0,0` |
 | `DefaultCropSize` | `width,height` |
-| `ColorMatrix1` | virtual camera 的 XYZ-to-native matrix |
-| `AsShotNeutral` | normalized to green 的 white-balance neutral |
+| `ColorMatrix1` | virtual camera 的 XYZ-to-native matrix；必須是 9 個 rational values |
+| `AsShotNeutral` | normalized to green 的 white-balance neutral；必須是 3 個正 rational values |
 | `CalibrationIlluminant1` | `21` (`D65`) |
 | `RawDataUniqueID` | 16-byte deterministic ID derived from the raw image buffer |
 | `Software` | `image2dng <version>` |
@@ -89,7 +89,7 @@ IFD0 preview 也會寫入基本 identity/provenance tags：`DNGVersion`、`DNGBa
 
 ## Validation Status
 
-`image2dng validate` 會檢查 embedded preview layout（若存在）、required raw tags、geometry、black/white levels、mode-specific CFA tags、XMP provenance，以及 MakerNote absence。
+`image2dng validate` 會檢查 embedded preview layout（若存在）、required raw tags、geometry、black/white levels、camera profile tags、mode-specific CFA tags、XMP provenance，以及 MakerNote absence。
 
 Optional smoke tools 是 compatibility evidence，不是 mandatory gates：
 

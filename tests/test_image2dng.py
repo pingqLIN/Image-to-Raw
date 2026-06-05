@@ -16,6 +16,7 @@ import pytest
 import tifffile
 from PIL import Image
 
+import image2dng.dng_writer as dng_writer
 from image2dng import InvalidMetadataError, OutputExistsError, convert
 from image2dng.cli import main
 from image2dng.compatibility import (
@@ -177,6 +178,56 @@ def test_dng_writes_explicit_photoshop_baseline_metadata(tmp_path):
     assert baseline_values["unique_camera_model"] == "Synthetic Camera v1"
     assert baseline_values["default_scale"] == (1, 1, 1, 1)
     assert len(baseline_values["raw_data_unique_id"]) == 16
+
+
+def test_validate_dng_rejects_bad_camera_profile_tags(tmp_path):
+    input_path = tmp_path / "bad-camera-profile-input.tif"
+    output_path = tmp_path / "bad-camera-profile.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-camera-profile"),
+        )
+        if tag[0] not in {TAG_COLOR_MATRIX_1, TAG_AS_SHOT_NEUTRAL}
+    ]
+    tags.extend(
+        [
+            (
+                TAG_COLOR_MATRIX_1,
+                "2i",
+                8,
+                tuple((1, 1) for _index in range(8)),
+                False,
+            ),
+            (
+                TAG_AS_SHOT_NEUTRAL,
+                "2I",
+                3,
+                ((0, 1), (1, 1), (1, 1)),
+                False,
+            ),
+        ]
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "ColorMatrix1 must contain 9 rational values, got 8" in result.errors
+    assert "AsShotNeutral values must be positive, got 0" in result.errors
 
 
 def test_dng_writes_embedded_jpeg_preview_with_raw_subifd(tmp_path):
