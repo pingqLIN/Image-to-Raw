@@ -120,15 +120,17 @@ Reactions only support linear-light external inputs: `linear-rec709`, `acescg`, 
 
 For applied reactions, the pipeline binds provenance to the copied batch inputs: `prompt_hash` includes the copied scene-linear source, copied semantic manifest, copied semantic asset bytes, and the `apply_semantic_reaction` flag. The reaction also rejects sidecars whose `scene.width`, `scene.height`, or `scene.input_space` do not match the actual external scene-linear input. Manifests keep the backward-compatible `semantic_reaction` primary summary and add a `semantic_reactions` list for every reaction model evaluated during the opt-in pass.
 
+`semantic_reaction_model_registry()` exposes both implemented reaction models and deferred candidate model IDs. Deferred entries provide scope and boundary evidence only; they do not mean raw values are currently changed.
+
 Current reaction model matrix:
 
 | Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` implemented | Yes | Yes | Finite EV, mask-bound, linear-light only. |
 | `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented | Yes | Yes | Deterministic soft shoulder; not a camera tone curve, ISO response, or proof of preserved sensor detail. |
-| `regions[].response_hints.noise_priority` | Metadata/research | No | Deferred | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
-| `sensor_response_hints.target_middle_gray` | Research | No | Deferred | Requires calibration policy before it can affect values. |
-| `sensor_response_hints.target_white_balance_kelvin` | Metadata/research | No | Deferred | Requires a color pipeline and illuminant policy before it can affect values. |
+| `regions[].response_hints.noise_priority` | `noise-priority-policy-v1` deferred | No | Deferred | Avoid mixing deterministic reaction proof with stochastic CFA noise. |
+| `sensor_response_hints.target_middle_gray` | `target-middle-gray-policy-v1` deferred | No | Deferred | Requires calibration policy before it can affect values. |
+| `sensor_response_hints.target_white_balance_kelvin` | `target-white-balance-policy-v1` deferred | No | Deferred | Requires a color pipeline and illuminant policy before it can affect values. |
 
 `semantic_to_raw_status` has three current states:
 

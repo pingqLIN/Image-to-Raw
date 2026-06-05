@@ -120,15 +120,17 @@ Reaction 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`
 
 對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。Manifest 會保留 backward-compatible `semantic_reaction` primary summary，並新增 `semantic_reactions` list 記錄本次 opt-in pass 評估過的 reaction models。
 
+`semantic_reaction_model_registry()` 會同時公開 implemented reaction models 與 deferred candidate model IDs。Deferred entries 只提供 scope / boundary evidence，不代表目前會改變 raw values。
+
 目前 reaction model matrix：
 
 | Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Yes | finite EV、mask-bound、linear-light only。 |
 | `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` 已實作 | Yes | Yes | deterministic soft shoulder；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
-| `regions[].response_hints.noise_priority` | metadata / research | No | Deferred | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
-| `sensor_response_hints.target_middle_gray` | research | No | Deferred | 需要 calibration policy 才能影響 values。 |
-| `sensor_response_hints.target_white_balance_kelvin` | metadata / research | No | Deferred | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
+| `regions[].response_hints.noise_priority` | `noise-priority-policy-v1` deferred | No | Deferred | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
+| `sensor_response_hints.target_middle_gray` | `target-middle-gray-policy-v1` deferred | No | Deferred | 需要 calibration policy 才能影響 values。 |
+| `sensor_response_hints.target_white_balance_kelvin` | `target-white-balance-policy-v1` deferred | No | Deferred | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
 
 目前 `semantic_to_raw_status` 有三種狀態：
 

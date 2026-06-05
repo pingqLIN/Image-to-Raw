@@ -12,6 +12,9 @@ from PIL import Image
 
 REGION_EXPOSURE_REACTION_MODEL = "region-exposure-mask-v1"
 HIGHLIGHT_CLIPPING_REACTION_MODEL = "highlight-clipping-policy-v1"
+NOISE_PRIORITY_REACTION_MODEL = "noise-priority-policy-v1"
+TARGET_MIDDLE_GRAY_REACTION_MODEL = "target-middle-gray-policy-v1"
+TARGET_WHITE_BALANCE_REACTION_MODEL = "target-white-balance-policy-v1"
 SUPPORTED_REACTION_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
 
 
@@ -54,6 +57,36 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
             "deterministic soft shoulder for 16-bit scene-linear RGB inputs; "
             "not a camera tone-curve, ISO response, or proof of preserved sensor detail"
         ),
+    ),
+    NOISE_PRIORITY_REACTION_MODEL: SemanticReactionModelInfo(
+        model_id=NOISE_PRIORITY_REACTION_MODEL,
+        status="deferred",
+        current_raw_value_effect=False,
+        intended_raw_value_effect=True,
+        scope="semantic noise-priority hints for future stochastic sensor-effect selection",
+        boundary=(
+            "deferred until stochastic CFA/noise policy can be tested separately from "
+            "deterministic semantic reaction proofs"
+        ),
+    ),
+    TARGET_MIDDLE_GRAY_REACTION_MODEL: SemanticReactionModelInfo(
+        model_id=TARGET_MIDDLE_GRAY_REACTION_MODEL,
+        status="deferred",
+        current_raw_value_effect=False,
+        intended_raw_value_effect=True,
+        scope="global exposure calibration from sensor_response_hints.target_middle_gray",
+        boundary="deferred until an explicit calibration policy defines metering and gain limits",
+    ),
+    TARGET_WHITE_BALANCE_REACTION_MODEL: SemanticReactionModelInfo(
+        model_id=TARGET_WHITE_BALANCE_REACTION_MODEL,
+        status="deferred",
+        current_raw_value_effect=False,
+        intended_raw_value_effect=True,
+        scope=(
+            "white-balance/color-pipeline calibration from "
+            "sensor_response_hints.target_white_balance_kelvin"
+        ),
+        boundary="deferred until illuminant and color-pipeline policy are explicit and tested",
     ),
 }
 

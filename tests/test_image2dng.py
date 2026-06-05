@@ -50,7 +50,10 @@ from image2dng.pipeline import (
 )
 from image2dng.semantic_reaction import (
     HIGHLIGHT_CLIPPING_REACTION_MODEL,
+    NOISE_PRIORITY_REACTION_MODEL,
     REGION_EXPOSURE_REACTION_MODEL,
+    TARGET_MIDDLE_GRAY_REACTION_MODEL,
+    TARGET_WHITE_BALANCE_REACTION_MODEL,
     apply_highlight_clipping_policy_reaction,
     apply_region_exposure_reaction,
     load_semantic_payload,
@@ -742,6 +745,18 @@ def test_semantic_reaction_model_registry_reports_implemented_and_deferred_model
     assert registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["intended_raw_value_effect"] is True
     assert "deterministic soft shoulder" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
     assert "camera tone-curve" in registry[HIGHLIGHT_CLIPPING_REACTION_MODEL]["boundary"]
+    assert registry[NOISE_PRIORITY_REACTION_MODEL]["status"] == "deferred"
+    assert registry[NOISE_PRIORITY_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[NOISE_PRIORITY_REACTION_MODEL]["intended_raw_value_effect"] is True
+    assert "stochastic CFA/noise policy" in registry[NOISE_PRIORITY_REACTION_MODEL]["boundary"]
+    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["status"] == "deferred"
+    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["intended_raw_value_effect"] is True
+    assert "explicit calibration policy" in registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["boundary"]
+    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["status"] == "deferred"
+    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["intended_raw_value_effect"] is True
+    assert "color-pipeline policy" in registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["boundary"]
 
 
 def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):
