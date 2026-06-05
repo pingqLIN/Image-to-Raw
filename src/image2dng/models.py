@@ -255,11 +255,13 @@ class AIMetadataModel:
             not isinstance(self.iso, Integral) or self.iso <= 0
         ):
             raise ValueError("iso must be positive")
-        if self.white_balance_kelvin is not None and (
-            not math.isfinite(float(self.white_balance_kelvin))
-            or self.white_balance_kelvin <= 0
-        ):
-            raise ValueError("white_balance_kelvin must be positive finite")
+        if self.white_balance_kelvin is not None:
+            try:
+                white_balance_kelvin = float(self.white_balance_kelvin)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("white_balance_kelvin must be positive finite") from exc
+            if not math.isfinite(white_balance_kelvin) or white_balance_kelvin <= 0:
+                raise ValueError("white_balance_kelvin must be positive finite")
         if self.raw_mode not in {"linearraw", "cfa"}:
             raise ValueError("raw_mode must be 'linearraw' or 'cfa'")
         if self.raw_mode == "linearraw" and self.cfa_pattern is not None:
@@ -277,10 +279,14 @@ class AIMetadataModel:
 
 def cct_to_as_shot_neutral(kelvin: float) -> tuple[float, float, float]:
     """Approximate white point coordinates normalized to green for DNG AsShotNeutral."""
-    if not math.isfinite(float(kelvin)) or kelvin <= 0:
+    try:
+        kelvin_value = float(kelvin)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("white balance Kelvin must be positive finite") from exc
+    if not math.isfinite(kelvin_value) or kelvin_value <= 0:
         raise ValueError("white balance Kelvin must be positive finite")
 
-    temperature = max(1000.0, min(40000.0, kelvin)) / 100.0
+    temperature = max(1000.0, min(40000.0, kelvin_value)) / 100.0
     if temperature <= 66.0:
         red = 255.0
         green = 99.4708025861 * math.log(temperature) - 161.1195681661

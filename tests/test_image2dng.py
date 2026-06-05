@@ -4172,11 +4172,15 @@ def test_ai_metadata_model_rejects_non_positive_capture_values():
         AIMetadataModel(iso=1.5)
     with pytest.raises(ValueError, match="white_balance_kelvin must be positive finite"):
         AIMetadataModel(white_balance_kelvin=0)
+    with pytest.raises(ValueError, match="white_balance_kelvin must be positive finite"):
+        AIMetadataModel(white_balance_kelvin="bad")
 
 
 def test_cct_to_as_shot_neutral_rejects_non_finite_kelvin():
     with pytest.raises(ValueError, match="white balance Kelvin must be positive finite"):
         cct_to_as_shot_neutral(float("nan"))
+    with pytest.raises(ValueError, match="white balance Kelvin must be positive finite"):
+        cct_to_as_shot_neutral("bad")
 
 
 @pytest.mark.parametrize("field_name", ["shot_noise", "read_noise", "row_noise"])
@@ -4375,6 +4379,22 @@ def test_public_convert_rejects_non_finite_white_balance(tmp_path):
             input_path=input_path,
             output_path=output_path,
             white_balance_kelvin=float("inf"),
+        )
+
+
+def test_public_convert_rejects_unparseable_white_balance(tmp_path):
+    input_path = tmp_path / "bad-white-balance.tif"
+    output_path = tmp_path / "bad-white-balance.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(
+        InvalidMetadataError,
+        match="white_balance_kelvin must be positive finite",
+    ):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            white_balance_kelvin="bad",
         )
 
 

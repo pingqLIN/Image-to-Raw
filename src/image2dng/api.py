@@ -89,7 +89,11 @@ def convert(
         raise InvalidMetadataError(f"unsupported DNG layout: {dng_layout}")
     if not isinstance(iso, Integral) or iso <= 0:
         raise InvalidMetadataError("iso must be positive")
-    if not math.isfinite(float(white_balance_kelvin)) or white_balance_kelvin <= 0:
+    try:
+        white_balance_value = float(white_balance_kelvin)
+    except (TypeError, ValueError) as exc:
+        raise InvalidMetadataError("white_balance_kelvin must be positive finite") from exc
+    if not math.isfinite(white_balance_value) or white_balance_value <= 0:
         raise InvalidMetadataError("white_balance_kelvin must be positive finite")
     try:
         sensor_effects = SensorEffectModel(
@@ -119,7 +123,7 @@ def convert(
         raise UnsupportedInputError(str(exc)) from exc
 
     try:
-        camera = CameraProfileModel.from_white_balance(white_balance_kelvin)
+        camera = CameraProfileModel.from_white_balance(white_balance_value)
         if color_matrix_1 is not None or as_shot_neutral is not None:
             camera = CameraProfileModel(
                 color_matrix_1=(
@@ -141,7 +145,7 @@ def convert(
             lighting=lighting,
             weather=weather,
             iso=iso,
-            white_balance_kelvin=white_balance_kelvin,
+            white_balance_kelvin=white_balance_value,
             prompt_plaintext=prompt_plaintext,
             raw_mode=mode,
             cfa_pattern=cfa_pattern if mode == "cfa" else None,
