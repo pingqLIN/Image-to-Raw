@@ -4053,6 +4053,70 @@ def test_validate_dng_rejects_bad_cfa_tags(tmp_path):
     assert "CFALayout must be 1, got 2" in result.errors
 
 
+def test_validate_dng_rejects_linearraw_with_cfa_xmp(tmp_path):
+    input_path = tmp_path / "bad-linearraw-xmp-input.tif"
+    output_path = tmp_path / "bad-linearraw-xmp.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = dng_writer._raw_extratags(
+        raw,
+        core,
+        CameraProfileModel.from_white_balance(6500),
+        AIMetadataModel(
+            prompt_hash="sha256:bad-linearraw-xmp",
+            raw_mode="cfa",
+            cfa_pattern="rggb",
+        ),
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        software="image2dng test",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "XMP rawMode must be linearraw, got cfa" in result.errors
+    assert "XMP cfaPattern must be absent for LinearRaw output" in result.errors
+
+
+def test_validate_dng_rejects_cfa_with_linearraw_xmp(tmp_path):
+    input_path = tmp_path / "bad-cfa-xmp-input.tif"
+    output_path = tmp_path / "bad-cfa-xmp.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_cfa_buffer(input_path, "linear-rec709", cfa_pattern="rggb")
+    tags = dng_writer._raw_extratags(
+        raw,
+        core,
+        CameraProfileModel.from_white_balance(6500),
+        AIMetadataModel(
+            prompt_hash="sha256:bad-cfa-xmp",
+            raw_mode="linearraw",
+        ),
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_CFA,
+        compression=None,
+        metadata=None,
+        software="image2dng test",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "XMP rawMode must be cfa, got linearraw" in result.errors
+    assert "XMP cfaPattern must name a supported CFA pattern, got None" in result.errors
+
+
 def test_public_convert_refuses_existing_output_without_overwrite(tmp_path):
     input_path = tmp_path / "api-input.tif"
     output_path = tmp_path / "api-output.dng"

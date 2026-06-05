@@ -562,10 +562,25 @@ def _check_xmp(page: tifffile.TiffPage, result: ValidationResult) -> None:
     attrs = descriptions[0].attrib
     provenance = attrs.get(f"{{{XMP_AI_NAMESPACE}}}provenanceType")
     simulated = attrs.get(f"{{{XMP_AI_NAMESPACE}}}cameraParametersAreSimulated")
+    raw_mode = attrs.get(f"{{{XMP_AI_NAMESPACE}}}rawMode")
+    cfa_pattern = attrs.get(f"{{{XMP_AI_NAMESPACE}}}cfaPattern")
     if provenance != "synthetic":
         result.errors.append("XMP synthetic provenance is missing or incorrect")
     if simulated != "True":
         result.errors.append("XMP simulated camera parameter flag is missing or incorrect")
+    photometric = _tag_value(page, TAG_PHOTOMETRIC)
+    if photometric is None:
+        return
+    expected_raw_mode = "cfa" if int(photometric) == PHOTOMETRIC_CFA else "linearraw"
+    if raw_mode != expected_raw_mode:
+        result.errors.append(f"XMP rawMode must be {expected_raw_mode}, got {raw_mode}")
+    if expected_raw_mode == "cfa":
+        if cfa_pattern not in {"rggb", "bggr", "grbg", "gbrg"}:
+            result.errors.append(
+                f"XMP cfaPattern must name a supported CFA pattern, got {cfa_pattern}"
+            )
+    elif cfa_pattern is not None:
+        result.errors.append("XMP cfaPattern must be absent for LinearRaw output")
 
 
 def _check_makernote(page: tifffile.TiffPage, result: ValidationResult) -> None:

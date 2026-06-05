@@ -81,15 +81,15 @@ Supported Bayer patterns:
 
 - XMP must include `xmpAI:provenanceType="synthetic"`.
 - XMP must include `xmpAI:cameraParametersAreSimulated="True"`.
-- `xmpAI:rawMode` records `linearraw` or `cfa`.
-- `xmpAI:cfaPattern` is written only for CFA outputs.
+- `xmpAI:rawMode` must match the raw IFD output mode and records `linearraw` or `cfa`.
+- `xmpAI:cfaPattern` is written only for CFA outputs and must name a supported Bayer pattern.
 - Plaintext prompts are not written by default; only `prompt_hash` is written unless the user explicitly opts in.
 - MakerNote must be absent.
 - Real camera/lens impersonation is out of scope.
 
 ## Validation Status
 
-`image2dng validate` checks embedded preview layout when present, required raw tags, identity/version/compression tags, geometry, crop/scale raw area tags, black/white levels, camera profile tags, mode-specific CFA tags, XMP provenance, and MakerNote absence.
+`image2dng validate` checks embedded preview layout when present, required raw tags, identity/version/compression tags, geometry, crop/scale raw area tags, black/white levels, camera profile tags, mode-specific CFA tags, XMP provenance/raw mode consistency, and MakerNote absence.
 
 Optional smoke tools are compatibility evidence, not mandatory gates:
 

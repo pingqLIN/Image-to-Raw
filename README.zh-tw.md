@@ -243,7 +243,7 @@ uv run image2dng validate output.dng
 uv run image2dng validate output.dng --json
 ```
 
-validator 會檢查必要 DNG tags、XMP 可解析性、identity/version/compression tags、影像幾何、crop/scale raw area tags、black/white level、camera profile tags、synthetic provenance，以及 MakerNote absence。現行 tag contract 見 [docs/i18n/zh-TW/dng-tag-contract.md](docs/i18n/zh-TW/dng-tag-contract.md)。若 `exiftool`、`dcraw`、`darktable-cli` 或 `rawtherapee-cli` 可由 PATH 或 adapter 支援的 common install path 找到，也會執行 optional smoke tests。
+validator 會檢查必要 DNG tags、XMP 可解析性、identity/version/compression tags、影像幾何、crop/scale raw area tags、black/white level、camera profile tags、synthetic provenance/raw mode consistency，以及 MakerNote absence。現行 tag contract 見 [docs/i18n/zh-TW/dng-tag-contract.md](docs/i18n/zh-TW/dng-tag-contract.md)。若 `exiftool`、`dcraw`、`darktable-cli` 或 `rawtherapee-cli` 可由 PATH 或 adapter 支援的 common install path 找到，也會執行 optional smoke tests。
 
 驗證 exit codes：
 

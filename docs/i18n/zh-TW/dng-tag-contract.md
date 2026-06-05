@@ -81,15 +81,15 @@ IFD0 preview 也會寫入基本 identity/provenance tags：`DNGVersion`、`DNGBa
 
 - XMP 必須包含 `xmpAI:provenanceType="synthetic"`。
 - XMP 必須包含 `xmpAI:cameraParametersAreSimulated="True"`。
-- `xmpAI:rawMode` 記錄 `linearraw` 或 `cfa`。
-- `xmpAI:cfaPattern` 只在 CFA 輸出中寫入。
+- `xmpAI:rawMode` 必須和 raw IFD 的 output mode 一致，記錄 `linearraw` 或 `cfa`。
+- `xmpAI:cfaPattern` 只在 CFA 輸出中寫入，且必須是支援的 Bayer pattern。
 - 預設不寫入 plaintext prompt；除非使用者明確 opt in，否則只寫入 `prompt_hash`。
 - MakerNote 必須不存在。
 - 偽裝成真實相機或鏡頭不在範圍內。
 
 ## Validation Status
 
-`image2dng validate` 會檢查 embedded preview layout（若存在）、required raw tags、identity/version/compression tags、geometry、crop/scale raw area tags、black/white levels、camera profile tags、mode-specific CFA tags、XMP provenance，以及 MakerNote absence。
+`image2dng validate` 會檢查 embedded preview layout（若存在）、required raw tags、identity/version/compression tags、geometry、crop/scale raw area tags、black/white levels、camera profile tags、mode-specific CFA tags、XMP provenance/raw mode consistency，以及 MakerNote absence。
 
 Optional smoke tools 是 compatibility evidence，不是 mandatory gates：
 
