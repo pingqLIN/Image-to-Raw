@@ -4055,6 +4055,12 @@ def test_sensor_effect_model_rejects_non_finite_noise(field_name):
         SensorEffectModel(**{field_name: float("nan")})
 
 
+@pytest.mark.parametrize("field_name", ["shot_noise", "read_noise", "row_noise"])
+def test_sensor_effect_model_rejects_unparseable_noise(field_name):
+    with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
+        SensorEffectModel(**{field_name: "bad"})
+
+
 def test_sensor_effect_model_rejects_negative_seed():
     with pytest.raises(ValueError, match="seed must be a non-negative integer"):
         SensorEffectModel(seed=-1)
@@ -4067,6 +4073,17 @@ def test_public_convert_rejects_negative_sensor_seed(tmp_path):
 
     with pytest.raises(InvalidMetadataError, match="seed must be a non-negative integer"):
         convert(input_path=input_path, output_path=output_path, sensor_effect_seed=-1)
+
+
+def test_public_convert_rejects_unparseable_sensor_noise(tmp_path):
+    input_path = tmp_path / "bad-noise.tif"
+    output_path = tmp_path / "bad-noise.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(
+        InvalidMetadataError, match="shot_noise must be non-negative finite"
+    ):
+        convert(input_path=input_path, output_path=output_path, shot_noise="bad")
 
 
 def test_cfa_mosaic_uses_requested_pattern(tmp_path):
@@ -4187,6 +4204,12 @@ def test_cct_to_as_shot_neutral_rejects_non_finite_kelvin():
 def test_ai_metadata_model_rejects_negative_noise_fields(field_name):
     with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
         AIMetadataModel(**{field_name: -0.1})
+
+
+@pytest.mark.parametrize("field_name", ["shot_noise", "read_noise", "row_noise"])
+def test_ai_metadata_model_rejects_unparseable_noise_fields(field_name):
+    with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
+        AIMetadataModel(**{field_name: "bad"})
 
 
 def test_validate_dng_rejects_bad_cfa_tags(tmp_path):

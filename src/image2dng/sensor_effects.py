@@ -20,7 +20,11 @@ class SensorEffectModel:
             ("read_noise", self.read_noise),
             ("row_noise", self.row_noise),
         ):
-            if not math.isfinite(float(value)) or value < 0:
+            try:
+                noise_value = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{field_name} must be non-negative finite") from exc
+            if not math.isfinite(noise_value) or noise_value < 0:
                 raise ValueError(f"{field_name} must be non-negative finite")
         if self.seed is not None and (
             not isinstance(self.seed, Integral) or self.seed < 0

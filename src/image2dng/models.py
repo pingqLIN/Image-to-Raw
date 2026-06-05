@@ -273,8 +273,13 @@ class AIMetadataModel:
             ("read_noise", self.read_noise),
             ("row_noise", self.row_noise),
         ):
-            if value is not None and (not math.isfinite(float(value)) or value < 0):
-                raise ValueError(f"{field_name} must be non-negative finite")
+            if value is not None:
+                try:
+                    noise_value = float(value)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{field_name} must be non-negative finite") from exc
+                if not math.isfinite(noise_value) or noise_value < 0:
+                    raise ValueError(f"{field_name} must be non-negative finite")
 
 
 def cct_to_as_shot_neutral(kelvin: float) -> tuple[float, float, float]:
