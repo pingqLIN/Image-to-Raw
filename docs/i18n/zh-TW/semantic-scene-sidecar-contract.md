@@ -37,6 +37,7 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 - `capture_physics`、`camera_response` 與 `regions[].raw_statistics` 是 optional semantic-physics 研究欄位；它們可被保存與驗證，但不代表已量測真實拍攝現場。
 - `capture_physics.source` 與 `regions[].response_hints.source` 若存在，必須是 `measured`、`metadata`、`inferred`、`synthetic` 或 `retrieved`。
 - confidence、ratio 類欄位必須是 0 到 1 之間的有限數字；ISO、曝光時間、光圈、白平衡、lux 與 white level 等量值若存在必須為正數。`ev100` 若存在必須是有限數字，低光場景可為 0 或負值。
+- `sensor_response_hints.target_middle_gray_policy` 若存在，必須是 `global-gain-v1`；`sensor_response_hints.target_middle_gray_max_gain_ev` 若存在，必須是正數。
 - `camera_response.cfa_pattern` 若存在，必須是 `rggb`、`bggr`、`grbg` 或 `gbrg`；black level 必須為非負，且必須小於 white level。
 - `regions[].raw_statistics.mean_linear_rgb`、`p50_linear_rgb`、`p95_linear_rgb` 若存在，必須是三個非負有限數字。
 - 未知欄位會被保留並容忍，方便外部 producer 擴充。
@@ -114,9 +115,10 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 可啟用 deterministic reaction models：
 
 - `region-exposure-mask-v1` 會讀取 finite `regions[].response_hints.exposure_bias_ev` values 與 `regions[].mask_asset_id`，對 mask 內的 16-bit scene-linear RGB values 做 EV modulation。
+- `target-middle-gray-policy-v1` 會在 `sensor_response_hints.target_middle_gray_policy` 明確設為 `global-gain-v1` 時，讀取 `sensor_response_hints.target_middle_gray`，並以 bounded global gain 將 scene-linear median luminance 推向目標 middle gray。
 - `highlight-clipping-policy-v1` 會讀取 `sensor_response_hints.clipping_policy`。`clip` 只記錄 explicit no-op baseline；`preserve-highlights` 與 `soft-rolloff` 會對高於固定 threshold 的 16-bit scene-linear RGB values 套用 deterministic soft shoulder。
 
-Reaction 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。這些 model 都不是完整物理 sensor model，也不宣稱光譜、ISO response、camera tone curve 或真實 sensor clipping 後的細節保存正確性。
+Reaction 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。這些 model 都不是完整物理 sensor model，也不宣稱光譜、ISO response、camera metering、camera tone curve 或真實 sensor clipping 後的細節保存正確性。
 
 對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。Manifest 會保留 backward-compatible `semantic_reaction` primary summary，並新增 `semantic_reactions` list 記錄本次 opt-in pass 評估過的 reaction models。
 
@@ -129,7 +131,7 @@ Reaction 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Yes | finite EV、mask-bound、linear-light only。 |
 | `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` 已實作 | Yes | Yes | deterministic soft shoulder；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |
 | `regions[].response_hints.noise_priority` | `noise-priority-policy-v1` deferred | No | Deferred | 避免把 deterministic reaction proof 與 stochastic CFA noise 混在一起。 |
-| `sensor_response_hints.target_middle_gray` | `target-middle-gray-policy-v1` deferred | No | Deferred | 需要 calibration policy 才能影響 values。 |
+| `sensor_response_hints.target_middle_gray` + `target_middle_gray_policy: global-gain-v1` | `target-middle-gray-policy-v1` 已實作 | Yes | Yes | deterministic median-luminance gain；不是 real camera metering model。 |
 | `sensor_response_hints.target_white_balance_kelvin` | `target-white-balance-policy-v1` deferred | No | Deferred | 需要 color pipeline 與 illuminant policy 才能影響 values。 |
 
 目前 `semantic_to_raw_status` 有三種狀態：

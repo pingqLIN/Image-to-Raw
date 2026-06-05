@@ -71,11 +71,17 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
     ),
     TARGET_MIDDLE_GRAY_REACTION_MODEL: SemanticReactionModelInfo(
         model_id=TARGET_MIDDLE_GRAY_REACTION_MODEL,
-        status="deferred",
-        current_raw_value_effect=False,
+        status="implemented",
+        current_raw_value_effect=True,
         intended_raw_value_effect=True,
-        scope="global exposure calibration from sensor_response_hints.target_middle_gray",
-        boundary="deferred until an explicit calibration policy defines metering and gain limits",
+        scope=(
+            "explicit global-gain-v1 exposure normalization from "
+            "sensor_response_hints.target_middle_gray"
+        ),
+        boundary=(
+            "deterministic median-luminance gain for 16-bit scene-linear RGB inputs; "
+            "requires explicit target_middle_gray_policy; not a real camera metering model"
+        ),
     ),
     TARGET_WHITE_BALANCE_REACTION_MODEL: SemanticReactionModelInfo(
         model_id=TARGET_WHITE_BALANCE_REACTION_MODEL,
@@ -255,6 +261,105 @@ def apply_highlight_clipping_policy_reaction(
                 "affected_pixels": affected_pixels,
             }
         ],
+        affected_pixels=affected_pixels,
+    )
+
+
+def apply_target_middle_gray_reaction(
+    image: np.ndarray,
+    *,
+    semantic_payload: dict[str, Any],
+    input_space: str | None = None,
+) -> tuple[np.ndarray, SemanticReactionResult | None]:
+    if image.dtype != np.uint16:
+        raise ValueError("semantic reaction input image must be uint16")
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("semantic reaction input image must be RGB")
+    _validate_scene_binding(image, semantic_payload, input_space)
+
+    sensor_hints = semantic_payload.get("sensor_response_hints")
+    if not isinstance(sensor_hints, dict):
+        return image.copy(), None
+    policy = sensor_hints.get("target_middle_gray_policy")
+    if policy is None:
+        return image.copy(), None
+    if policy != "global-gain-v1":
+        raise ValueError(f"semantic reaction target_middle_gray_policy is unsupported: {policy}")
+
+    target = sensor_hints.get("target_middle_gray")
+    if not (
+        isinstance(target, int | float)
+        and not isinstance(target, bool)
+        and math.isfinite(target)
+        and 0 < target < 1
+    ):
+        raise ValueError("semantic reaction target_middle_gray must be between 0 and 1")
+    max_gain_ev = sensor_hints.get("target_middle_gray_max_gain_ev", 2.0)
+    if not (
+        isinstance(max_gain_ev, int | float)
+        and not isinstance(max_gain_ev, bool)
+        and math.isfinite(max_gain_ev)
+        and max_gain_ev > 0
+    ):
+        raise ValueError("semantic reaction target_middle_gray_max_gain_ev must be positive")
+
+    source = image.astype(np.float64, copy=False)
+    normalized = source / 65535.0
+    luminance = (
+        normalized[..., 0] * 0.2126
+        + normalized[..., 1] * 0.7152
+        + normalized[..., 2] * 0.0722
+    )
+    source_middle_gray = float(np.median(luminance))
+    region = {
+        "policy": policy,
+        "target_middle_gray": round(float(target), 6),
+        "source_p50_luminance": round(source_middle_gray, 6),
+        "max_gain_ev": round(float(max_gain_ev), 6),
+    }
+    if source_middle_gray <= 0:
+        return image.copy(), SemanticReactionResult(
+            model=TARGET_MIDDLE_GRAY_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="source median luminance is zero",
+            regions=[region],
+        )
+
+    requested_gain = float(target) / source_middle_gray
+    max_gain = 2.0 ** float(max_gain_ev)
+    applied_gain = min(max(requested_gain, 1.0 / max_gain), max_gain)
+    region.update(
+        {
+            "requested_gain": round(requested_gain, 6),
+            "applied_gain": round(applied_gain, 6),
+        }
+    )
+    if math.isclose(applied_gain, 1.0, rel_tol=0.0, abs_tol=1.0 / 65535.0):
+        return image.copy(), SemanticReactionResult(
+            model=TARGET_MIDDLE_GRAY_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="target middle gray already matches source median luminance",
+            regions=[region],
+        )
+
+    output = np.rint(np.clip(source * applied_gain, 0.0, 65535.0)).astype(np.uint16)
+    affected_pixels = int(np.count_nonzero(np.any(output != image, axis=2)))
+    if affected_pixels == 0:
+        return image.copy(), SemanticReactionResult(
+            model=TARGET_MIDDLE_GRAY_REACTION_MODEL,
+            applied=False,
+            status="no-op",
+            reason="target middle gray gain did not change quantized pixels",
+            regions=[region],
+        )
+    region["affected_pixels"] = affected_pixels
+    return output, SemanticReactionResult(
+        model=TARGET_MIDDLE_GRAY_REACTION_MODEL,
+        applied=True,
+        status="applied",
+        regions=[region],
         affected_pixels=affected_pixels,
     )
 

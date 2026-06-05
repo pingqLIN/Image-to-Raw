@@ -85,7 +85,7 @@ Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與
 
 `semantic_manifest` 是刻意保留的下一階段接點。若 sidecar 使用 `image2dng.semantic_scene.v1`，pipeline 會在 DNG 產生前驗證它、複製 sidecar、複製可 resolve 的 local assets，並在 batch manifest 與 sample index 記錄 validation summary。預設仍不把語意資訊轉成 raw sample values。
 
-若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 會啟用已實作的 deterministic semantic reactions：`region-exposure-mask-v1` 可用 region mask 與 `exposure_bias_ev` 對 16-bit scene-linear RGB input 進行 EV modulation；`highlight-clipping-policy-v1` 可依 `sensor_response_hints.clipping_policy` 套用 bounded soft shoulder。這只支援 `linear-rec709`、`acescg`、`xyz`，不支援 encoded `srgb` 或 `prophoto-rgb` 直接套用 reaction。詳細 contract 見 [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md)。
+若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 會啟用已實作的 deterministic semantic reactions：`region-exposure-mask-v1` 可用 region mask 與 `exposure_bias_ev` 對 16-bit scene-linear RGB input 進行 EV modulation；`target-middle-gray-policy-v1` 可在明確設定 `target_middle_gray_policy: global-gain-v1` 時套用 bounded global gain；`highlight-clipping-policy-v1` 可依 `sensor_response_hints.clipping_policy` 套用 bounded soft shoulder。這只支援 `linear-rec709`、`acescg`、`xyz`，不支援 encoded `srgb` 或 `prophoto-rgb` 直接套用 reaction。詳細 contract 見 [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md)。
 
 ## Artifact contract
 

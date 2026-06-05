@@ -384,6 +384,14 @@ def _validate_sensor_response_hints(value: Any, errors: list[str]) -> None:
     middle_gray = value.get("target_middle_gray")
     if middle_gray is not None and (not _is_number(middle_gray) or not 0 < middle_gray < 1):
         errors.append("sensor_response_hints.target_middle_gray must be between 0 and 1")
+    middle_gray_policy = value.get("target_middle_gray_policy")
+    if middle_gray_policy is not None and middle_gray_policy != "global-gain-v1":
+        errors.append("sensor_response_hints.target_middle_gray_policy is unsupported")
+    middle_gray_max_gain = value.get("target_middle_gray_max_gain_ev")
+    if middle_gray_max_gain is not None and (
+        not _is_number(middle_gray_max_gain) or middle_gray_max_gain <= 0
+    ):
+        errors.append("sensor_response_hints.target_middle_gray_max_gain_ev must be positive")
     clipping_policy = value.get("clipping_policy")
     if clipping_policy is not None and clipping_policy not in {
         "preserve-highlights",

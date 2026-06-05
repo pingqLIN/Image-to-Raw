@@ -56,6 +56,7 @@ from image2dng.semantic_reaction import (
     TARGET_WHITE_BALANCE_REACTION_MODEL,
     apply_highlight_clipping_policy_reaction,
     apply_region_exposure_reaction,
+    apply_target_middle_gray_reaction,
     load_semantic_payload,
     semantic_reaction_model_registry,
 )
@@ -742,6 +743,20 @@ def test_semantic_scene_validator_rejects_non_string_semantic_physics_enums(tmp_
     )
 
 
+def test_semantic_scene_validator_rejects_bad_middle_gray_policy(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["sensor_response_hints"]["target_middle_gray_policy"] = "auto"
+    payload["sensor_response_hints"]["target_middle_gray_max_gain_ev"] = 0
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_semantic_scene(semantic_path)
+
+    assert not result.ok
+    assert "sensor_response_hints.target_middle_gray_policy is unsupported" in result.errors
+    assert "sensor_response_hints.target_middle_gray_max_gain_ev must be positive" in result.errors
+
+
 def test_semantic_reaction_model_registry_reports_implemented_and_deferred_models():
     registry = semantic_reaction_model_registry()
 
@@ -758,10 +773,14 @@ def test_semantic_reaction_model_registry_reports_implemented_and_deferred_model
     assert registry[NOISE_PRIORITY_REACTION_MODEL]["current_raw_value_effect"] is False
     assert registry[NOISE_PRIORITY_REACTION_MODEL]["intended_raw_value_effect"] is True
     assert "stochastic CFA/noise policy" in registry[NOISE_PRIORITY_REACTION_MODEL]["boundary"]
-    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["status"] == "deferred"
-    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["status"] == "implemented"
+    assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["current_raw_value_effect"] is True
     assert registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["intended_raw_value_effect"] is True
-    assert "explicit calibration policy" in registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["boundary"]
+    assert "target_middle_gray_policy" in registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["boundary"]
+    assert (
+        "not a real camera metering model"
+        in registry[TARGET_MIDDLE_GRAY_REACTION_MODEL]["boundary"]
+    )
     assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["status"] == "deferred"
     assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["current_raw_value_effect"] is False
     assert registry[TARGET_WHITE_BALANCE_REACTION_MODEL]["intended_raw_value_effect"] is True
@@ -915,6 +934,54 @@ def test_highlight_clipping_policy_clip_is_explicit_noop(tmp_path):
     assert result.applied is False
     assert result.status == "no-op"
     assert result.reason == "clipping_policy clip uses the existing uint16 clamp baseline"
+    assert np.array_equal(reacted, image)
+
+
+def test_target_middle_gray_policy_applies_bounded_global_gain(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=3, height=2, exposure_bias_ev=None)
+    payload = load_semantic_payload(semantic_path)
+    payload["sensor_response_hints"]["target_middle_gray"] = 0.4
+    payload["sensor_response_hints"]["target_middle_gray_policy"] = "global-gain-v1"
+    payload["sensor_response_hints"]["target_middle_gray_max_gain_ev"] = 1.0
+    image = np.full((2, 3, 3), 6554, dtype=np.uint16)
+
+    reacted, result = apply_target_middle_gray_reaction(
+        image,
+        semantic_payload=payload,
+        input_space="linear-rec709",
+    )
+
+    assert result is not None
+    assert result.model == TARGET_MIDDLE_GRAY_REACTION_MODEL
+    assert result.applied is True
+    assert result.status == "applied"
+    assert result.affected_pixels == 6
+    assert result.regions == [
+        {
+            "policy": "global-gain-v1",
+            "target_middle_gray": 0.4,
+            "source_p50_luminance": 0.100008,
+            "max_gain_ev": 1.0,
+            "requested_gain": 3.999695,
+            "applied_gain": 2.0,
+            "affected_pixels": 6,
+        }
+    ]
+    assert np.all(reacted == 13108)
+
+
+def test_target_middle_gray_policy_is_noop_without_explicit_policy(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=3, height=2, exposure_bias_ev=None)
+    payload = load_semantic_payload(semantic_path)
+    image = np.full((2, 3, 3), 6554, dtype=np.uint16)
+
+    reacted, result = apply_target_middle_gray_reaction(
+        image,
+        semantic_payload=payload,
+        input_space="linear-rec709",
+    )
+
+    assert result is None
     assert np.array_equal(reacted, image)
 
 
@@ -1246,6 +1313,71 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
     assert scene_manifest["semantic_reaction"]["reason"] == (
         "no regions with exposure_bias_ev and mask_asset_id"
     )
+
+
+def test_external_scene_linear_batch_applies_target_middle_gray_policy(tmp_path):
+    source_path = tmp_path / "middle-gray-scene.tif"
+    source = np.full((8, 10, 3), 6554, dtype=np.uint16)
+    tifffile.imwrite(source_path, source, photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=10,
+        height=8,
+        exposure_bias_ev=None,
+    )
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["sensor_response_hints"]["target_middle_gray"] = 0.4
+    payload["sensor_response_hints"]["target_middle_gray_policy"] = "global-gain-v1"
+    payload["sensor_response_hints"]["target_middle_gray_max_gain_ev"] = 1.0
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    reacted = run_external_scene_linear_batch(
+        tmp_path / "reacted-middle-gray-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="middle-gray-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    scene_manifest = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    reacted_input = tifffile.imread(scene_manifest["outputs"]["scene_linear_input"])
+
+    assert scene_manifest["semantic_to_raw_status"] == "applied"
+    assert scene_manifest["semantic_reaction"]["model"] == TARGET_MIDDLE_GRAY_REACTION_MODEL
+    assert scene_manifest["semantic_reactions"] == [
+        {
+            "model": REGION_EXPOSURE_REACTION_MODEL,
+            "applied": False,
+            "status": "no-op",
+            "region_count": 0,
+            "affected_pixels": 0,
+            "regions": [],
+            "reason": "no regions with exposure_bias_ev and mask_asset_id",
+        },
+        {
+            "model": TARGET_MIDDLE_GRAY_REACTION_MODEL,
+            "applied": True,
+            "status": "applied",
+            "region_count": 1,
+            "affected_pixels": 80,
+            "regions": [
+                {
+                    "policy": "global-gain-v1",
+                    "target_middle_gray": 0.4,
+                    "source_p50_luminance": 0.100008,
+                    "max_gain_ev": 1.0,
+                    "requested_gain": 3.999695,
+                    "applied_gain": 2.0,
+                    "affected_pixels": 80,
+                }
+            ],
+        },
+    ]
+    assert np.all(reacted_input == 13108)
 
 
 def test_external_scene_linear_batch_applies_highlight_clipping_policy(tmp_path):
@@ -3428,8 +3560,8 @@ def test_semantic_reactions_cli_outputs_registry_json(capsys):
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload[REGION_EXPOSURE_REACTION_MODEL]["status"] == "implemented"
-    assert payload[TARGET_MIDDLE_GRAY_REACTION_MODEL]["status"] == "deferred"
-    assert payload[TARGET_MIDDLE_GRAY_REACTION_MODEL]["current_raw_value_effect"] is False
+    assert payload[TARGET_MIDDLE_GRAY_REACTION_MODEL]["status"] == "implemented"
+    assert payload[TARGET_MIDDLE_GRAY_REACTION_MODEL]["current_raw_value_effect"] is True
 
 
 def test_semantic_reactions_cli_outputs_human_readable_registry(capsys):

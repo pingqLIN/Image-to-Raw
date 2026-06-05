@@ -121,7 +121,7 @@ uv run image2dng-comfyui-import `
 
 本核心 repo 只接收 bridge 或其他外部 producer 交付的 `image2dng.external_scene_linear_sources.v1` manifest，並負責 scene-linear input、semantic sidecar、DNG writer、validation 與 RAW-native batch。ComfyUI workflow metadata 仍以 `producer_metadata` / `producer_metadata_manifest` 進入 manifest，但不再是核心 package 的內建 API。
 
-`semantic_manifest` 若使用 `image2dng.semantic_scene.v1`，會在 DNG 產生前被驗證，sidecar 與可解析的 local assets 會被複製並寫入 batch manifest / sample index。預設仍只做 preservation + validation；若 manifest 明確設定 `apply_semantic_reaction: true`，可啟用 deterministic reaction models，例如 `region-exposure-mask-v1` 與 `highlight-clipping-policy-v1`。這些 prototype 不是完整物理 sensor model。詳細格式見 [docs/i18n/zh-TW/semantic-scene-sidecar-contract.md](docs/i18n/zh-TW/semantic-scene-sidecar-contract.md)。
+`semantic_manifest` 若使用 `image2dng.semantic_scene.v1`，會在 DNG 產生前被驗證，sidecar 與可解析的 local assets 會被複製並寫入 batch manifest / sample index。預設仍只做 preservation + validation；若 manifest 明確設定 `apply_semantic_reaction: true`，可啟用 deterministic reaction models，例如 `region-exposure-mask-v1`、`target-middle-gray-policy-v1` 與 `highlight-clipping-policy-v1`。這些 prototype 不是完整物理 sensor model。詳細格式見 [docs/i18n/zh-TW/semantic-scene-sidecar-contract.md](docs/i18n/zh-TW/semantic-scene-sidecar-contract.md)。
 
 可用 CLI 檢視目前 implemented 與 deferred semantic reaction boundaries：
 
