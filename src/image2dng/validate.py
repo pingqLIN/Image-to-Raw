@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -151,6 +152,7 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             _check_required_tags(page, result)
             _check_identity_tags(page, result)
             _check_geometry(page, result)
+            _check_raw_data_unique_id(page, result)
             _check_raw_area_tags(page, result)
             _check_levels(page, result)
             _check_camera_profile_tags(page, result)
@@ -402,6 +404,21 @@ def _check_geometry(page: tifffile.TiffPage, result: ValidationResult) -> None:
     if actual_bytes != expected_bytes:
         result.errors.append(
             f"buffer byte count mismatch: expected {expected_bytes}, got {actual_bytes}"
+        )
+
+
+def _check_raw_data_unique_id(page: tifffile.TiffPage, result: ValidationResult) -> None:
+    raw_data_unique_id = _as_tuple(_tag_value(page, TAG_RAW_DATA_UNIQUE_ID))
+    if not raw_data_unique_id or len(raw_data_unique_id) != 16:
+        return
+    try:
+        data = page.asarray()
+    except Exception:  # noqa: BLE001
+        return
+    expected = tuple(hashlib.md5(data.tobytes()).digest())
+    if tuple(int(value) for value in raw_data_unique_id) != expected:
+        result.errors.append(
+            "RawDataUniqueID must match the MD5 digest of the raw image buffer"
         )
 
 

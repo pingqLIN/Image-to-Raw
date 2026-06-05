@@ -351,6 +351,41 @@ def test_validate_dng_rejects_bad_identity_tags(tmp_path):
     assert "Software must start with 'image2dng ', got other writer" in result.errors
 
 
+def test_validate_dng_rejects_stale_raw_data_unique_id(tmp_path):
+    input_path = tmp_path / "stale-raw-id-input.tif"
+    output_path = tmp_path / "stale-raw-id.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:stale-raw-id"),
+        )
+        if tag[0] != TAG_RAW_DATA_UNIQUE_ID
+    ]
+    tags.append((TAG_RAW_DATA_UNIQUE_ID, "B", 16, (0,) * 16, False))
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        software="image2dng test",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert (
+        "RawDataUniqueID must match the MD5 digest of the raw image buffer" in result.errors
+    )
+
+
 def test_validate_dng_rejects_mode_mismatched_level_counts(tmp_path):
     input_path = tmp_path / "bad-level-count-input.tif"
     output_path = tmp_path / "bad-level-count.dng"
