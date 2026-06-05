@@ -14,6 +14,7 @@ from image2dng.dng_writer import (
     TAG_ACTIVE_AREA,
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
+    TAG_BLACK_LEVEL_REPEAT_DIM,
     TAG_CALIBRATION_ILLUMINANT_1,
     TAG_CFA_LAYOUT,
     TAG_CFA_PATTERN,
@@ -451,6 +452,13 @@ def _check_levels(page: tifffile.TiffPage, result: ValidationResult) -> None:
     is_cfa = photometric is not None and int(photometric) == PHOTOMETRIC_CFA
     expected_black_count = 4 if is_cfa else 3
     expected_white_count = 1 if is_cfa else 3
+    expected_repeat_dim = (2, 2) if is_cfa else (1, 1)
+    repeat_dim = _as_tuple(_tag_value(page, TAG_BLACK_LEVEL_REPEAT_DIM))
+    if repeat_dim and tuple(int(value) for value in repeat_dim) != expected_repeat_dim:
+        result.errors.append(
+            f"BlackLevelRepeatDim must be {expected_repeat_dim} for this output mode, "
+            f"got {repeat_dim}"
+        )
     if len(black_levels) != expected_black_count:
         result.errors.append(
             f"BlackLevel must contain {expected_black_count} values for this output mode, "

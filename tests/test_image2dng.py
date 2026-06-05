@@ -30,6 +30,7 @@ from image2dng.dng_writer import (
     TAG_ACTIVE_AREA,
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
+    TAG_BLACK_LEVEL_REPEAT_DIM,
     TAG_CALIBRATION_ILLUMINANT_1,
     TAG_CFA_LAYOUT,
     TAG_CFA_PATTERN,
@@ -386,6 +387,41 @@ def test_validate_dng_rejects_mode_mismatched_level_counts(tmp_path):
     assert not result.ok
     assert "BlackLevel must contain 3 values for this output mode, got 1" in result.errors
     assert "WhiteLevel must contain 3 values for this output mode, got 1" in result.errors
+
+
+def test_validate_dng_rejects_mode_mismatched_black_level_repeat_dim(tmp_path):
+    input_path = tmp_path / "bad-repeat-dim-input.tif"
+    output_path = tmp_path / "bad-repeat-dim.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-repeat-dim"),
+        )
+        if tag[0] != TAG_BLACK_LEVEL_REPEAT_DIM
+    ]
+    tags.append((TAG_BLACK_LEVEL_REPEAT_DIM, "H", 2, (2, 2), False))
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert (
+        "BlackLevelRepeatDim must be (1, 1) for this output mode, got (2, 2)"
+        in result.errors
+    )
 
 
 def test_dng_writes_embedded_jpeg_preview_with_raw_subifd(tmp_path):
