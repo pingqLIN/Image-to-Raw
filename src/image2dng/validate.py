@@ -446,10 +446,20 @@ def _check_levels(page: tifffile.TiffPage, result: ValidationResult) -> None:
     white_levels = [int(value) for value in _as_tuple(_tag_value(page, TAG_WHITE_LEVEL))]
     if not black_levels or not white_levels:
         return
-    if len(black_levels) not in {1, 3, 4}:
-        result.errors.append(f"BlackLevel should have 1, 3, or 4 values, got {len(black_levels)}")
-    if len(white_levels) not in {1, 3}:
-        result.errors.append(f"WhiteLevel should have 1 or 3 values, got {len(white_levels)}")
+    photometric = _tag_value(page, TAG_PHOTOMETRIC)
+    is_cfa = photometric is not None and int(photometric) == PHOTOMETRIC_CFA
+    expected_black_count = 4 if is_cfa else 3
+    expected_white_count = 1 if is_cfa else 3
+    if len(black_levels) != expected_black_count:
+        result.errors.append(
+            f"BlackLevel must contain {expected_black_count} values for this output mode, "
+            f"got {len(black_levels)}"
+        )
+    if len(white_levels) != expected_white_count:
+        result.errors.append(
+            f"WhiteLevel must contain {expected_white_count} values for this output mode, "
+            f"got {len(white_levels)}"
+        )
     white_reference = white_levels[0]
     for black in black_levels:
         if black < 0:

@@ -29,6 +29,7 @@ from image2dng.compatibility import (
 from image2dng.dng_writer import (
     TAG_ACTIVE_AREA,
     TAG_AS_SHOT_NEUTRAL,
+    TAG_BLACK_LEVEL,
     TAG_CALIBRATION_ILLUMINANT_1,
     TAG_CFA_PATTERN,
     TAG_CFA_REPEAT_PATTERN_DIM,
@@ -44,6 +45,7 @@ from image2dng.dng_writer import (
     TAG_ORIENTATION,
     TAG_RAW_DATA_UNIQUE_ID,
     TAG_UNIQUE_CAMERA_MODEL,
+    TAG_WHITE_LEVEL,
     TAG_XMP,
 )
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
@@ -339,6 +341,44 @@ def test_validate_dng_rejects_bad_identity_tags(tmp_path):
     assert "Orientation must be 1, got 8" in result.errors
     assert "CalibrationIlluminant1 must be 21, got 17" in result.errors
     assert "Software must start with 'image2dng ', got other writer" in result.errors
+
+
+def test_validate_dng_rejects_mode_mismatched_level_counts(tmp_path):
+    input_path = tmp_path / "bad-level-count-input.tif"
+    output_path = tmp_path / "bad-level-count.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-level-count"),
+        )
+        if tag[0] not in {TAG_BLACK_LEVEL, TAG_WHITE_LEVEL}
+    ]
+    tags.extend(
+        [
+            (TAG_BLACK_LEVEL, "I", 1, (0,), False),
+            (TAG_WHITE_LEVEL, "I", 1, (65535,), False),
+        ]
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "BlackLevel must contain 3 values for this output mode, got 1" in result.errors
+    assert "WhiteLevel must contain 3 values for this output mode, got 1" in result.errors
 
 
 def test_dng_writes_embedded_jpeg_preview_with_raw_subifd(tmp_path):
