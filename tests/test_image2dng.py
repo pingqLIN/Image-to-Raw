@@ -1219,6 +1219,10 @@ def test_public_package_exports_implemented_semantic_reactions():
     assert image2dng.apply_target_white_balance_reaction is apply_target_white_balance_reaction
 
 
+def test_package_declares_pep561_type_marker():
+    assert (Path("src") / "image2dng" / "py.typed").is_file()
+
+
 def test_semantic_reaction_applies_exposure_to_masked_region_only(tmp_path):
     semantic_path = _write_semantic_scene(
         tmp_path,
