@@ -29,6 +29,7 @@ from image2dng.compatibility import (
 from image2dng.dng_writer import (
     TAG_ACTIVE_AREA,
     TAG_AS_SHOT_NEUTRAL,
+    TAG_CALIBRATION_ILLUMINANT_1,
     TAG_CFA_PATTERN,
     TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_COLOR_MATRIX_1,
@@ -279,6 +280,65 @@ def test_validate_dng_rejects_bad_raw_area_tags(tmp_path):
     assert "ActiveArea must be (0, 0, 8, 8), got (1, 0, 8, 8)" in result.errors
     assert "DefaultCropOrigin must be (0, 0), got (1, 0)" in result.errors
     assert "DefaultCropSize must be (8, 8), got (7, 8)" in result.errors
+
+
+def test_validate_dng_rejects_bad_identity_tags(tmp_path):
+    input_path = tmp_path / "bad-identity-input.tif"
+    output_path = tmp_path / "bad-identity.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    replaced_tags = {
+        TAG_DNG_VERSION,
+        TAG_DNG_BACKWARD_VERSION,
+        TAG_MAKE,
+        TAG_MODEL,
+        TAG_UNIQUE_CAMERA_MODEL,
+        TAG_ORIENTATION,
+        TAG_CALIBRATION_ILLUMINANT_1,
+    }
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-identity"),
+        )
+        if tag[0] not in replaced_tags
+    ]
+    tags.extend(
+        [
+            (TAG_DNG_VERSION, "B", 4, (1, 3, 0, 0), False),
+            (TAG_DNG_BACKWARD_VERSION, "B", 4, (1, 0, 0, 0), False),
+            (TAG_MAKE, "s", 0, "WrongMake", False),
+            (TAG_MODEL, "s", 0, "Wrong Model", False),
+            (TAG_UNIQUE_CAMERA_MODEL, "s", 0, "Wrong Model", False),
+            (TAG_ORIENTATION, "H", 1, 8, False),
+            (TAG_CALIBRATION_ILLUMINANT_1, "H", 1, 17, False),
+        ]
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        software="other writer",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "DNGVersion must be (1, 4, 0, 0), got (1, 3, 0, 0)" in result.errors
+    assert "DNGBackwardVersion must be (1, 1, 0, 0), got (1, 0, 0, 0)" in result.errors
+    assert "Make must be image2dng, got WrongMake" in result.errors
+    assert "Model must be Synthetic Camera v1, got Wrong Model" in result.errors
+    assert "UniqueCameraModel must be Synthetic Camera v1, got Wrong Model" in result.errors
+    assert "Orientation must be 1, got 8" in result.errors
+    assert "CalibrationIlluminant1 must be 21, got 17" in result.errors
+    assert "Software must start with 'image2dng ', got other writer" in result.errors
 
 
 def test_dng_writes_embedded_jpeg_preview_with_raw_subifd(tmp_path):

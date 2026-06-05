@@ -32,7 +32,12 @@ from image2dng.dng_writer import (
     TAG_WHITE_LEVEL,
     TAG_XMP,
 )
-from image2dng.models import PHOTOMETRIC_CFA, PHOTOMETRIC_LINEAR_RAW
+from image2dng.models import (
+    PHOTOMETRIC_CFA,
+    PHOTOMETRIC_LINEAR_RAW,
+    SYNTHETIC_CAMERA_MAKE,
+    SYNTHETIC_CAMERA_MODEL,
+)
 from image2dng.xmp import XMP_AI_NAMESPACE
 
 TAG_BITS_PER_SAMPLE = 258
@@ -142,6 +147,7 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             _record_layout_summary(tif, page, raw_location, result)
             _check_embedded_preview_layout(tif, page, result)
             _check_required_tags(page, result)
+            _check_identity_tags(page, result)
             _check_geometry(page, result)
             _check_raw_area_tags(page, result)
             _check_levels(page, result)
@@ -331,6 +337,30 @@ def _check_required_tags(page: tifffile.TiffPage, result: ValidationResult) -> N
         result.errors.append(
             f"RawDataUniqueID must contain 16 bytes, got {len(raw_data_unique_id)}"
         )
+
+
+def _check_identity_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
+    expectations = {
+        TAG_DNG_VERSION: ("DNGVersion", (1, 4, 0, 0)),
+        TAG_DNG_BACKWARD_VERSION: ("DNGBackwardVersion", (1, 1, 0, 0)),
+        TAG_MAKE: ("Make", SYNTHETIC_CAMERA_MAKE),
+        TAG_MODEL: ("Model", SYNTHETIC_CAMERA_MODEL),
+        TAG_UNIQUE_CAMERA_MODEL: ("UniqueCameraModel", SYNTHETIC_CAMERA_MODEL),
+        TAG_ORIENTATION: ("Orientation", 1),
+        TAG_COMPRESSION: ("Compression", 1),
+        TAG_CALIBRATION_ILLUMINANT_1: ("CalibrationIlluminant1", 21),
+    }
+    for tag, (name, expected) in expectations.items():
+        value = _tag_value(page, tag)
+        if value is None:
+            continue
+        normalized = _as_tuple(value) if isinstance(expected, tuple) else value
+        if normalized != expected:
+            result.errors.append(f"{name} must be {expected}, got {normalized}")
+
+    software = _tag_value(page, TAG_SOFTWARE)
+    if software is not None and not str(software).startswith("image2dng "):
+        result.errors.append(f"Software must start with 'image2dng ', got {software}")
 
 
 def _check_geometry(page: tifffile.TiffPage, result: ValidationResult) -> None:

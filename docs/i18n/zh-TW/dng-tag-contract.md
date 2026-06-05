@@ -89,7 +89,7 @@ IFD0 preview 也會寫入基本 identity/provenance tags：`DNGVersion`、`DNGBa
 
 ## Validation Status
 
-`image2dng validate` 會檢查 embedded preview layout（若存在）、required raw tags、geometry、crop/scale raw area tags、black/white levels、camera profile tags、mode-specific CFA tags、XMP provenance，以及 MakerNote absence。
+`image2dng validate` 會檢查 embedded preview layout（若存在）、required raw tags、identity/version/compression tags、geometry、crop/scale raw area tags、black/white levels、camera profile tags、mode-specific CFA tags、XMP provenance，以及 MakerNote absence。
 
 Optional smoke tools 是 compatibility evidence，不是 mandatory gates：
 
