@@ -11,6 +11,7 @@ SYNTHETIC_CAMERA_MODEL = "Synthetic Camera v1"
 
 CfaPattern = Literal["rggb", "bggr", "grbg", "gbrg"]
 PhotometricName = Literal["LinearRaw", "ColorFilterArray"]
+RawMode = Literal["linearraw", "cfa"]
 
 
 @dataclass(frozen=True)
@@ -161,8 +162,8 @@ class AIMetadataModel:
     iso: int | None = None
     white_balance_kelvin: float | None = None
     prompt_plaintext: str | None = None
-    raw_mode: str = "linearraw"
-    cfa_pattern: str | None = None
+    raw_mode: RawMode = "linearraw"
+    cfa_pattern: CfaPattern | None = None
     sensor_noise_model: str | None = None
     shot_noise: float | None = None
     read_noise: float | None = None
@@ -176,6 +177,17 @@ class AIMetadataModel:
             raise ValueError("camera parameters must be marked simulated")
         if self.prompt_plaintext is not None and not self.prompt_plaintext.strip():
             raise ValueError("prompt_plaintext must be non-empty when provided")
+        if self.raw_mode not in {"linearraw", "cfa"}:
+            raise ValueError("raw_mode must be 'linearraw' or 'cfa'")
+        if self.raw_mode == "linearraw" and self.cfa_pattern is not None:
+            raise ValueError("linearraw metadata must not set cfa_pattern")
+        if self.raw_mode == "cfa" and self.cfa_pattern not in {
+            "rggb",
+            "bggr",
+            "grbg",
+            "gbrg",
+        }:
+            raise ValueError("cfa metadata requires a supported cfa_pattern")
 
 
 def cct_to_as_shot_neutral(kelvin: float) -> tuple[float, float, float]:

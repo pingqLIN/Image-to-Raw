@@ -4012,6 +4012,21 @@ def test_cfa_mosaic_uses_requested_pattern(tmp_path):
     assert raw[1, 1] == 10000
 
 
+def test_ai_metadata_model_rejects_invalid_raw_mode():
+    with pytest.raises(ValueError, match="raw_mode must be 'linearraw' or 'cfa'"):
+        AIMetadataModel(raw_mode="jpeg")
+
+
+def test_ai_metadata_model_rejects_linearraw_cfa_pattern():
+    with pytest.raises(ValueError, match="linearraw metadata must not set cfa_pattern"):
+        AIMetadataModel(raw_mode="linearraw", cfa_pattern="rggb")
+
+
+def test_ai_metadata_model_rejects_cfa_without_supported_pattern():
+    with pytest.raises(ValueError, match="cfa metadata requires a supported cfa_pattern"):
+        AIMetadataModel(raw_mode="cfa")
+
+
 def test_validate_dng_rejects_bad_cfa_tags(tmp_path):
     input_path = tmp_path / "bad-cfa-input.tif"
     output_path = tmp_path / "bad-cfa.dng"
@@ -4062,11 +4077,11 @@ def test_validate_dng_rejects_linearraw_with_cfa_xmp(tmp_path):
         raw,
         core,
         CameraProfileModel.from_white_balance(6500),
-        AIMetadataModel(
-            prompt_hash="sha256:bad-linearraw-xmp",
-            raw_mode="cfa",
-            cfa_pattern="rggb",
-        ),
+        AIMetadataModel(prompt_hash="sha256:bad-linearraw-xmp"),
+    )
+    tags = _replace_xmp_packet(
+        tags,
+        _test_xmp_packet(raw_mode="cfa", cfa_pattern="rggb"),
     )
     tifffile.imwrite(
         output_path,
@@ -4097,9 +4112,11 @@ def test_validate_dng_rejects_cfa_with_linearraw_xmp(tmp_path):
         CameraProfileModel.from_white_balance(6500),
         AIMetadataModel(
             prompt_hash="sha256:bad-cfa-xmp",
-            raw_mode="linearraw",
+            raw_mode="cfa",
+            cfa_pattern="rggb",
         ),
     )
+    tags = _replace_xmp_packet(tags, _test_xmp_packet(raw_mode="linearraw"))
     tifffile.imwrite(
         output_path,
         raw,
@@ -4339,6 +4356,32 @@ def _write_test_dng(tmp_path, *, prompt_hash: str):
         ),
     )
     return output_path
+
+
+def _replace_xmp_packet(
+    tags: list[tuple[int, str, int, object, bool]],
+    packet: bytes,
+) -> list[tuple[int, str, int, object, bool]]:
+    return [
+        (TAG_XMP, "B", len(packet), packet, False) if tag[0] == TAG_XMP else tag
+        for tag in tags
+    ]
+
+
+def _test_xmp_packet(*, raw_mode: str, cfa_pattern: str | None = None) -> bytes:
+    cfa_attr = "" if cfa_pattern is None else f' xmpAI:cfaPattern="{cfa_pattern}"'
+    return f'''<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description
+      rdf:about=""
+      xmlns:xmpAI="{XMP_AI_NAMESPACE}"
+      xmpAI:provenanceType="synthetic"
+      xmpAI:cameraParametersAreSimulated="True"
+      xmpAI:rawMode="{raw_mode}"{cfa_attr} />
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>'''.encode()
 
 
 def _write_adobe_rewritten_like_dng(path: Path) -> None:
