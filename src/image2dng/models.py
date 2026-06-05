@@ -195,6 +195,18 @@ class CameraProfileModel:
     as_shot_neutral: tuple[float, float, float] = (1.0, 1.0, 1.0)
 
     def __post_init__(self) -> None:
+        for field_name, value in (
+            ("make", self.make),
+            ("model", self.model),
+            ("unique_camera_model", self.unique_camera_model),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.calibration_illuminant_1, Integral)
+            or self.calibration_illuminant_1 <= 0
+        ):
+            raise ValueError("calibration_illuminant_1 must be a positive integer")
         if len(self.color_matrix_1) != 9:
             raise ValueError("color_matrix_1 must contain exactly 9 values")
         if not all(math.isfinite(value) for value in self.color_matrix_1):

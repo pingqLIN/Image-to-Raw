@@ -633,6 +633,19 @@ def test_public_convert_api_accepts_explicit_camera_profile_overrides(tmp_path):
         assert _tag_rational_values(page.tags[TAG_AS_SHOT_NEUTRAL].value) == list(neutral)
 
 
+def test_camera_profile_model_rejects_empty_identity():
+    with pytest.raises(ValueError, match="model must be a non-empty string"):
+        CameraProfileModel(model="")
+
+
+def test_camera_profile_model_rejects_bad_calibration_illuminant():
+    with pytest.raises(
+        ValueError,
+        match="calibration_illuminant_1 must be a positive integer",
+    ):
+        CameraProfileModel(calibration_illuminant_1=0)
+
+
 def test_public_convert_api_rejects_bad_camera_profile_overrides(tmp_path):
     input_path = tmp_path / "bad-profile-input.tif"
     output_path = tmp_path / "bad-profile-output.dng"
