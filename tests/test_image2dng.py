@@ -3434,6 +3434,17 @@ def test_semantic_reactions_cli_outputs_human_readable_registry(capsys):
     assert "boundary:" in output
 
 
+def test_cli_help_lists_subcommands(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "Subcommands:" in output
+    assert "validate-semantic" in output
+    assert "semantic-reactions" in output
+
+
 def test_validate_semantic_cli_outputs_json(tmp_path, capsys):
     semantic_path = _write_semantic_scene(tmp_path, width=6, height=4, include_hash=True)
 

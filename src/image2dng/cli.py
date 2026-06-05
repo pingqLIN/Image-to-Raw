@@ -31,6 +31,10 @@ def build_generate_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="image2dng",
         description="Generate truthful synthetic LinearRaw DNG files from 16-bit images.",
+        epilog=(
+            "Subcommands: validate, validate-semantic, semantic-reactions. "
+            "Run 'image2dng <subcommand> --help' for subcommand options."
+        ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("input", type=Path, help="input 16-bit TIFF/PNG")
