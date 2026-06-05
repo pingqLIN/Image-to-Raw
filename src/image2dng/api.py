@@ -38,6 +38,10 @@ class OutputExistsError(Image2DNGError):
     """Raised when the output path exists and overwrite is disabled."""
 
 
+class OutputWriteError(Image2DNGError):
+    """Raised when the output path cannot be written."""
+
+
 class ValidationError(Image2DNGError):
     """Raised when generated output fails a post-generation validation step."""
 
@@ -81,6 +85,8 @@ def convert(
     target = Path(output_path)
     if target.exists() and not overwrite:
         raise OutputExistsError(f"output already exists: {target}")
+    if not target.parent.exists():
+        raise OutputWriteError(f"output directory does not exist: {target.parent}")
     if mode not in {"linearraw", "cfa"}:
         raise InvalidMetadataError(f"unsupported output mode: {mode}")
     if mode == "cfa" and cfa_pattern not in CFA_PATTERN_VALUES:
@@ -154,7 +160,10 @@ def convert(
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc
 
-    write_dng(target, raw_buffer, core, camera, ai, dng_layout=dng_layout)
+    try:
+        write_dng(target, raw_buffer, core, camera, ai, dng_layout=dng_layout)
+    except OSError as exc:
+        raise OutputWriteError(f"could not write output: {target}") from exc
     return ConversionResult(
         output_path=target,
         input_space=input_space,

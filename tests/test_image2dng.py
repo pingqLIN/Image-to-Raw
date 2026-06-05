@@ -17,7 +17,13 @@ import tifffile
 from PIL import Image
 
 import image2dng.dng_writer as dng_writer
-from image2dng import InvalidMetadataError, OutputExistsError, UnsupportedInputError, convert
+from image2dng import (
+    InvalidMetadataError,
+    OutputExistsError,
+    OutputWriteError,
+    UnsupportedInputError,
+    convert,
+)
 from image2dng.cli import main
 from image2dng.compatibility import (
     PROCESSOR_TOOL_SPECS,
@@ -4540,6 +4546,15 @@ def test_public_convert_refuses_existing_output_without_overwrite(tmp_path):
         raise AssertionError("expected OutputExistsError")
 
 
+def test_public_convert_rejects_missing_output_directory(tmp_path):
+    input_path = tmp_path / "api-input.tif"
+    output_path = tmp_path / "missing" / "api-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(OutputWriteError, match="output directory does not exist"):
+        convert(input_path=input_path, output_path=output_path)
+
+
 def test_cli_returns_usage_error_for_invalid_metadata(tmp_path, capsys):
     input_path = tmp_path / "invalid-metadata.tif"
     output_path = tmp_path / "invalid-metadata.dng"
@@ -4549,6 +4564,17 @@ def test_cli_returns_usage_error_for_invalid_metadata(tmp_path, capsys):
 
     assert exit_code == 3
     assert "iso must be positive" in capsys.readouterr().err
+
+
+def test_cli_returns_usage_error_for_missing_output_directory(tmp_path, capsys):
+    input_path = tmp_path / "missing-output-dir-input.tif"
+    output_path = tmp_path / "missing" / "output.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    exit_code = main([str(input_path), str(output_path)])
+
+    assert exit_code == 3
+    assert "output directory does not exist" in capsys.readouterr().err
 
 
 def test_public_convert_rejects_non_finite_white_balance(tmp_path):
