@@ -31,10 +31,16 @@ class CoreRawModel:
     default_crop_size: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.width, Integral) or not isinstance(self.height, Integral):
+            raise ValueError("width and height must be positive integers")
         if self.width <= 0 or self.height <= 0:
-            raise ValueError("width and height must be positive")
+            raise ValueError("width and height must be positive integers")
+        if not isinstance(self.bits_per_sample, Integral):
+            raise ValueError("bits_per_sample must be an integer")
         if self.bits_per_sample != 16:
             raise ValueError("MVP only supports 16-bit output")
+        if not isinstance(self.samples_per_pixel, Integral):
+            raise ValueError("samples_per_pixel must be an integer")
         if self.photometric not in {"LinearRaw", "ColorFilterArray"}:
             raise ValueError("photometric must be LinearRaw or ColorFilterArray")
         is_cfa = self.photometric == "ColorFilterArray"

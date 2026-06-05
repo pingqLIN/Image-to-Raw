@@ -4103,6 +4103,18 @@ def test_core_raw_model_rejects_unsupported_cfa_pattern():
         CoreRawModel.for_cfa(width=8, height=8, cfa_pattern="rgb")
 
 
+def test_core_raw_model_rejects_non_integer_dimensions():
+    with pytest.raises(ValueError, match="width and height must be positive integers"):
+        CoreRawModel(width=8.5, height=8)
+
+
+def test_core_raw_model_rejects_non_integer_sample_metadata():
+    with pytest.raises(ValueError, match="bits_per_sample must be an integer"):
+        CoreRawModel(width=8, height=8, bits_per_sample=16.0)
+    with pytest.raises(ValueError, match="samples_per_pixel must be an integer"):
+        CoreRawModel(width=8, height=8, samples_per_pixel=3.0)
+
+
 def test_core_raw_model_rejects_unsupported_photometric_name():
     with pytest.raises(
         ValueError,
