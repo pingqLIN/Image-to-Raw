@@ -141,7 +141,7 @@ uv run image2dng validate-semantic renderer-frame-001.semantic.json --json
 uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
 ```
 
-This verification flow runs `pytest`, `ruff check`, RAW-native batch generation, and checks the manifest, sample index, DNG validation JSON, and JPEG previews. It writes `demo-output/development-baseline/verification-report.json`. `demo-output/` is local output and binary samples should not be committed.
+This verification flow runs `pytest`, `ruff check`, demo sample generation, RAW-native batch generation, and checks demo DNG validation, the manifest, sample index, DNG validation JSON, and JPEG previews. It writes `demo-output/development-baseline/verification-report.json`. `demo-output/` is local output and binary samples should not be committed.
 
 ## Generate compatibility evidence
 

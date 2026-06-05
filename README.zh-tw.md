@@ -138,7 +138,7 @@ uv run image2dng validate-semantic renderer-frame-001.semantic.json --json
 uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
 ```
 
-這個驗證流程會執行 `pytest`、`ruff check`、RAW-native batch generation，並檢查 manifest、sample index、DNG validation JSON 與 JPEG preview。結果會寫入 `demo-output/development-baseline/verification-report.json`。`demo-output/` 是本機輸出資料夾，不應提交 binary 樣片。
+這個驗證流程會執行 `pytest`、`ruff check`、demo sample generation、RAW-native batch generation，並檢查 demo DNG validation、manifest、sample index、DNG validation JSON 與 JPEG preview。結果會寫入 `demo-output/development-baseline/verification-report.json`。`demo-output/` 是本機輸出資料夾，不應提交 binary 樣片。
 
 ## 產生相容性證據矩陣
 

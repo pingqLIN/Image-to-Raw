@@ -2750,6 +2750,52 @@ def test_run_adobe_dng_sdk_validation_allows_empty_when_explicit(tmp_path):
     assert report["results"] == []
 
 
+def test_verify_development_baseline_inspects_demo_samples(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    output_dir = tmp_path / "demo-samples"
+    output_dir.mkdir()
+    input_path = output_dir / "demo-gradient.tif"
+    tifffile.imwrite(input_path, _gradient_image(24, 24), photometric="rgb")
+    convert(
+        input_path=input_path,
+        output_path=output_dir / "demo-linearraw.dng",
+        input_space="linear-rec709",
+        mode="linearraw",
+        prompt_hash="sha256:demo-linearraw",
+    )
+    convert(
+        input_path=input_path,
+        output_path=output_dir / "demo-cfa-rggb.dng",
+        input_space="linear-rec709",
+        mode="cfa",
+        cfa_pattern="rggb",
+        prompt_hash="sha256:demo-cfa",
+    )
+    convert(
+        input_path=input_path,
+        output_path=output_dir / "demo-cfa-rggb-noisy.dng",
+        input_space="linear-rec709",
+        mode="cfa",
+        cfa_pattern="rggb",
+        shot_noise=0.01,
+        read_noise=0.002,
+        row_noise=0.001,
+        sensor_effect_seed=20260510,
+        prompt_hash="sha256:demo-cfa-noisy",
+    )
+
+    report = module._inspect_demo_samples(output_dir)
+
+    assert report["sample_count"] == 3
+    assert report["all_validations_ok"] is True
+    assert [sample["key"] for sample in report["samples"]] == [
+        "linearraw",
+        "cfa",
+        "cfa-with-sensor-effects",
+    ]
+    assert all(sample["validation"]["ok"] is True for sample in report["samples"])
+
+
 def test_run_adobe_dng_sdk_validation_refuses_unsafe_output_dirs(tmp_path):
     module = _load_script_module("run_adobe_dng_sdk_validation")
     repo_root = tmp_path / "repo"

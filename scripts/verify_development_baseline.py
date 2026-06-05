@@ -12,6 +12,8 @@ from typing import Literal
 
 from PIL import Image
 
+from image2dng.validate import validate_dng
+
 StepStatus = Literal["passed", "failed"]
 
 
@@ -43,6 +45,7 @@ def main() -> int:
         },
         "steps": [],
         "batch": {},
+        "demo_samples": {},
         "ok": False,
         "errors": [],
     }
@@ -60,6 +63,17 @@ def main() -> int:
         (
             "cli-semantic-reactions-help",
             ["uv", "run", "image2dng", "semantic-reactions", "--help"],
+        ),
+        (
+            "demo-samples",
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/generate_demo_samples.py",
+                "--output-dir",
+                str(output_dir / "demo-samples"),
+            ],
         ),
         (
             "raw-native-batch",
@@ -82,6 +96,7 @@ def main() -> int:
             return 1
 
     try:
+        report["demo_samples"] = _inspect_demo_samples(output_dir / "demo-samples")
         report["batch"] = _inspect_batch(output_dir / "raw-native-node-batch", repo_root)
     except ValueError as exc:
         _append_error(report, str(exc))
@@ -91,6 +106,32 @@ def main() -> int:
     )
     _write_report(output_dir, report)
     return 0 if report["ok"] else 1
+
+
+def _inspect_demo_samples(output_dir: Path) -> dict[str, object]:
+    input_path = output_dir / "demo-gradient.tif"
+    if not input_path.exists():
+        raise ValueError(f"demo input missing: {input_path}")
+    samples = [
+        ("linearraw", output_dir / "demo-linearraw.dng"),
+        ("cfa", output_dir / "demo-cfa-rggb.dng"),
+        ("cfa-with-sensor-effects", output_dir / "demo-cfa-rggb-noisy.dng"),
+    ]
+    sample_reports = []
+    for key, path in samples:
+        artifact = _artifact_record(key, path)
+        validation = validate_dng(path, run_smoke=False).to_dict()
+        artifact["validation"] = validation
+        if validation["ok"] is not True:
+            raise ValueError(f"{key}: demo sample validation failed")
+        sample_reports.append(artifact)
+    return {
+        "output_dir": str(output_dir),
+        "input": _artifact_record("demo-gradient", input_path),
+        "sample_count": len(sample_reports),
+        "all_validations_ok": True,
+        "samples": sample_reports,
+    }
 
 
 def _run_step(name: str, command: list[str], cwd: Path) -> dict[str, object]:
