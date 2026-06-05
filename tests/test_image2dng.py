@@ -89,7 +89,7 @@ from image2dng.validate import (
     inspect_adobe_converted_dng,
     validate_dng,
 )
-from image2dng.xmp import XMP_AI_NAMESPACE
+from image2dng.xmp import XMP_AI_NAMESPACE, build_xmp_packet
 
 
 def _fake_processor_executable(command: str) -> str:
@@ -4260,6 +4260,27 @@ def test_ai_metadata_model_rejects_non_positive_capture_values():
         AIMetadataModel(white_balance_kelvin="bad")
 
 
+def test_ai_metadata_model_normalizes_parseable_numeric_fields():
+    ai = AIMetadataModel(
+        white_balance_kelvin="6500",
+        shot_noise="0.01",
+        read_noise="0.002",
+        row_noise="0.001",
+        sensor_effect_seed=7,
+    )
+
+    assert ai.white_balance_kelvin == pytest.approx(6500.0)
+    assert ai.shot_noise == pytest.approx(0.01)
+    assert ai.read_noise == pytest.approx(0.002)
+    assert ai.row_noise == pytest.approx(0.001)
+    packet = build_xmp_packet(ai).decode("utf-8")
+    assert 'xmpAI:simulatedWhiteBalanceKelvin="6500"' in packet
+    assert 'xmpAI:shotNoise="0.01"' in packet
+    assert 'xmpAI:readNoise="0.002"' in packet
+    assert 'xmpAI:rowNoise="0.001"' in packet
+    assert 'xmpAI:sensorEffectSeed="7"' in packet
+
+
 def test_cct_to_as_shot_neutral_rejects_non_finite_kelvin():
     with pytest.raises(ValueError, match="white balance Kelvin must be positive finite"):
         cct_to_as_shot_neutral(float("nan"))
@@ -4277,6 +4298,19 @@ def test_ai_metadata_model_rejects_negative_noise_fields(field_name):
 def test_ai_metadata_model_rejects_unparseable_noise_fields(field_name):
     with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
         AIMetadataModel(**{field_name: "bad"})
+
+
+def test_ai_metadata_model_rejects_bad_sensor_effect_seed():
+    with pytest.raises(
+        ValueError,
+        match="sensor_effect_seed must be a non-negative integer",
+    ):
+        AIMetadataModel(sensor_effect_seed=-1)
+    with pytest.raises(
+        ValueError,
+        match="sensor_effect_seed must be a non-negative integer",
+    ):
+        AIMetadataModel(sensor_effect_seed=1.5)
 
 
 def test_validate_dng_rejects_bad_cfa_tags(tmp_path):

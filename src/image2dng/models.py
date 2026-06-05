@@ -284,6 +284,7 @@ class AIMetadataModel:
                 raise ValueError("white_balance_kelvin must be positive finite") from exc
             if not math.isfinite(white_balance_kelvin) or white_balance_kelvin <= 0:
                 raise ValueError("white_balance_kelvin must be positive finite")
+            object.__setattr__(self, "white_balance_kelvin", white_balance_kelvin)
         if self.raw_mode not in {"linearraw", "cfa"}:
             raise ValueError("raw_mode must be 'linearraw' or 'cfa'")
         if self.raw_mode == "linearraw" and self.cfa_pattern is not None:
@@ -302,6 +303,12 @@ class AIMetadataModel:
                     raise ValueError(f"{field_name} must be non-negative finite") from exc
                 if not math.isfinite(noise_value) or noise_value < 0:
                     raise ValueError(f"{field_name} must be non-negative finite")
+                object.__setattr__(self, field_name, noise_value)
+        if self.sensor_effect_seed is not None and (
+            not isinstance(self.sensor_effect_seed, Integral)
+            or self.sensor_effect_seed < 0
+        ):
+            raise ValueError("sensor_effect_seed must be a non-negative integer")
 
 
 def cct_to_as_shot_neutral(kelvin: float) -> tuple[float, float, float]:
