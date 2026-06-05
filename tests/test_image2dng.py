@@ -4087,6 +4087,8 @@ def test_ai_metadata_model_rejects_cfa_without_supported_pattern():
 def test_ai_metadata_model_rejects_non_positive_capture_values():
     with pytest.raises(ValueError, match="iso must be positive"):
         AIMetadataModel(iso=0)
+    with pytest.raises(ValueError, match="iso must be positive"):
+        AIMetadataModel(iso=1.5)
     with pytest.raises(ValueError, match="white_balance_kelvin must be positive finite"):
         AIMetadataModel(white_balance_kelvin=0)
 
@@ -4248,6 +4250,15 @@ def test_public_convert_rejects_non_finite_white_balance(tmp_path):
             output_path=output_path,
             white_balance_kelvin=float("inf"),
         )
+
+
+def test_public_convert_rejects_non_integer_iso(tmp_path):
+    input_path = tmp_path / "non-integer-iso.tif"
+    output_path = tmp_path / "non-integer-iso.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(InvalidMetadataError, match="iso must be positive"):
+        convert(input_path=input_path, output_path=output_path, iso=float("nan"))
 
 
 def test_metadata_round_trip(tmp_path):

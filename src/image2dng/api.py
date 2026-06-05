@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from numbers import Integral
 from pathlib import Path
 from typing import Literal
 
@@ -79,7 +80,7 @@ def convert(
         raise InvalidMetadataError(f"unsupported output mode: {mode}")
     if dng_layout not in {"single-raw-ifd", "preview-subifd"}:
         raise InvalidMetadataError(f"unsupported DNG layout: {dng_layout}")
-    if iso <= 0:
+    if not isinstance(iso, Integral) or iso <= 0:
         raise InvalidMetadataError("iso must be positive")
     if not math.isfinite(float(white_balance_kelvin)) or white_balance_kelvin <= 0:
         raise InvalidMetadataError("white_balance_kelvin must be positive finite")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Literal
 
 PHOTOMETRIC_LINEAR_RAW = 34892
@@ -177,7 +178,9 @@ class AIMetadataModel:
             raise ValueError("camera parameters must be marked simulated")
         if self.prompt_plaintext is not None and not self.prompt_plaintext.strip():
             raise ValueError("prompt_plaintext must be non-empty when provided")
-        if self.iso is not None and self.iso <= 0:
+        if self.iso is not None and (
+            not isinstance(self.iso, Integral) or self.iso <= 0
+        ):
             raise ValueError("iso must be positive")
         if self.white_balance_kelvin is not None and (
             not math.isfinite(float(self.white_balance_kelvin))
