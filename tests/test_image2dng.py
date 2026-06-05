@@ -438,6 +438,44 @@ def test_validate_dng_rejects_mode_mismatched_level_counts(tmp_path):
     assert "WhiteLevel must contain 3 values for this output mode, got 1" in result.errors
 
 
+def test_validate_dng_rejects_out_of_range_levels(tmp_path):
+    input_path = tmp_path / "bad-level-range-input.tif"
+    output_path = tmp_path / "bad-level-range.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-level-range"),
+        )
+        if tag[0] not in {TAG_BLACK_LEVEL, TAG_WHITE_LEVEL}
+    ]
+    tags.extend(
+        [
+            (TAG_BLACK_LEVEL, "i", 3, (-1, 512, 512), False),
+            (TAG_WHITE_LEVEL, "I", 3, (70000, 65535, 65535), False),
+        ]
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "BlackLevel must be non-negative, got -1" in result.errors
+    assert "WhiteLevel must be <= 65535, got 70000" in result.errors
+
+
 def test_validate_dng_rejects_mode_mismatched_black_level_repeat_dim(tmp_path):
     input_path = tmp_path / "bad-repeat-dim-input.tif"
     output_path = tmp_path / "bad-repeat-dim.dng"
