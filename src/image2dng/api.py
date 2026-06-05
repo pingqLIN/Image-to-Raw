@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -54,6 +55,8 @@ def convert(
     cfa_pattern: CfaPattern = "rggb",
     iso: int = 100,
     white_balance_kelvin: float = 6500.0,
+    color_matrix_1: Sequence[float] | None = None,
+    as_shot_neutral: Sequence[float] | None = None,
     shot_noise: float = 0.0,
     read_noise: float = 0.0,
     row_noise: float = 0.0,
@@ -86,7 +89,7 @@ def convert(
             row_noise=row_noise,
             seed=sensor_effect_seed,
         )
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise InvalidMetadataError(str(exc)) from exc
 
     try:
@@ -108,6 +111,19 @@ def convert(
 
     try:
         camera = CameraProfileModel.from_white_balance(white_balance_kelvin)
+        if color_matrix_1 is not None or as_shot_neutral is not None:
+            camera = CameraProfileModel(
+                color_matrix_1=(
+                    tuple(float(value) for value in color_matrix_1)
+                    if color_matrix_1 is not None
+                    else camera.color_matrix_1
+                ),
+                as_shot_neutral=(
+                    tuple(float(value) for value in as_shot_neutral)
+                    if as_shot_neutral is not None
+                    else camera.as_shot_neutral
+                ),
+            )
         ai = AIMetadataModel(
             model_name=model_name,
             model_version=model_version,

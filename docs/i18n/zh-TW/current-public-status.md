@@ -10,6 +10,7 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 - 輸出未壓縮 16-bit 三通道 `LinearRaw` DNG。
 - 輸出明確 opt-in 的單通道 simulated CFA DNG，支援 `rggb`、`bggr`、`grbg`、`gbrg`。
 - 提供 deterministic synthetic sensor effects，供 demo 與 compatibility testing 使用。
+- 可顯式覆寫 DNG `ColorMatrix1` 與 `AsShotNeutral` metadata，用於 virtual camera profile 實驗。
 - 驗證並保存 `image2dng.semantic_scene.v1` semantic sidecars，並可在明確 opt-in 時執行已實作的 deterministic semantic reactions。
 - 在 XMP 中嵌入 AI provenance、raw mode、simulated camera parameters 與已啟用的 sensor-effect 設定。
 - 以 structural checks、mode-aware tag checks、XMP checks 與 optional local smoke tools 驗證產出的 DNG。

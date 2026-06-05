@@ -131,6 +131,18 @@ class CameraProfileModel:
     )
     as_shot_neutral: tuple[float, float, float] = (1.0, 1.0, 1.0)
 
+    def __post_init__(self) -> None:
+        if len(self.color_matrix_1) != 9:
+            raise ValueError("color_matrix_1 must contain exactly 9 values")
+        if not all(math.isfinite(value) for value in self.color_matrix_1):
+            raise ValueError("color_matrix_1 values must be finite")
+        if len(self.as_shot_neutral) != 3:
+            raise ValueError("as_shot_neutral must contain exactly 3 values")
+        if not all(
+            math.isfinite(value) and value > 0 for value in self.as_shot_neutral
+        ):
+            raise ValueError("as_shot_neutral values must be positive finite numbers")
+
     @classmethod
     def from_white_balance(cls, kelvin: float) -> CameraProfileModel:
         return cls(as_shot_neutral=cct_to_as_shot_neutral(kelvin))

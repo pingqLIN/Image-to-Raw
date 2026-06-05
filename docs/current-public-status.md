@@ -10,6 +10,7 @@ This document records the current engineering baseline for public exchange. It a
 - Write uncompressed 16-bit three-channel `LinearRaw` DNG output.
 - Write explicit simulated single-channel CFA DNG output with `rggb`, `bggr`, `grbg`, or `gbrg` Bayer patterns.
 - Apply optional deterministic synthetic sensor effects for demos and compatibility testing.
+- Override DNG `ColorMatrix1` and `AsShotNeutral` metadata explicitly for virtual camera profile experiments.
 - Validate and preserve `image2dng.semantic_scene.v1` semantic sidecars, with explicit opt-in support for implemented deterministic semantic reactions.
 - Embed AI provenance, selected raw mode, simulated camera parameters, and enabled sensor-effect settings in XMP.
 - Validate generated DNG files with structural checks, mode-aware tag checks, XMP checks, and optional local smoke tools.

@@ -48,6 +48,22 @@ def build_generate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cfa-pattern", choices=["rggb", "bggr", "grbg", "gbrg"], default="rggb")
     parser.add_argument("--iso", type=int, default=100)
     parser.add_argument("--white-balance", type=float, default=6500.0)
+    parser.add_argument(
+        "--color-matrix-1",
+        type=float,
+        nargs=9,
+        default=None,
+        metavar="VALUE",
+        help="override DNG ColorMatrix1 with 9 row-major SRATIONAL values",
+    )
+    parser.add_argument(
+        "--as-shot-neutral",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar="VALUE",
+        help="override DNG AsShotNeutral with 3 positive RATIONAL values",
+    )
     parser.add_argument("--shot-noise", type=float, default=0.0)
     parser.add_argument("--read-noise", type=float, default=0.0)
     parser.add_argument("--row-noise", type=float, default=0.0)
@@ -130,6 +146,8 @@ def _run_generate(args: argparse.Namespace) -> int:
             cfa_pattern=args.cfa_pattern,
             iso=args.iso,
             white_balance_kelvin=args.white_balance,
+            color_matrix_1=args.color_matrix_1,
+            as_shot_neutral=args.as_shot_neutral,
             shot_noise=args.shot_noise,
             read_noise=args.read_noise,
             row_noise=args.row_noise,

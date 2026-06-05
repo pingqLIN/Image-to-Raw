@@ -201,6 +201,14 @@ uv run image2dng input.tif output.dng `
 
 By default, the CLI refuses to replace an existing output file. Pass `--overwrite` only when replacing the output is intentional.
 
+For advanced virtual camera profile experiments, explicitly override DNG color metadata. This writes `ColorMatrix1` and `AsShotNeutral` tags only; it does not color-grade the input image:
+
+```powershell
+uv run image2dng input.tif output-profile.dng `
+  --color-matrix-1 1 0 0 0 1 0 0 0 1 `
+  --as-shot-neutral 0.5 1 2
+```
+
 The default DNG layout is `preview-subifd`: IFD0 is a JPEG-compressed RGB preview, and the raw image data is stored in a Raw SubIFD. To write the older single raw IFD layout, pass:
 
 ```powershell
@@ -264,6 +272,8 @@ result = convert(
     cfa_pattern="rggb",
     iso=100,
     white_balance_kelvin=6500,
+    color_matrix_1=None,
+    as_shot_neutral=None,
     shot_noise=0.0,
     read_noise=0.0,
     row_noise=0.0,

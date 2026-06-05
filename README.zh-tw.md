@@ -198,6 +198,14 @@ uv run image2dng input.tif output.dng `
 
 CLI 預設不會覆寫既有輸出檔。只有在確定要替換輸出時才傳入 `--overwrite`。
 
+若需要進階 virtual camera profile 實驗，可顯式覆寫 DNG color metadata。這只寫入 `ColorMatrix1` 與 `AsShotNeutral` tags，不會把輸入影像重新做 color grading：
+
+```powershell
+uv run image2dng input.tif output-profile.dng `
+  --color-matrix-1 1 0 0 0 1 0 0 0 1 `
+  --as-shot-neutral 0.5 1 2
+```
+
 預設 DNG layout 為 `preview-subifd`：IFD0 是 JPEG-compressed RGB preview，raw image data 寫在 Raw SubIFD。需要回到舊版單一 raw IFD layout 時，可傳入：
 
 ```powershell
@@ -259,6 +267,8 @@ result = convert(
     cfa_pattern="rggb",
     iso=100,
     white_balance_kelvin=6500,
+    color_matrix_1=None,
+    as_shot_neutral=None,
     shot_noise=0.0,
     read_noise=0.0,
     row_noise=0.0,

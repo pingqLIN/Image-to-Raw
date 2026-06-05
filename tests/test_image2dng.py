@@ -16,7 +16,7 @@ import pytest
 import tifffile
 from PIL import Image
 
-from image2dng import OutputExistsError, convert
+from image2dng import InvalidMetadataError, OutputExistsError, convert
 from image2dng.cli import main
 from image2dng.compatibility import (
     PROCESSOR_TOOL_SPECS,
@@ -26,8 +26,10 @@ from image2dng.compatibility import (
     run_processor_compatibility,
 )
 from image2dng.dng_writer import (
+    TAG_AS_SHOT_NEUTRAL,
     TAG_CFA_PATTERN,
     TAG_CFA_REPEAT_PATTERN_DIM,
+    TAG_COLOR_MATRIX_1,
     TAG_DEFAULT_SCALE,
     TAG_DNG_BACKWARD_VERSION,
     TAG_DNG_VERSION,
@@ -321,6 +323,121 @@ def test_public_convert_api_returns_result(tmp_path):
     assert result.raw_data_unique_id == _raw_data_unique_id_hex(output_path)
     validation = validate_dng(output_path, run_smoke=False)
     assert validation.ok, validation.errors
+
+
+def test_public_convert_api_accepts_explicit_camera_profile_overrides(tmp_path):
+    input_path = tmp_path / "profile-override-input.tif"
+    output_path = tmp_path / "profile-override-output.dng"
+    color_matrix = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    neutral = (0.5, 1.0, 2.0)
+    tifffile.imwrite(input_path, _gradient_image(24, 24), photometric="rgb")
+
+    result = convert(
+        input_path=input_path,
+        output_path=output_path,
+        input_space="linear-rec709",
+        color_matrix_1=color_matrix,
+        as_shot_neutral=neutral,
+        prompt_hash="sha256:profile-override",
+    )
+
+    assert result.raw_data_unique_id == _raw_data_unique_id_hex(output_path)
+    validation = validate_dng(output_path, run_smoke=False)
+    assert validation.ok, validation.errors
+    with tifffile.TiffFile(output_path) as tif:
+        page = _raw_page(tif)
+        assert _tag_rational_values(page.tags[TAG_COLOR_MATRIX_1].value) == list(color_matrix)
+        assert _tag_rational_values(page.tags[TAG_AS_SHOT_NEUTRAL].value) == list(neutral)
+
+
+def test_public_convert_api_rejects_bad_camera_profile_overrides(tmp_path):
+    input_path = tmp_path / "bad-profile-input.tif"
+    output_path = tmp_path / "bad-profile-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(InvalidMetadataError, match="color_matrix_1 must contain exactly 9"):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            color_matrix_1=(1.0, 0.0, 0.0),
+        )
+    with pytest.raises(InvalidMetadataError, match="as_shot_neutral values must be positive"):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            as_shot_neutral=(1.0, 0.0, 1.0),
+        )
+
+
+def test_cli_accepts_explicit_camera_profile_overrides(tmp_path):
+    input_path = tmp_path / "cli-profile-input.tif"
+    output_path = tmp_path / "cli-profile-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(24, 24), photometric="rgb")
+
+    exit_code = main(
+        [
+            str(input_path),
+            str(output_path),
+            "--input-space",
+            "linear-rec709",
+            "--color-matrix-1",
+            "1",
+            "0",
+            "0",
+            "0",
+            "1",
+            "0",
+            "0",
+            "0",
+            "1",
+            "--as-shot-neutral",
+            "0.5",
+            "1",
+            "2",
+        ]
+    )
+
+    assert exit_code == 0
+    validation = validate_dng(output_path, run_smoke=False)
+    assert validation.ok, validation.errors
+    with tifffile.TiffFile(output_path) as tif:
+        page = _raw_page(tif)
+        assert _tag_rational_values(page.tags[TAG_COLOR_MATRIX_1].value) == [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        ]
+        assert _tag_rational_values(page.tags[TAG_AS_SHOT_NEUTRAL].value) == [
+            0.5,
+            1.0,
+            2.0,
+        ]
+
+
+def test_cli_rejects_invalid_camera_profile_override(tmp_path, capsys):
+    input_path = tmp_path / "cli-bad-profile-input.tif"
+    output_path = tmp_path / "cli-bad-profile-output.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    exit_code = main(
+        [
+            str(input_path),
+            str(output_path),
+            "--as-shot-neutral",
+            "1",
+            "0",
+            "1",
+        ]
+    )
+
+    assert exit_code == 3
+    assert "as_shot_neutral values must be positive" in capsys.readouterr().err
 
 
 def test_public_convert_api_generates_cfa_dng(tmp_path):
@@ -3862,6 +3979,13 @@ def _raw_page(tif: tifffile.TiffFile) -> tifffile.TiffPage:
     page = find_raw_image_page(tif)
     assert page is not None
     return page
+
+
+def _tag_rational_values(values: tuple[int, ...]) -> list[float]:
+    return [
+        numerator / denominator
+        for numerator, denominator in zip(values[::2], values[1::2], strict=True)
+    ]
 
 
 def _gradient_image(width: int, height: int) -> np.ndarray:
