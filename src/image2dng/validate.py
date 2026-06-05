@@ -15,6 +15,7 @@ from image2dng.dng_writer import (
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
     TAG_CALIBRATION_ILLUMINANT_1,
+    TAG_CFA_LAYOUT,
     TAG_CFA_PATTERN,
     TAG_CFA_PLANE_COLOR,
     TAG_CFA_REPEAT_PATTERN_DIM,
@@ -505,6 +506,7 @@ def _check_cfa_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
         TAG_CFA_REPEAT_PATTERN_DIM: "CFARepeatPatternDim",
         TAG_CFA_PATTERN: "CFAPattern",
         TAG_CFA_PLANE_COLOR: "CFAPlaneColor",
+        TAG_CFA_LAYOUT: "CFALayout",
     }
     for code, name in required.items():
         if code not in page.tags:
@@ -515,6 +517,19 @@ def _check_cfa_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
     pattern = _as_tuple(_tag_value(page, TAG_CFA_PATTERN))
     if pattern and len(pattern) != 4:
         result.errors.append(f"CFAPattern must contain 4 entries, got {len(pattern)}")
+    elif pattern and tuple(int(value) for value in pattern) not in {
+        (0, 1, 1, 2),
+        (2, 1, 1, 0),
+        (1, 0, 2, 1),
+        (1, 2, 0, 1),
+    }:
+        result.errors.append(f"CFAPattern must match a supported 2x2 Bayer pattern, got {pattern}")
+    plane_color = _as_tuple(_tag_value(page, TAG_CFA_PLANE_COLOR))
+    if plane_color and tuple(int(value) for value in plane_color) != (0, 1, 2):
+        result.errors.append(f"CFAPlaneColor must be 0,1,2, got {plane_color}")
+    layout = _tag_value(page, TAG_CFA_LAYOUT)
+    if layout is not None and int(layout) != 1:
+        result.errors.append(f"CFALayout must be 1, got {layout}")
 
 
 def _check_xmp(page: tifffile.TiffPage, result: ValidationResult) -> None:

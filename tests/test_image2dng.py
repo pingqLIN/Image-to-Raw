@@ -31,7 +31,9 @@ from image2dng.dng_writer import (
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
     TAG_CALIBRATION_ILLUMINANT_1,
+    TAG_CFA_LAYOUT,
     TAG_CFA_PATTERN,
+    TAG_CFA_PLANE_COLOR,
     TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_COLOR_MATRIX_1,
     TAG_DEFAULT_CROP_ORIGIN,
@@ -49,7 +51,12 @@ from image2dng.dng_writer import (
     TAG_XMP,
 )
 from image2dng.image_processing import build_cfa_buffer, build_linearraw_buffer
-from image2dng.models import PHOTOMETRIC_LINEAR_RAW, AIMetadataModel, CameraProfileModel
+from image2dng.models import (
+    PHOTOMETRIC_CFA,
+    PHOTOMETRIC_LINEAR_RAW,
+    AIMetadataModel,
+    CameraProfileModel,
+)
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
@@ -3956,6 +3963,47 @@ def test_cfa_mosaic_uses_requested_pattern(tmp_path):
     assert raw[0, 1] == 5000
     assert raw[1, 0] == 8000
     assert raw[1, 1] == 10000
+
+
+def test_validate_dng_rejects_bad_cfa_tags(tmp_path):
+    input_path = tmp_path / "bad-cfa-input.tif"
+    output_path = tmp_path / "bad-cfa.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_cfa_buffer(input_path, "linear-rec709", cfa_pattern="rggb")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-cfa"),
+        )
+        if tag[0] not in {TAG_CFA_PATTERN, TAG_CFA_PLANE_COLOR, TAG_CFA_LAYOUT}
+    ]
+    tags.extend(
+        [
+            (TAG_CFA_PATTERN, "B", 4, (0, 0, 0, 0), False),
+            (TAG_CFA_PLANE_COLOR, "B", 3, (0, 2, 1), False),
+            (TAG_CFA_LAYOUT, "H", 1, 2, False),
+        ]
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_CFA,
+        compression=None,
+        metadata=None,
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "CFAPattern must match a supported 2x2 Bayer pattern, got (0, 0, 0, 0)" in (
+        result.errors
+    )
+    assert "CFAPlaneColor must be 0,1,2, got (0, 2, 1)" in result.errors
+    assert "CFALayout must be 1, got 2" in result.errors
 
 
 def test_public_convert_refuses_existing_output_without_overwrite(tmp_path):
