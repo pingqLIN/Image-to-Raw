@@ -7,11 +7,19 @@ from image2dng.api import (
     Image2DNGError,
     InvalidMetadataError,
     OutputExistsError,
+    OutputMode,
     UnsupportedInputError,
     ValidationError,
     convert,
 )
-from image2dng.models import AIMetadataModel, CameraProfileModel, CoreRawModel
+from image2dng.models import (
+    AIMetadataModel,
+    CameraProfileModel,
+    CfaPattern,
+    CoreRawModel,
+    PhotometricName,
+    RawMode,
+)
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
     GenerationScene,
@@ -48,6 +56,7 @@ __all__ = [
     "AIMetadataModel",
     "CameraProfileModel",
     "ConversionResult",
+    "CfaPattern",
     "CoreRawModel",
     "ExternalSceneLinearInput",
     "GenerationScene",
@@ -55,9 +64,12 @@ __all__ = [
     "Image2DNGError",
     "InvalidMetadataError",
     "NOISE_PRIORITY_REACTION_MODEL",
+    "OutputMode",
     "OutputExistsError",
+    "PhotometricName",
     "PipelineBatchResult",
     "REGION_EXPOSURE_REACTION_MODEL",
+    "RawMode",
     "SEMANTIC_SCENE_SCHEMA",
     "SEMANTIC_REACTION_MODEL_REGISTRY",
     "SUPPORTED_REACTION_INPUT_SPACES",

@@ -1210,7 +1210,13 @@ def test_semantic_reaction_model_registry_reports_implemented_and_deferred_model
 
 def test_public_package_exports_implemented_semantic_reactions():
     import image2dng
+    from image2dng.api import OutputMode
+    from image2dng.models import CfaPattern, PhotometricName, RawMode
 
+    assert image2dng.CfaPattern is CfaPattern
+    assert image2dng.OutputMode is OutputMode
+    assert image2dng.PhotometricName is PhotometricName
+    assert image2dng.RawMode is RawMode
     assert (
         image2dng.apply_highlight_clipping_policy_reaction
         is apply_highlight_clipping_policy_reaction
