@@ -416,6 +416,15 @@ def test_raw_native_manifest_contract_is_stable(tmp_path):
         "dng_layout": "preview-subifd",
         "embedded_preview": "IFD0 JPEG preview",
         "raw_ifd_location": "Raw SubIFD referenced from IFD0",
+        "dng_payload_boundary": {
+            "exif_ifd": "not-written",
+            "semantic_mask_ifd": "not-written",
+            "depth_ifd": "not-written",
+            "dng_private_data": "not-written",
+            "semantic_sidecar": (
+                "preserved as copied sidecar and manifest artifacts when provided"
+            ),
+        },
         "external_scene_linear_boundary": "available",
         "semantic_boundary": (
             "semantic sidecar is preserved by default; opt-in implemented semantic reactions "

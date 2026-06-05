@@ -640,6 +640,7 @@ def _batch_manifest(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, 
             "dng_layout": _batch_dng_layout(scenes),
             "embedded_preview": _batch_embedded_preview(scenes),
             "raw_ifd_location": _batch_raw_ifd_location(scenes),
+            "dng_payload_boundary": _dng_payload_boundary(),
             "external_scene_linear_boundary": "available",
             "semantic_boundary": SEMANTIC_BOUNDARY,
         },
@@ -666,6 +667,16 @@ def _batch_raw_ifd_location(scenes: list[PipelineSceneResult]) -> str:
     if _batch_dng_layout(scenes) == "single-raw-ifd":
         return "IFD0"
     return "Raw SubIFD referenced from IFD0"
+
+
+def _dng_payload_boundary() -> dict[str, str]:
+    return {
+        "exif_ifd": "not-written",
+        "semantic_mask_ifd": "not-written",
+        "depth_ifd": "not-written",
+        "dng_private_data": "not-written",
+        "semantic_sidecar": "preserved as copied sidecar and manifest artifacts when provided",
+    }
 
 
 def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, Any]:

@@ -98,6 +98,7 @@ Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與
 - `jpeg/*-cfa-rggb.jpg`：由 CFA DNG raw page false-color render 的 sidecar JPEG preview。
 - `validation/*.json`：validator 結果。
 - `manifests/raw-native-node-batch.json`：節點流程、輸入輸出、參數與驗證摘要。
+- Batch manifest 的 `graph.dng_payload_boundary` 會明確記錄目前未寫入 EXIF IFD、semantic mask IFD、depth IFD 或 `DNGPrivateData`；semantic sidecar 仍是 copied sidecar 與 manifest artifacts，不是 DNG payload embedding。
 - 若使用 producer metadata，batch manifest 與 sample index 會記錄 `producer_metadata` 與 `producer_metadata_artifacts`；這是 sidecar/manifest 保存，不是 DNG payload embedding。
 - 若使用 semantic sidecar，batch manifest 會記錄 `semantic_artifacts`、`semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`；sample index 會記錄 `semantic_contract`、`semantic_to_raw_status` 與 `semantic_validation`。
 - 若啟用 semantic reaction，batch manifest 與 sample index 會記錄 `semantic_reaction` summary；reaction-applied input 會以 `inputs/*-semantic-reaction.tif` 保存。
