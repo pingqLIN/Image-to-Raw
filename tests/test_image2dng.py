@@ -79,6 +79,7 @@ from image2dng.semantic_reaction import (
     semantic_reaction_model_registry,
 )
 from image2dng.semantic_scene import SEMANTIC_SCENE_SCHEMA, validate_semantic_scene
+from image2dng.sensor_effects import SensorEffectModel
 from image2dng.validate import (
     TAG_MAKER_NOTE,
     find_raw_image_page,
@@ -4020,6 +4021,26 @@ def test_cli_rejects_negative_sensor_effects(tmp_path, capsys):
 
     assert exit_code == 3
     assert "shot_noise must be non-negative" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("field_name", ["shot_noise", "read_noise", "row_noise"])
+def test_sensor_effect_model_rejects_non_finite_noise(field_name):
+    with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
+        SensorEffectModel(**{field_name: float("nan")})
+
+
+def test_sensor_effect_model_rejects_negative_seed():
+    with pytest.raises(ValueError, match="seed must be a non-negative integer"):
+        SensorEffectModel(seed=-1)
+
+
+def test_public_convert_rejects_negative_sensor_seed(tmp_path):
+    input_path = tmp_path / "negative-seed.tif"
+    output_path = tmp_path / "negative-seed.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(InvalidMetadataError, match="seed must be a non-negative integer"):
+        convert(input_path=input_path, output_path=output_path, sensor_effect_seed=-1)
 
 
 def test_cfa_mosaic_uses_requested_pattern(tmp_path):

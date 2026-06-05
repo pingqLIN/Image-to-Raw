@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from numbers import Integral
 
 import numpy as np
 
@@ -13,12 +15,17 @@ class SensorEffectModel:
     seed: int | None = None
 
     def __post_init__(self) -> None:
-        if self.shot_noise < 0:
-            raise ValueError("shot_noise must be non-negative")
-        if self.read_noise < 0:
-            raise ValueError("read_noise must be non-negative")
-        if self.row_noise < 0:
-            raise ValueError("row_noise must be non-negative")
+        for field_name, value in (
+            ("shot_noise", self.shot_noise),
+            ("read_noise", self.read_noise),
+            ("row_noise", self.row_noise),
+        ):
+            if not math.isfinite(float(value)) or value < 0:
+                raise ValueError(f"{field_name} must be non-negative finite")
+        if self.seed is not None and (
+            not isinstance(self.seed, Integral) or self.seed < 0
+        ):
+            raise ValueError("seed must be a non-negative integer")
 
     @property
     def enabled(self) -> bool:
