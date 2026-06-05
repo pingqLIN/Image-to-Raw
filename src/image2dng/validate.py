@@ -11,6 +11,7 @@ import tifffile
 
 from image2dng.compatibility import resolve_processor_executable
 from image2dng.dng_writer import (
+    TAG_ACTIVE_AREA,
     TAG_AS_SHOT_NEUTRAL,
     TAG_BLACK_LEVEL,
     TAG_CALIBRATION_ILLUMINANT_1,
@@ -18,6 +19,8 @@ from image2dng.dng_writer import (
     TAG_CFA_PLANE_COLOR,
     TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_COLOR_MATRIX_1,
+    TAG_DEFAULT_CROP_ORIGIN,
+    TAG_DEFAULT_CROP_SIZE,
     TAG_DEFAULT_SCALE,
     TAG_DNG_BACKWARD_VERSION,
     TAG_DNG_VERSION,
@@ -140,6 +143,7 @@ def validate_dng(path: str | Path, *, run_smoke: bool = True) -> ValidationResul
             _check_embedded_preview_layout(tif, page, result)
             _check_required_tags(page, result)
             _check_geometry(page, result)
+            _check_raw_area_tags(page, result)
             _check_levels(page, result)
             _check_camera_profile_tags(page, result)
             _check_cfa_tags(page, result)
@@ -367,6 +371,44 @@ def _check_geometry(page: tifffile.TiffPage, result: ValidationResult) -> None:
         result.errors.append(
             f"buffer byte count mismatch: expected {expected_bytes}, got {actual_bytes}"
         )
+
+
+def _check_raw_area_tags(page: tifffile.TiffPage, result: ValidationResult) -> None:
+    width = _tag_value(page, TAG_IMAGE_WIDTH)
+    height = _tag_value(page, TAG_IMAGE_LENGTH)
+    if width is None or height is None:
+        return
+    expected_active_area = (0, 0, int(height), int(width))
+    expected_crop_origin = (0, 0)
+    expected_crop_size = (int(width), int(height))
+
+    default_scale = _rational_tag_values(
+        _tag_value(page, TAG_DEFAULT_SCALE),
+        "DefaultScale",
+        result,
+    )
+    if default_scale and len(default_scale) != 2:
+        result.errors.append(
+            f"DefaultScale must contain 2 rational values, got {len(default_scale)}"
+        )
+    elif default_scale and any(value != 1.0 for value in default_scale):
+        result.errors.append(f"DefaultScale must be 1/1, 1/1, got {default_scale}")
+
+    active_area = _as_tuple(_tag_value(page, TAG_ACTIVE_AREA))
+    if active_area and tuple(int(value) for value in active_area) != expected_active_area:
+        result.errors.append(
+            f"ActiveArea must be {expected_active_area}, got {active_area}"
+        )
+
+    crop_origin = _as_tuple(_tag_value(page, TAG_DEFAULT_CROP_ORIGIN))
+    if crop_origin and tuple(int(value) for value in crop_origin) != expected_crop_origin:
+        result.errors.append(
+            f"DefaultCropOrigin must be {expected_crop_origin}, got {crop_origin}"
+        )
+
+    crop_size = _as_tuple(_tag_value(page, TAG_DEFAULT_CROP_SIZE))
+    if crop_size and tuple(int(value) for value in crop_size) != expected_crop_size:
+        result.errors.append(f"DefaultCropSize must be {expected_crop_size}, got {crop_size}")
 
 
 def _check_levels(page: tifffile.TiffPage, result: ValidationResult) -> None:

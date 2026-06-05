@@ -27,10 +27,13 @@ from image2dng.compatibility import (
     run_processor_compatibility,
 )
 from image2dng.dng_writer import (
+    TAG_ACTIVE_AREA,
     TAG_AS_SHOT_NEUTRAL,
     TAG_CFA_PATTERN,
     TAG_CFA_REPEAT_PATTERN_DIM,
     TAG_COLOR_MATRIX_1,
+    TAG_DEFAULT_CROP_ORIGIN,
+    TAG_DEFAULT_CROP_SIZE,
     TAG_DEFAULT_SCALE,
     TAG_DNG_BACKWARD_VERSION,
     TAG_DNG_VERSION,
@@ -228,6 +231,54 @@ def test_validate_dng_rejects_bad_camera_profile_tags(tmp_path):
     assert not result.ok
     assert "ColorMatrix1 must contain 9 rational values, got 8" in result.errors
     assert "AsShotNeutral values must be positive, got 0" in result.errors
+
+
+def test_validate_dng_rejects_bad_raw_area_tags(tmp_path):
+    input_path = tmp_path / "bad-area-input.tif"
+    output_path = tmp_path / "bad-area.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+    raw, core = build_linearraw_buffer(input_path, "linear-rec709")
+    tags = [
+        tag
+        for tag in dng_writer._raw_extratags(
+            raw,
+            core,
+            CameraProfileModel.from_white_balance(6500),
+            AIMetadataModel(prompt_hash="sha256:bad-area"),
+        )
+        if tag[0]
+        not in {
+            TAG_DEFAULT_SCALE,
+            TAG_ACTIVE_AREA,
+            TAG_DEFAULT_CROP_ORIGIN,
+            TAG_DEFAULT_CROP_SIZE,
+        }
+    ]
+    tags.extend(
+        [
+            (TAG_DEFAULT_SCALE, "2I", 2, ((1, 2), (1, 1)), False),
+            (TAG_ACTIVE_AREA, "I", 4, (1, 0, 8, 8), False),
+            (TAG_DEFAULT_CROP_ORIGIN, "I", 2, (1, 0), False),
+            (TAG_DEFAULT_CROP_SIZE, "I", 2, (7, 8), False),
+        ]
+    )
+    tifffile.imwrite(
+        output_path,
+        raw,
+        photometric=PHOTOMETRIC_LINEAR_RAW,
+        compression=None,
+        metadata=None,
+        planarconfig="contig",
+        extratags=tags,
+    )
+
+    result = validate_dng(output_path, run_smoke=False)
+
+    assert not result.ok
+    assert "DefaultScale must be 1/1, 1/1, got [0.5, 1.0]" in result.errors
+    assert "ActiveArea must be (0, 0, 8, 8), got (1, 0, 8, 8)" in result.errors
+    assert "DefaultCropOrigin must be (0, 0), got (1, 0)" in result.errors
+    assert "DefaultCropSize must be (8, 8), got (7, 8)" in result.errors
 
 
 def test_dng_writes_embedded_jpeg_preview_with_raw_subifd(tmp_path):
