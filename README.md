@@ -131,6 +131,8 @@ Use the CLI to inspect the current implemented and deferred semantic reaction bo
 ```powershell
 uv run image2dng semantic-reactions
 uv run image2dng semantic-reactions --json
+uv run image2dng validate-semantic renderer-frame-001.semantic.json
+uv run image2dng validate-semantic renderer-frame-001.semantic.json --json
 ```
 
 ## Run the development baseline verification

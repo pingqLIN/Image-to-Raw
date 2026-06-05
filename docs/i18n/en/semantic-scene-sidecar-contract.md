@@ -142,7 +142,14 @@ Current reaction model matrix:
 
 ## Validation
 
-Use the Python API to validate a sidecar:
+Use the CLI to validate a sidecar:
+
+```powershell
+uv run image2dng validate-semantic renderer-frame-001.semantic.json
+uv run image2dng validate-semantic renderer-frame-001.semantic.json --json
+```
+
+The Python API is also available:
 
 ```python
 from image2dng import validate_semantic_scene

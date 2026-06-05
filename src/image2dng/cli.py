@@ -8,6 +8,7 @@ from pathlib import Path
 from image2dng import __version__
 from image2dng.api import Image2DNGError, convert
 from image2dng.semantic_reaction import semantic_reaction_model_registry
+from image2dng.semantic_scene import validate_semantic_scene
 from image2dng.validate import validate_dng
 
 
@@ -16,6 +17,9 @@ def main(argv: list[str] | None = None) -> int:
     if tokens and tokens[0] == "validate":
         args = build_validate_parser().parse_args(tokens[1:])
         return _run_validate(args)
+    if tokens and tokens[0] == "validate-semantic":
+        args = build_validate_semantic_parser().parse_args(tokens[1:])
+        return _run_validate_semantic(args)
     if tokens and tokens[0] == "semantic-reactions":
         args = build_semantic_reactions_parser().parse_args(tokens[1:])
         return _run_semantic_reactions(args)
@@ -98,6 +102,20 @@ def build_semantic_reactions_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_validate_semantic_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="image2dng validate-semantic",
+        description="Validate an image2dng semantic scene sidecar.",
+    )
+    parser.add_argument("sidecar", type=Path)
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="write a structured semantic scene validation report as JSON",
+    )
+    return parser
+
+
 def _run_generate(args: argparse.Namespace) -> int:
     try:
         result = convert(
@@ -165,3 +183,19 @@ def _run_semantic_reactions(args: argparse.Namespace) -> int:
         print(f"  scope: {entry['scope']}")
         print(f"  boundary: {entry['boundary']}")
     return 0
+
+
+def _run_validate_semantic(args: argparse.Namespace) -> int:
+    result = validate_semantic_scene(args.sidecar)
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        return 0 if result.ok else 1
+
+    for warning in result.warnings:
+        print(f"warning: {warning}")
+    if result.ok:
+        print(f"ok: {result.path}")
+        return 0
+    for error in result.errors:
+        print(f"error: {error}")
+    return 1

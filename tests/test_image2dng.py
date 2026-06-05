@@ -3434,6 +3434,36 @@ def test_semantic_reactions_cli_outputs_human_readable_registry(capsys):
     assert "boundary:" in output
 
 
+def test_validate_semantic_cli_outputs_json(tmp_path, capsys):
+    semantic_path = _write_semantic_scene(tmp_path, width=6, height=4, include_hash=True)
+
+    exit_code = main(["validate-semantic", str(semantic_path), "--json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["schema"] == SEMANTIC_SCENE_SCHEMA
+    assert payload["scene_dimensions"] == {"height": 4, "width": 6}
+    assert payload["counts"]["regions"] == 1
+    assert payload["errors"] == []
+
+
+def test_validate_semantic_cli_reports_errors(tmp_path, capsys):
+    semantic_path = _write_semantic_scene(tmp_path, width=6, height=4)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["regions"][0]["mask_asset_id"] = "missing-mask"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    exit_code = main(["validate-semantic", str(semantic_path)])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "warning: assets[0].sha256 is missing" in captured.out
+    assert "error: regions[0].mask_asset_id references unknown asset: missing-mask" in (
+        captured.out
+    )
+
+
 def test_missing_smoke_tools_are_reported_as_skipped(tmp_path, monkeypatch):
     output_path = _write_test_dng(tmp_path, prompt_hash="sha256:smoke-skipped")
     monkeypatch.setattr(

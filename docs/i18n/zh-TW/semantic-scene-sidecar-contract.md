@@ -142,7 +142,14 @@ Reaction 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`
 
 ## 驗證
 
-可透過 Python API 驗證 sidecar：
+可透過 CLI 驗證 sidecar：
+
+```powershell
+uv run image2dng validate-semantic renderer-frame-001.semantic.json
+uv run image2dng validate-semantic renderer-frame-001.semantic.json --json
+```
+
+也可透過 Python API 驗證：
 
 ```python
 from image2dng import validate_semantic_scene
