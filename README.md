@@ -28,7 +28,7 @@ This product includes DNG technology under license by Adobe.
 | Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
 | Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
 | RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
-| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; optional region-exposure reaction prototype |
+| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; optional deterministic reaction prototypes |
 | Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
 | Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
 

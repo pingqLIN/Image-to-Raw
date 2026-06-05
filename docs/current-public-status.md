@@ -10,6 +10,7 @@ This document records the current engineering baseline for public exchange. It a
 - Write uncompressed 16-bit three-channel `LinearRaw` DNG output.
 - Write explicit simulated single-channel CFA DNG output with `rggb`, `bggr`, `grbg`, or `gbrg` Bayer patterns.
 - Apply optional deterministic synthetic sensor effects for demos and compatibility testing.
+- Validate and preserve `image2dng.semantic_scene.v1` semantic sidecars, with explicit opt-in support for implemented deterministic semantic reactions.
 - Embed AI provenance, selected raw mode, simulated camera parameters, and enabled sensor-effect settings in XMP.
 - Validate generated DNG files with structural checks, mode-aware tag checks, XMP checks, and optional local smoke tools.
 - Use either the CLI or the public Python `convert()` API.
@@ -26,6 +27,8 @@ Primary interfaces:
 
 - CLI: `uv run image2dng input.tif output.dng`
 - Validator: `uv run image2dng validate output.dng --json`
+- Semantic sidecar validator: `uv run image2dng validate-semantic scene.semantic.json --json`
+- Semantic reaction registry: `uv run image2dng semantic-reactions --json`
 - Python API: `from image2dng import convert`
 - Demo generator: `uv run python scripts/generate_demo_samples.py --output-dir demo-output`
 
@@ -43,5 +46,5 @@ The current high-signal checks are:
 - `uv run pytest`
 - `uv run ruff check`
 - `uv build`
-- wheel install smoke for `image2dng --help` and `image2dng validate --help`
+- wheel install smoke for `image2dng --help`, `image2dng validate --help`, `image2dng validate-semantic --help`, and `image2dng semantic-reactions --help`
 - demo sample generation and validation for LinearRaw, CFA, and CFA with sensor effects
