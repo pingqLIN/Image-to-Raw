@@ -50,6 +50,17 @@ def main() -> int:
     steps = [
         ("pytest", ["uv", "run", "pytest"]),
         ("ruff", ["uv", "run", "ruff", "check"]),
+        ("build", ["uv", "build"]),
+        ("cli-help", ["uv", "run", "image2dng", "--help"]),
+        ("cli-validate-help", ["uv", "run", "image2dng", "validate", "--help"]),
+        (
+            "cli-validate-semantic-help",
+            ["uv", "run", "image2dng", "validate-semantic", "--help"],
+        ),
+        (
+            "cli-semantic-reactions-help",
+            ["uv", "run", "image2dng", "semantic-reactions", "--help"],
+        ),
         (
             "raw-native-batch",
             [
