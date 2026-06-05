@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,8 +81,8 @@ def convert(
         raise InvalidMetadataError(f"unsupported DNG layout: {dng_layout}")
     if iso <= 0:
         raise InvalidMetadataError("iso must be positive")
-    if white_balance_kelvin <= 0:
-        raise InvalidMetadataError("white_balance_kelvin must be positive")
+    if not math.isfinite(float(white_balance_kelvin)) or white_balance_kelvin <= 0:
+        raise InvalidMetadataError("white_balance_kelvin must be positive finite")
     try:
         sensor_effects = SensorEffectModel(
             shot_noise=shot_noise,

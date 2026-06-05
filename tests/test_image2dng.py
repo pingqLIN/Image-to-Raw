@@ -57,6 +57,7 @@ from image2dng.models import (
     PHOTOMETRIC_LINEAR_RAW,
     AIMetadataModel,
     CameraProfileModel,
+    cct_to_as_shot_neutral,
 )
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
@@ -4090,6 +4091,11 @@ def test_ai_metadata_model_rejects_non_positive_capture_values():
         AIMetadataModel(white_balance_kelvin=0)
 
 
+def test_cct_to_as_shot_neutral_rejects_non_finite_kelvin():
+    with pytest.raises(ValueError, match="white balance Kelvin must be positive finite"):
+        cct_to_as_shot_neutral(float("nan"))
+
+
 @pytest.mark.parametrize("field_name", ["shot_noise", "read_noise", "row_noise"])
 def test_ai_metadata_model_rejects_negative_noise_fields(field_name):
     with pytest.raises(ValueError, match=f"{field_name} must be non-negative finite"):
@@ -4226,6 +4232,22 @@ def test_cli_returns_usage_error_for_invalid_metadata(tmp_path, capsys):
 
     assert exit_code == 3
     assert "iso must be positive" in capsys.readouterr().err
+
+
+def test_public_convert_rejects_non_finite_white_balance(tmp_path):
+    input_path = tmp_path / "non-finite-white-balance.tif"
+    output_path = tmp_path / "non-finite-white-balance.dng"
+    tifffile.imwrite(input_path, _gradient_image(8, 8), photometric="rgb")
+
+    with pytest.raises(
+        InvalidMetadataError,
+        match="white_balance_kelvin must be positive finite",
+    ):
+        convert(
+            input_path=input_path,
+            output_path=output_path,
+            white_balance_kelvin=float("inf"),
+        )
 
 
 def test_metadata_round_trip(tmp_path):

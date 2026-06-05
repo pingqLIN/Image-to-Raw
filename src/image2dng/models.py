@@ -206,8 +206,8 @@ class AIMetadataModel:
 
 def cct_to_as_shot_neutral(kelvin: float) -> tuple[float, float, float]:
     """Approximate white point coordinates normalized to green for DNG AsShotNeutral."""
-    if kelvin <= 0:
-        raise ValueError("white balance Kelvin must be positive")
+    if not math.isfinite(float(kelvin)) or kelvin <= 0:
+        raise ValueError("white balance Kelvin must be positive finite")
 
     temperature = max(1000.0, min(40000.0, kelvin)) / 100.0
     if temperature <= 66.0:
