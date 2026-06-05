@@ -2223,6 +2223,41 @@ def test_external_scene_manifest_loader_resolves_relative_paths(tmp_path):
     ]
 
 
+def test_external_scene_manifest_loader_rejects_non_object_root(tmp_path):
+    manifest_path = tmp_path / "external-scenes.json"
+    manifest_path.write_text(json.dumps([]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="external scene manifest must be an object"):
+        load_external_scene_manifest(manifest_path)
+
+
+def test_external_scene_manifest_loader_rejects_non_string_text_fields(tmp_path):
+    source_path = tmp_path / "manifest-scene.tif"
+    manifest_path = tmp_path / "external-scenes.json"
+    tifffile.imwrite(source_path, _gradient_image(8, 8), photometric="rgb")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "image2dng.external_scene_linear_sources.v1",
+                "scenes": [
+                    {
+                        "slug": "manifest-scene",
+                        "path": source_path.name,
+                        "prompt": 123,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="manifest-scene: prompt must be a string when present",
+    ):
+        load_external_scene_manifest(manifest_path)
+
+
 def test_visual_demo_generates_phase3_evidence(tmp_path):
     output_dir = tmp_path / "visual-demo"
 

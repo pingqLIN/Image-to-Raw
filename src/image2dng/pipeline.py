@@ -231,6 +231,8 @@ def run_external_scene_linear_batch(
 def load_external_scene_manifest(path: str | Path) -> list[ExternalSceneLinearInput]:
     source = Path(path)
     payload = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("external scene manifest must be an object")
     if payload.get("schema") != "image2dng.external_scene_linear_sources.v1":
         raise ValueError("unexpected external scene manifest schema")
     scenes = payload.get("scenes")
@@ -814,11 +816,16 @@ def _external_scene_from_manifest_item(
         slug=slug,
         path=source_path,
         input_space=input_space,
-        prompt=str(item.get("prompt", "")),
-        description=str(item.get("description", "")),
-        lighting=str(item.get("lighting", "")),
-        weather=str(item.get("weather", "")),
-        producer=str(item.get("producer", "external-scene-linear")),
+        prompt=_optional_manifest_string(item, "prompt", "", slug),
+        description=_optional_manifest_string(item, "description", "", slug),
+        lighting=_optional_manifest_string(item, "lighting", "", slug),
+        weather=_optional_manifest_string(item, "weather", "", slug),
+        producer=_optional_manifest_string(
+            item,
+            "producer",
+            "external-scene-linear",
+            slug,
+        ),
         semantic_manifest=semantic_manifest,
         apply_semantic_reaction=apply_semantic_reaction,
         producer_metadata=producer_metadata,
@@ -1019,6 +1026,18 @@ def _manifest_string(item: dict[str, object], key: str) -> str:
     value = item.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"external scene manifest entry missing string field: {key}")
+    return value
+
+
+def _optional_manifest_string(
+    item: dict[str, object],
+    key: str,
+    default: str,
+    slug: str,
+) -> str:
+    value = item.get(key, default)
+    if not isinstance(value, str):
+        raise ValueError(f"{slug}: {key} must be a string when present")
     return value
 
 
