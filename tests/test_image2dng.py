@@ -3251,6 +3251,36 @@ def test_verify_development_baseline_inspects_demo_samples(tmp_path):
     assert all(sample["validation"]["ok"] is True for sample in report["samples"])
 
 
+def test_verify_development_baseline_rejects_invalid_batch_manifest_json(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    batch_dir = tmp_path / "raw-native-node-batch"
+    manifest_dir = batch_dir / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "raw-native-node-batch.json").write_text("{", encoding="utf-8")
+    (manifest_dir / "sample-index.json").write_text(
+        json.dumps({"schema": "image2dng.raw_native_sample_index.v1"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="raw-native manifest JSON is invalid"):
+        module._inspect_batch(batch_dir, tmp_path)
+
+
+def test_verify_development_baseline_rejects_non_object_sample_index(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    batch_dir = tmp_path / "raw-native-node-batch"
+    manifest_dir = batch_dir / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "raw-native-node-batch.json").write_text(
+        json.dumps({"schema": "image2dng.raw_native_node_batch.v1"}),
+        encoding="utf-8",
+    )
+    (manifest_dir / "sample-index.json").write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="raw-native sample index must be a JSON object"):
+        module._inspect_batch(batch_dir, tmp_path)
+
+
 def test_run_adobe_dng_sdk_validation_refuses_unsafe_output_dirs(tmp_path):
     module = _load_script_module("run_adobe_dng_sdk_validation")
     repo_root = tmp_path / "repo"

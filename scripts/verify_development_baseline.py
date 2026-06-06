@@ -166,8 +166,8 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
     if not sample_index_path.exists():
         raise ValueError(f"sample index missing: {sample_index_path}")
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    sample_index = json.loads(sample_index_path.read_text(encoding="utf-8"))
+    manifest = _load_json_object(manifest_path, "raw-native manifest")
+    sample_index = _load_json_object(sample_index_path, "raw-native sample index")
     _require(manifest.get("schema") == "image2dng.raw_native_node_batch.v1", "unexpected schema")
     _require(
         sample_index.get("schema") == "image2dng.raw_native_sample_index.v1",
@@ -197,6 +197,18 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
         "sample_index_all_validations_ok": sample_index.get("all_validations_ok"),
         "scenes": scene_reports,
     }
+
+
+def _load_json_object(path: Path, label: str) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} JSON is invalid: {exc.msg}") from exc
+    except OSError as exc:
+        raise ValueError(f"{label} could not be read: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return payload
 
 
 def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
