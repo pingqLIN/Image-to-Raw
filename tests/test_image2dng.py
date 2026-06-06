@@ -3914,6 +3914,26 @@ def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path
     assert sidecar["regions"][0]["raw_statistics"]["clipped_pixel_ratio"] >= 0
 
 
+def test_generate_fivek_semantic_physics_sample_manifest_records_invalid_sidecar(tmp_path):
+    module = _load_script_module("generate_fivek_semantic_physics_sample")
+    semantic_path = tmp_path / "broken.semantic.json"
+    semantic_path.write_text("{", encoding="utf-8")
+
+    manifest = module._manifest(tmp_path, [semantic_path])
+
+    sample = manifest["samples"][0]
+    assert manifest["all_validations_ok"] is False
+    assert sample["sample_id"] == "broken.semantic"
+    assert sample["semantic_sidecar_sha256"].startswith("sha256:")
+    assert sample["validation_ok"] is False
+    assert sample["semantic_physics_fields"] == {
+        "capture_physics": False,
+        "camera_response": False,
+        "region_raw_statistics_count": 0,
+    }
+    assert any("invalid JSON" in error for error in sample["validation"]["errors"])
+
+
 def test_generate_fivek_semantic_physics_sample_rejects_path_like_sample_id(tmp_path):
     module = _load_script_module("generate_fivek_semantic_physics_sample")
     fivek_dir = tmp_path / "fivek-smoke"

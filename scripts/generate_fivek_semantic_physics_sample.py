@@ -290,7 +290,7 @@ def _manifest(output_dir: Path, semantic_paths: list[Path]) -> dict[str, Any]:
 
 def _sample_record(path: Path) -> dict[str, Any]:
     validation = validate_semantic_scene(path)
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _read_payload(path)
     regions = payload.get("regions", [])
     return {
         "sample_id": validation.scene_id or path.stem,
@@ -314,6 +314,14 @@ def _sample_record(path: Path) -> dict[str, Any]:
             ),
         },
     }
+
+
+def _read_payload(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _relative_path(path: Path, base: Path) -> str:
