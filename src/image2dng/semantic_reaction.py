@@ -454,7 +454,13 @@ def apply_target_white_balance_reaction(
 
 
 def load_semantic_payload(path: str | Path) -> dict[str, Any]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    source = Path(path)
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid semantic payload JSON: {exc.msg}") from exc
+    except OSError as exc:
+        raise ValueError(f"cannot read semantic payload: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("semantic payload must be a JSON object")
     return payload

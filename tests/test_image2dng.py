@@ -1060,6 +1060,22 @@ def test_semantic_scene_validator_rejects_unsupported_schema(tmp_path):
     assert "unsupported semantic scene schema: 'example.semantic_scene.v1'" in result.errors
 
 
+def test_load_semantic_payload_rejects_invalid_json(tmp_path):
+    semantic_path = tmp_path / "bad-semantic.json"
+    semantic_path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid semantic payload JSON"):
+        load_semantic_payload(semantic_path)
+
+
+def test_load_semantic_payload_rejects_non_object_root(tmp_path):
+    semantic_path = tmp_path / "bad-semantic.json"
+    semantic_path.write_text(json.dumps([]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="semantic payload must be a JSON object"):
+        load_semantic_payload(semantic_path)
+
+
 def test_semantic_scene_validator_rejects_boolean_numeric_values(tmp_path):
     semantic_path = _write_semantic_scene(tmp_path, width=16, height=12)
     payload = json.loads(semantic_path.read_text(encoding="utf-8"))
