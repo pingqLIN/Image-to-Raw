@@ -733,9 +733,7 @@ def _load_script_module(name: str):
 
 
 def _read_json(path: Path, schema: str) -> dict[str, Any]:
-    if not path.exists():
-        raise ValueError(f"missing JSON report: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _load_json_object(path)
     _require(
         payload.get("schema") == schema,
         f"unexpected schema in {path}: {payload.get('schema')}",
@@ -744,13 +742,23 @@ def _read_json(path: Path, schema: str) -> dict[str, Any]:
 
 
 def _read_json_any(path: Path, schemas: set[str]) -> dict[str, Any]:
-    if not path.exists():
-        raise ValueError(f"missing JSON report: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _load_json_object(path)
     _require(
         payload.get("schema") in schemas,
         f"unexpected schema in {path}: {payload.get('schema')}",
     )
+    return payload
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise ValueError(f"missing JSON report: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON report: {path}: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"JSON report must be an object: {path}")
     return payload
 
 

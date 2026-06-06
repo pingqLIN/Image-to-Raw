@@ -3970,6 +3970,24 @@ def test_processor_compatibility_fails_when_export_output_is_missing(tmp_path, m
     assert "missing output artifact" in payload["dcraw"]["notes"]
 
 
+def test_demo_review_bundle_json_reader_rejects_invalid_json(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    report_path = tmp_path / "report.json"
+    report_path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid JSON report"):
+        module._read_json(report_path, "image2dng.demo_review_bundle.v1")
+
+
+def test_demo_review_bundle_json_reader_rejects_non_object_root(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps([]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="JSON report must be an object"):
+        module._read_json(report_path, "image2dng.demo_review_bundle.v1")
+
+
 def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     module = _load_script_module("generate_demo_review_bundle")
     monkeypatch.setattr("shutil.which", lambda _command: None)
