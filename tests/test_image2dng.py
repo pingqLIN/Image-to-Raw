@@ -2269,6 +2269,14 @@ def test_external_scene_manifest_loader_rejects_non_object_root(tmp_path):
         load_external_scene_manifest(manifest_path)
 
 
+def test_external_scene_manifest_loader_rejects_invalid_json(tmp_path):
+    manifest_path = tmp_path / "external-scenes.json"
+    manifest_path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid external scene manifest JSON"):
+        load_external_scene_manifest(manifest_path)
+
+
 def test_external_scene_manifest_loader_rejects_non_string_text_fields(tmp_path):
     source_path = tmp_path / "manifest-scene.tif"
     manifest_path = tmp_path / "external-scenes.json"
