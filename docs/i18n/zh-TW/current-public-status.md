@@ -44,8 +44,9 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 
 目前高訊號的檢查包括：
 
+- `uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline`
 - `uv run pytest`
 - `uv run ruff check`
 - `uv build`
-- wheel install smoke for `image2dng --help`, `image2dng validate --help`, `image2dng validate-semantic --help`, and `image2dng semantic-reactions --help`
-- 對 LinearRaw、CFA 與 CFA with sensor effects 進行 demo sample generation 與 validation
+- CLI help smoke for `image2dng --help`, `image2dng validate --help`, `image2dng validate-semantic --help`, and `image2dng semantic-reactions --help`
+- 對 LinearRaw、CFA、CFA with sensor effects，以及 RAW-native node batch 進行 local generation、manifest inspection 與 validation

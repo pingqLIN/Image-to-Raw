@@ -44,8 +44,9 @@ See:
 
 The current high-signal checks are:
 
+- `uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline`
 - `uv run pytest`
 - `uv run ruff check`
 - `uv build`
-- wheel install smoke for `image2dng --help`, `image2dng validate --help`, `image2dng validate-semantic --help`, and `image2dng semantic-reactions --help`
-- demo sample generation and validation for LinearRaw, CFA, and CFA with sensor effects
+- CLI help smoke for `image2dng --help`, `image2dng validate --help`, `image2dng validate-semantic --help`, and `image2dng semantic-reactions --help`
+- local generation, manifest inspection, and validation for LinearRaw, CFA, CFA with sensor effects, and the RAW-native node batch
