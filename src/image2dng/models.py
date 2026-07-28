@@ -278,6 +278,36 @@ class CameraProfileModel:
 
 
 @dataclass(frozen=True)
+class ExposurePlacementModel:
+    highlight_headroom_ev: float = 0.0
+    exposure_bias_ev: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.highlight_headroom_ev):
+            raise ValueError("highlight_headroom_ev must be finite")
+        if not math.isfinite(self.exposure_bias_ev):
+            raise ValueError("exposure_bias_ev must be finite")
+        if self.highlight_headroom_ev < 0:
+            raise ValueError("highlight_headroom_ev must be non-negative")
+
+    @property
+    def enabled(self) -> bool:
+        return self.highlight_headroom_ev != 0.0 or self.exposure_bias_ev != 0.0
+
+    @property
+    def scale(self) -> float:
+        return 2.0 ** (self.exposure_bias_ev - self.highlight_headroom_ev)
+
+    def validate_input_space(self, input_space: str) -> None:
+        if self.enabled and input_space not in SCENE_LINEAR_INPUT_SPACES:
+            supported = ", ".join(sorted(SCENE_LINEAR_INPUT_SPACES))
+            raise ValueError(
+                "exposure placement requires true scene-linear input_space; "
+                f"got {input_space!r}, supported: {supported}"
+            )
+
+
+@dataclass(frozen=True)
 class AIMetadataModel:
     provenance_type: str = "synthetic"
     model_name: str = ""
@@ -297,6 +327,8 @@ class AIMetadataModel:
     read_noise: float | None = None
     row_noise: float | None = None
     sensor_effect_seed: int | None = None
+    highlight_headroom_ev: float | None = None
+    exposure_bias_ev: float | None = None
 
     def __post_init__(self) -> None:
         if self.provenance_type != "synthetic":

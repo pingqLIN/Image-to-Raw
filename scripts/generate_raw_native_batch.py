@@ -11,7 +11,7 @@ from image2dng.pipeline import (
 )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate a raw-native node-graph batch with DNG and JPEG outputs."
     )
@@ -42,7 +42,19 @@ def main() -> int:
             "input compatibility"
         ),
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--highlight-headroom-ev",
+        type=float,
+        default=0.0,
+        help="scene-linear highlight headroom for --scene-linear inputs",
+    )
+    parser.add_argument(
+        "--exposure-bias-ev",
+        type=float,
+        default=0.0,
+        help="scene-linear exposure placement bias for --scene-linear inputs",
+    )
+    args = parser.parse_args(argv)
 
     external_scenes = []
     if args.external_manifest is not None:
@@ -53,6 +65,8 @@ def main() -> int:
             path=path,
             description=f"external scene-linear input: {path.name}",
             producer="image2dng CLI external scene-linear input",
+            highlight_headroom_ev=args.highlight_headroom_ev,
+            exposure_bias_ev=args.exposure_bias_ev,
         )
         for path in args.scene_linear
     )

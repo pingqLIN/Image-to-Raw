@@ -220,6 +220,17 @@ uv run image2dng input.tif output.dng --dng-layout single-raw-ifd
 - `xyz`：scene-linear CIE XYZ，轉換到 virtual camera space。
 - `prophoto-rgb`：encoded ProPhoto RGB / ROMM-style 1.8 transfer，並從 D50 adapted 到 D65。
 
+對真正 scene-linear input（`linear-rec709`、`acescg`、`xyz`），可用 opt-in exposure placement 保留來源中已存在的 highlight headroom：
+
+```powershell
+uv run image2dng scene-linear.tif output.dng `
+  --input-space acescg `
+  --highlight-headroom-ev 2 `
+  --exposure-bias-ev 0
+```
+
+`--highlight-headroom-ev 2` 代表 scene value `4.0` 映射到 RAW white point；它不會替 display-referred 圖片恢復不存在的高光細節，也不是 dynamic range recovery。這個功能目前只接受 `linear-rec709`、`acescg`、`xyz`，並會在 sensor effects 前套用，避免 HDR values 在 noise/sensor-effect 階段先被 clip。
+
 支援的輸出模式：
 
 - `linearraw`：預設三通道 16-bit LinearRaw DNG。

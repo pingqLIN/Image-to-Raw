@@ -193,6 +193,8 @@ MVP fields:
 - `xmpAI:cameraParametersAreSimulated="True"`
 - `xmpAI:simulatedISO`
 - `xmpAI:simulatedWhiteBalanceKelvin`
+- `xmpAI:highlightHeadroomEV` when opt-in exposure placement is enabled
+- `xmpAI:exposureBiasEV` when opt-in exposure placement is enabled
 
 Plaintext prompt is not written by default. The CLI only embeds it when the user explicitly passes `--prompt-plaintext`.
 

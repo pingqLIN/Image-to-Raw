@@ -60,6 +60,7 @@ __all__ = [
     "CfaPattern",
     "CoreRawModel",
     "ExternalSceneLinearInput",
+    "ExposurePlacementModel",
     "GenerationScene",
     "HIGHLIGHT_CLIPPING_REACTION_MODEL",
     "Image2DNGError",

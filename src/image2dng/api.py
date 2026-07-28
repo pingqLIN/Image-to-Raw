@@ -72,6 +72,8 @@ def convert(
     read_noise: float = 0.0,
     row_noise: float = 0.0,
     sensor_effect_seed: int | None = None,
+    highlight_headroom_ev: float = 0.0,
+    exposure_bias_ev: float = 0.0,
     prompt_hash: str | None = None,
     prompt_plaintext: str | None = None,
     scene_description: str = "",
@@ -118,12 +120,14 @@ def convert(
                 input_space,
                 cfa_pattern=cfa_pattern,
                 sensor_effects=sensor_effects,
+                exposure_placement=exposure_placement,
             )
         else:
             raw_buffer, core = build_linearraw_buffer(
                 input_path,
                 input_space,
                 sensor_effects=sensor_effects,
+                exposure_placement=exposure_placement,
             )
     except ValueError as exc:
         raise UnsupportedInputError(str(exc)) from exc
@@ -156,6 +160,10 @@ def convert(
             read_noise=sensor_effects.read_noise if sensor_effects.read_noise > 0 else None,
             row_noise=sensor_effects.row_noise if sensor_effects.row_noise > 0 else None,
             sensor_effect_seed=sensor_effect_seed if sensor_effects.enabled else None,
+            highlight_headroom_ev=(
+                highlight_headroom_ev if exposure_placement.enabled else None
+            ),
+            exposure_bias_ev=exposure_bias_ev if exposure_placement.enabled else None,
         )
     except ValueError as exc:
         raise InvalidMetadataError(str(exc)) from exc

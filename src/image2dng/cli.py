@@ -67,6 +67,18 @@ def build_generate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--shot-noise", type=float, default=0.0)
     parser.add_argument("--read-noise", type=float, default=0.0)
     parser.add_argument("--row-noise", type=float, default=0.0)
+    parser.add_argument(
+        "--highlight-headroom-ev",
+        type=float,
+        default=0.0,
+        help="scene-linear highlight headroom before RAW white clipping",
+    )
+    parser.add_argument(
+        "--exposure-bias-ev",
+        type=float,
+        default=0.0,
+        help="scene-linear exposure placement bias before RAW quantization",
+    )
     parser.add_argument("--seed", type=int, default=None, help="deterministic sensor-effect seed")
     parser.add_argument("--prompt-hash", default="")
     parser.add_argument("--scene-description", default="")
@@ -152,6 +164,8 @@ def _run_generate(args: argparse.Namespace) -> int:
             read_noise=args.read_noise,
             row_noise=args.row_noise,
             sensor_effect_seed=args.seed,
+            highlight_headroom_ev=args.highlight_headroom_ev,
+            exposure_bias_ev=args.exposure_bias_ev,
             prompt_hash=args.prompt_hash,
             prompt_plaintext=args.prompt_plaintext,
             scene_description=args.scene_description,

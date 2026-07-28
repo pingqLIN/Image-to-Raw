@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import shutil
 from dataclasses import dataclass
@@ -66,6 +67,8 @@ class ExternalSceneLinearInput:
     producer: str = "external-scene-linear"
     semantic_manifest: Path | None = None
     apply_semantic_reaction: bool = False
+    highlight_headroom_ev: float = 0.0
+    exposure_bias_ev: float = 0.0
     producer_metadata: dict[str, Any] | None = None
     producer_metadata_manifest: Path | None = None
 
@@ -311,6 +314,8 @@ def _run_scene_graph(
         overwrite=overwrite,
         nodes=nodes,
         semantic_artifacts=None,
+        highlight_headroom_ev=0.0,
+        exposure_bias_ev=0.0,
         dng_layout=dng_layout,
     )
 
@@ -368,6 +373,8 @@ def _run_external_scene_graph(
                 "lighting": scene.lighting,
                 "weather": scene.weather,
                 "apply_semantic_reaction": scene.apply_semantic_reaction,
+                "highlight_headroom_ev": scene.highlight_headroom_ev,
+                "exposure_bias_ev": scene.exposure_bias_ev,
                 "semantic_boundary": _external_semantic_boundary(scene),
                 "producer_metadata": scene.producer_metadata or {},
             },
@@ -392,6 +399,8 @@ def _run_external_scene_graph(
         overwrite=overwrite,
         nodes=nodes,
         semantic_artifacts=semantic_artifacts or None,
+        highlight_headroom_ev=scene.highlight_headroom_ev,
+        exposure_bias_ev=scene.exposure_bias_ev,
         semantic_validation=semantic_validation,
         semantic_reactions=semantic_reactions,
         producer_metadata=scene.producer_metadata,
@@ -419,6 +428,8 @@ def _run_capture_graph(
     overwrite: bool,
     nodes: list[PipelineNodeRecord],
     semantic_artifacts: dict[str, str] | None,
+    highlight_headroom_ev: float,
+    exposure_bias_ev: float,
     semantic_validation: dict[str, Any] | None = None,
     semantic_reactions: list[SemanticReactionResult] | None = None,
     producer_metadata: dict[str, Any] | None = None,
@@ -439,6 +450,8 @@ def _run_capture_graph(
         seed=seed,
         overwrite=overwrite,
         dng_layout=dng_layout,
+        highlight_headroom_ev=highlight_headroom_ev,
+        exposure_bias_ev=exposure_bias_ev,
     )
     nodes.append(
         PipelineNodeRecord(
@@ -450,6 +463,8 @@ def _run_capture_graph(
                 "mode": "linearraw",
                 "input_space": input_space,
                 "dng_layout": dng_layout,
+                "highlight_headroom_ev": highlight_headroom_ev,
+                "exposure_bias_ev": exposure_bias_ev,
             },
         )
     )
@@ -468,6 +483,8 @@ def _run_capture_graph(
         seed=seed,
         overwrite=overwrite,
         dng_layout=dng_layout,
+        highlight_headroom_ev=highlight_headroom_ev,
+        exposure_bias_ev=exposure_bias_ev,
     )
     nodes.append(
         PipelineNodeRecord(
@@ -480,6 +497,8 @@ def _run_capture_graph(
                 "cfa_pattern": "rggb",
                 "input_space": input_space,
                 "dng_layout": dng_layout,
+                "highlight_headroom_ev": highlight_headroom_ev,
+                "exposure_bias_ev": exposure_bias_ev,
             },
         )
     )
@@ -575,6 +594,8 @@ def _convert_node(
     seed: int | None,
     overwrite: bool,
     dng_layout: DngLayout,
+    highlight_headroom_ev: float,
+    exposure_bias_ev: float,
 ) -> ConversionResult:
     return convert(
         input_path=input_path,
@@ -588,6 +609,8 @@ def _convert_node(
         read_noise=0.001 if mode == "cfa" else 0.0,
         row_noise=0.0005 if mode == "cfa" else 0.0,
         sensor_effect_seed=seed if mode == "cfa" else None,
+        highlight_headroom_ev=highlight_headroom_ev,
+        exposure_bias_ev=exposure_bias_ev,
         prompt_hash=prompt_hash,
         scene_description=description,
         model_name=producer,
@@ -749,11 +772,13 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
         sample["producer_metadata"] = scene.producer_metadata
     if scene.producer_metadata_artifacts is not None:
         sample["producer_metadata_artifacts"] = scene.producer_metadata_artifacts
+    if scene.exposure_placement is not None:
+        sample["exposure_placement"] = scene.exposure_placement
     return sample
 
 
 def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
-    return {
+    result = {
         "slug": scene.slug,
         "source_type": scene.source_type,
         "producer": scene.producer,
@@ -790,6 +815,9 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
             for node in scene.nodes
         ],
     }
+    if scene.exposure_placement is not None:
+        result["exposure_placement"] = scene.exposure_placement
+    return result
 
 
 def _external_scene_from_manifest_item(
@@ -809,6 +837,8 @@ def _external_scene_from_manifest_item(
     apply_semantic_reaction = item.get("apply_semantic_reaction", False)
     if not isinstance(apply_semantic_reaction, bool):
         raise ValueError(f"{slug}: apply_semantic_reaction must be boolean when present")
+    highlight_headroom_ev = _manifest_float(item, "highlight_headroom_ev", default=0.0)
+    exposure_bias_ev = _manifest_float(item, "exposure_bias_ev", default=0.0)
     producer_metadata = item.get("producer_metadata", item.get("comfyui"))
     if producer_metadata is not None and not isinstance(producer_metadata, dict):
         raise ValueError(f"{slug}: producer_metadata must be an object when present")
@@ -833,6 +863,8 @@ def _external_scene_from_manifest_item(
         ),
         semantic_manifest=semantic_manifest,
         apply_semantic_reaction=apply_semantic_reaction,
+        highlight_headroom_ev=highlight_headroom_ev,
+        exposure_bias_ev=exposure_bias_ev,
         producer_metadata=producer_metadata,
         producer_metadata_manifest=producer_metadata_manifest,
     )
@@ -1089,10 +1121,35 @@ def _external_prompt_hash(
             "producer": scene.producer,
             "input_space": scene.input_space,
             "apply_semantic_reaction": scene.apply_semantic_reaction,
+            "highlight_headroom_ev": scene.highlight_headroom_ev,
+            "exposure_bias_ev": scene.exposure_bias_ev,
         },
         sort_keys=True,
     ).encode("utf-8")
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+
+def _exposure_placement_dict(
+    *,
+    highlight_headroom_ev: float,
+    exposure_bias_ev: float,
+) -> dict[str, float] | None:
+    if highlight_headroom_ev == 0.0 and exposure_bias_ev == 0.0:
+        return None
+    return {
+        "highlight_headroom_ev": highlight_headroom_ev,
+        "exposure_bias_ev": exposure_bias_ev,
+    }
+
+
+def _manifest_float(item: dict[str, object], key: str, *, default: float) -> float:
+    value = item.get(key, default)
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        raise ValueError(f"{key} must be numeric when present")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{key} must be finite when present")
+    return number
 
 
 def _semantic_asset_hashes(semantic_artifacts: dict[str, str]) -> dict[str, str]:
