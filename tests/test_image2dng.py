@@ -6185,6 +6185,51 @@ def test_dng_private_data_payload_builder_rejects_absolute_paths(tmp_path):
         raise AssertionError("absolute path was not rejected")
 
 
+def test_semantic_physics_retrieval_index_groups_region_priors(tmp_path):
+    manifest_module = _load_script_module("build_semantic_physics_manifest")
+    index_module = _load_script_module("build_semantic_physics_retrieval_index")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=16,
+        height=12,
+        include_hash=True,
+        include_semantic_physics=True,
+    )
+    dataset_dir = tmp_path / "semantic-physics-dataset"
+    index_dir = tmp_path / "retrieval-index"
+    assert (
+        manifest_module.main(
+            [
+                "--semantic-sidecar",
+                str(semantic_path),
+                "--output-dir",
+                str(dataset_dir),
+                "--allow-output-outside-demo-output",
+            ]
+        )
+        == 0
+    )
+
+    exit_code = index_module.main(
+        [
+            "--dataset-manifest",
+            str(dataset_dir / "manifest.json"),
+            "--output-dir",
+            str(index_dir),
+            "--allow-output-outside-demo-output",
+        ]
+    )
+
+    index = json.loads((index_dir / "retrieval-index.json").read_text(encoding="utf-8"))
+    key = "material:neutral-gray-card|region:neutral-card"
+    assert exit_code == 0
+    assert index["schema"] == "image2dng.semantic_physics_retrieval_index.v1"
+    assert index["record_count"] == 1
+    assert index["lookup_keys"] == [key]
+    assert index["priors"][key]["sample_count"] == 1
+    assert index["priors"][key]["mean_linear_rgb"] == [0.18, 0.18, 0.18]
+
+
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
     dng_path = _write_test_dng(tmp_path, prompt_hash="sha256:darktable-common-path")
     common_executable = tmp_path / "darktable" / "bin" / "darktable-cli.exe"
