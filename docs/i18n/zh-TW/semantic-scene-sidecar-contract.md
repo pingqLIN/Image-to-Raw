@@ -173,3 +173,12 @@ uv run python scripts/generate_raw_native_batch.py `
   --output-dir demo-output/semantic-scene-v1-smoke `
   --external-manifest demo-output/semantic-scene-v1-smoke-input/external-scenes.json
 ```
+
+若要產生 semantic reaction 的可重跑本機 evidence pack，可執行：
+
+```powershell
+uv run python scripts/generate_semantic_reaction_evidence.py `
+  --output-dir demo-output/semantic-reaction-evidence
+```
+
+此工具會產生 ignored local report 與 summary，用來檢查 exposure reaction、highlight reaction、多 model manifest，以及 `clip` no-op baseline；生成的 TIFF、DNG、mask 與 report 不作為 committed fixture。

@@ -101,7 +101,7 @@ Each batch emits at least:
 - The batch manifest `graph.dng_payload_boundary` explicitly records that EXIF IFD, semantic mask IFD, depth IFD, and `DNGPrivateData` are not written yet; semantic sidecars remain copied sidecars and manifest artifacts, not DNG payload embedding.
 - With producer metadata, the batch manifest and sample index record `producer_metadata` and `producer_metadata_artifacts`; this is sidecar/manifest preservation, not DNG payload embedding.
 - With a semantic sidecar, the batch manifest records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`; the sample index records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation`.
-- When semantic reaction is enabled, the batch manifest and sample index record a `semantic_reaction` summary; the reaction-applied input is preserved as `inputs/*-semantic-reaction.tif`.
+- When semantic reaction is enabled, the batch manifest and sample index record a compatible `semantic_reaction` primary summary and a `semantic_reactions` list for per-model details; the reaction-applied input is preserved as `inputs/*-semantic-reaction.tif`.
 
 ## Current Implementation
 

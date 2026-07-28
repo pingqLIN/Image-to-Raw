@@ -2348,6 +2348,110 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
         "affected_pixels": 340,
         "affected_pixel_count_semantics": "sum-of-child-affected-pixels",
     }
+    assert [reaction["model"] for reaction in sample["semantic_reactions"]] == [
+        "region-exposure-mask-v1",
+        "highlight-clipping-policy-v1",
+    ]
+
+
+def test_external_scene_batch_applies_semantic_reaction_highlight_without_exposure(
+    tmp_path,
+):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        exposure_bias_ev=None,
+        clipping_policy="soft-rolloff",
+    )
+
+    preserved = run_external_scene_linear_batch(
+        tmp_path / "preserved-highlight-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+            )
+        ],
+    )
+    reacted = run_external_scene_linear_batch(
+        tmp_path / "reacted-highlight-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    preserved_scene = json.loads(preserved.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    reacted_scene = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    assert reacted_scene["semantic_to_raw_status"] == "applied"
+    assert reacted_scene["semantic_reaction"]["model"] == "highlight-clipping-policy-v1"
+    assert reacted_scene["semantic_reaction"]["regions"] == [
+        {
+            "policy": "soft-rolloff",
+            "threshold": 56000,
+            "affected_pixels": 105,
+        }
+    ]
+    assert reacted_scene["semantic_reactions"] == [reacted_scene["semantic_reaction"]]
+    assert (
+        preserved_scene["raw_data_unique_ids"]["linearraw"]
+        != reacted_scene["raw_data_unique_ids"]["linearraw"]
+    )
+    assert preserved_scene["prompt_hash"] != reacted_scene["prompt_hash"]
+
+
+def test_external_scene_linear_batch_records_semantic_reaction_highlight_noop_with_applied_exposure(
+    tmp_path,
+):
+    source_path = tmp_path / "external-scene.tif"
+    tifffile.imwrite(source_path, _gradient_image(20, 18), photometric="rgb")
+    semantic_path = _write_semantic_scene(
+        tmp_path,
+        width=20,
+        height=18,
+        exposure_bias_ev=1.0,
+        clipping_policy="clip",
+    )
+
+    result = run_external_scene_linear_batch(
+        tmp_path / "reacted-exposure-clip-batch",
+        scenes=[
+            ExternalSceneLinearInput(
+                slug="external-scene",
+                path=source_path,
+                semantic_manifest=semantic_path,
+                apply_semantic_reaction=True,
+            )
+        ],
+    )
+
+    reacted_scene = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
+    assert reacted_scene["semantic_to_raw_status"] == "applied"
+    assert [reaction["model"] for reaction in reacted_scene["semantic_reactions"]] == [
+        "region-exposure-mask-v1",
+        "highlight-clipping-policy-v1",
+    ]
+    assert reacted_scene["semantic_reactions"][1]["applied"] is False
+    assert reacted_scene["semantic_reactions"][1]["status"] == "no-op"
+    assert (
+        reacted_scene["semantic_reactions"][1]["reason"]
+        == "clip policy preserves existing uint16 clamp baseline"
+    )
+    assert reacted_scene["semantic_reactions"][1]["regions"] == [
+        {
+            "policy": "clip",
+            "threshold": 65535,
+            "affected_pixels": 0,
+        }
+    ]
 
 
 def test_external_scene_linear_batch_preserves_inline_producer_metadata(tmp_path):
@@ -2429,6 +2533,7 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
         width=20,
         height=18,
         exposure_bias_ev=None,
+        clipping_policy=None,
     )
     payload = load_semantic_payload(semantic_path)
     payload["sensor_response_hints"]["clipping_policy"] = "clip"
@@ -3273,6 +3378,65 @@ def test_compatibility_evidence_rejects_malformed_report_accessors():
     summary = module._summary_markdown(report | {"ok": False, "errors": ["synthetic failure"]})
     assert "## Errors" in summary
     assert "- synthetic failure" in summary
+
+
+def test_semantic_reaction_evidence_generates_report_and_summary(tmp_path):
+    module = _load_script_module("generate_semantic_reaction_evidence")
+
+    output_dir = tmp_path / "semantic-reaction-evidence"
+    assert module.main(["--output-dir", str(output_dir)]) == 0
+
+    report_path = output_dir / "semantic-reaction-evidence-report.json"
+    summary_path = output_dir / "semantic-reaction-evidence-summary.md"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["schema"] == "image2dng.semantic_reaction_evidence.v1"
+    assert report["ok"] is True
+    assert report["errors"] == []
+    assert [scenario["slug"] for scenario in report["scenarios"]] == [
+        "exposure-only",
+        "highlight-only",
+        "exposure-and-highlight",
+        "clip-noop-baseline",
+    ]
+    assert all(
+        scenario["validations"]["reacted"]["linearraw"]["ok"] is True
+        and scenario["validations"]["reacted"]["cfa"]["ok"] is True
+        for scenario in report["scenarios"]
+    )
+    assert all(
+        "copied_source" in scenario["hashes"]
+        and "copied_semantic_manifest" in scenario["hashes"]
+        for scenario in report["scenarios"]
+    )
+
+    scenarios = {scenario["slug"]: scenario for scenario in report["scenarios"]}
+    assert scenarios["exposure-only"]["semantic_to_raw_status"] == "applied"
+    assert scenarios["highlight-only"]["semantic_reaction"]["model"] == (
+        "highlight-clipping-policy-v1"
+    )
+    exposure_and_highlight = scenarios["exposure-and-highlight"]
+    assert [reaction["model"] for reaction in exposure_and_highlight["semantic_reactions"]] == [
+        "region-exposure-mask-v1",
+        "highlight-clipping-policy-v1",
+    ]
+    clip = scenarios["clip-noop-baseline"]
+    assert clip["semantic_to_raw_status"] == "no-op"
+    assert clip["raw_value_changed"] is False
+    assert clip["provenance_changed"] is True
+    assert clip["semantic_reaction"]["reason"] == (
+        "clip policy preserves existing uint16 clamp baseline"
+    )
+    assert any(
+        artifact["kind"] == "reaction-input" and artifact["path"].endswith(
+            "-semantic-reaction.tif"
+        )
+        for artifact in scenarios["highlight-only"]["artifacts"]
+    )
+
+    summary = summary_path.read_text(encoding="utf-8")
+    assert "| Scenario | Status | Raw value changed | Reactions |" in summary
+    assert "clip-noop-baseline" in summary
 
 
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
@@ -8182,6 +8346,7 @@ def _write_semantic_scene(
     mask_columns: int | None = None,
     clipping_policy: str | None = None,
 ) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
     mask_path = directory / "renderer-frame-001-mask.png"
     mask = np.zeros((height, width), dtype=np.uint16)
     mask[:, : (mask_columns or width)] = 65535

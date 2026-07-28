@@ -113,6 +113,18 @@ def semantic_reaction_model_registry() -> dict[str, dict[str, Any]]:
     }
 
 
+def highlight_clipping_reaction_parameters(policy: str) -> dict[str, float | int | str]:
+    if policy not in HIGHLIGHT_POLICY_THRESHOLDS:
+        raise ValueError("semantic reaction clipping_policy is unsupported")
+    payload: dict[str, float | int | str] = {
+        "policy": policy,
+        "threshold": HIGHLIGHT_POLICY_THRESHOLDS[policy],
+    }
+    if policy in HIGHLIGHT_POLICY_FACTORS:
+        payload["rolloff_factor"] = HIGHLIGHT_POLICY_FACTORS[policy]
+    return payload
+
+
 @dataclass(frozen=True)
 class SemanticReactionResult:
     model: str
@@ -562,6 +574,18 @@ def _regions_with_exposure(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return reaction_regions
+
+
+def _highlight_clipping_policy(payload: dict[str, Any]) -> str | None:
+    hints = payload.get("sensor_response_hints")
+    if not isinstance(hints, dict):
+        return None
+    policy = hints.get("clipping_policy")
+    if policy is None:
+        return None
+    if not isinstance(policy, str) or policy not in HIGHLIGHT_POLICY_THRESHOLDS:
+        raise ValueError("semantic reaction clipping_policy is unsupported")
+    return policy
 
 
 def _read_mask(path: Path) -> np.ndarray:
