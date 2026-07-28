@@ -68,6 +68,7 @@ from image2dng.models import (
     AIMetadataModel,
     CameraProfileModel,
     CoreRawModel,
+    ExposurePlacementModel,
     cct_to_as_shot_neutral,
 )
 from image2dng.pipeline import (

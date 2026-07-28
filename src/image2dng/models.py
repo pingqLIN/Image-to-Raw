@@ -13,7 +13,9 @@ SYNTHETIC_CAMERA_MODEL = "Synthetic Camera v1"
 CfaPattern = Literal["rggb", "bggr", "grbg", "gbrg"]
 PhotometricName = Literal["LinearRaw", "ColorFilterArray"]
 RawMode = Literal["linearraw", "cfa"]
+SceneLinearInputSpace = Literal["linear-rec709", "acescg", "xyz"]
 CFA_PATTERN_VALUES = frozenset({"rggb", "bggr", "grbg", "gbrg"})
+SCENE_LINEAR_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
 
 
 def _tuple_from(value: object, message: str) -> tuple[object, ...]:

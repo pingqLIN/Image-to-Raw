@@ -77,8 +77,10 @@ Input flow:
 3. Treat `linear-rec709` and `srgb` as the virtual camera native RGB space.
 4. Convert `acescg` and `xyz` through XYZ into the virtual camera native RGB space.
 5. Apply the ROMM-style 1.8 inverse transfer for `prophoto-rgb`, adapt from D50 to D65 with Bradford, then convert into the virtual camera native RGB space.
-6. Add the black-level offset and clip to white level.
-7. Quantize into a 16-bit LinearRaw buffer.
+6. When requested, apply opt-in exposure placement to true scene-linear input (`linear-rec709`, `acescg`, or `xyz`) to preserve HDR values already present in the source.
+7. Apply optional synthetic sensor effects after exposure placement.
+8. Add the black-level offset and clip to white level.
+9. Quantize into a 16-bit LinearRaw buffer.
 
 This MVP does not attempt to impersonate a real camera file. It produces a synthetic LinearRaw DNG.
 

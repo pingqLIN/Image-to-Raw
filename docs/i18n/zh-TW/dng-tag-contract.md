@@ -83,6 +83,7 @@ IFD0 preview 也會寫入基本 identity/provenance tags：`DNGVersion`、`DNGBa
 - XMP 必須包含 `xmpAI:cameraParametersAreSimulated="True"`。
 - `xmpAI:rawMode` 必須和 raw IFD 的 output mode 一致，記錄 `linearraw` 或 `cfa`。
 - `xmpAI:cfaPattern` 只在 CFA 輸出中寫入，且必須是支援的 Bayer pattern。
+- `xmpAI:highlightHeadroomEV` 與 `xmpAI:exposureBiasEV` 只在啟用 opt-in exposure placement 時寫入。它們記錄 simulated scene-linear white placement，不宣稱恢復了 dynamic range。
 - 預設不寫入 plaintext prompt；除非使用者明確 opt in，否則只寫入 `prompt_hash`。
 - MakerNote 必須不存在。
 - 偽裝成真實相機或鏡頭不在範圍內。

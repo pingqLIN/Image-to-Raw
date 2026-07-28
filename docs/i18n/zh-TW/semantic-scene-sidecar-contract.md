@@ -122,6 +122,8 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 
 Reaction 只支援 linear-light external inputs：`linear-rec709`、`acescg`、`xyz`。這些 model 都不是完整物理 sensor model，也不宣稱光譜 adaptation、ISO response、camera metering、camera tone curve 或真實 sensor clipping 後的細節保存正確性。
 
+External scene manifest 也可在 scene entry 設定全域 `highlight_headroom_ev` 與 `exposure_bias_ev`。Exposure placement 會在 RAW quantization 與 sensor effects 前套用；例如 `highlight_headroom_ev = 2` 代表 scene value `4.0` 對應 RAW white point。它只保存 source scene-linear data 中已存在的 highlight values，不是 dynamic range recovery，也不會替 display-referred image 產生不存在的細節。非預設 placement 只接受 `linear-rec709`、`acescg`、`xyz`。
+
 對 applied reactions 而言，pipeline 會把 provenance 綁定到已複製進 batch 的 inputs：`prompt_hash` 會納入 copied scene-linear source、copied semantic manifest、copied semantic asset bytes，以及 `apply_semantic_reaction` flag。若 sidecar 的 `scene.width`、`scene.height` 或 `scene.input_space` 與實際 external scene-linear input 不一致，reaction 會拒絕執行。Manifest 會保留 backward-compatible `semantic_reaction` primary summary，並新增 `semantic_reactions` list 記錄本次 opt-in pass 評估過的 reaction models。
 
 `semantic_reaction_model_registry()` 會同時公開 implemented reaction models 與 deferred candidate model IDs。Deferred entries 只提供 scope / boundary evidence，不代表目前會改變 raw values。

@@ -16,6 +16,7 @@ from image2dng.models import (
     AIMetadataModel,
     CameraProfileModel,
     CfaPattern,
+    ExposurePlacementModel,
 )
 from image2dng.sensor_effects import SensorEffectModel
 
@@ -110,6 +111,15 @@ def convert(
             row_noise=row_noise,
             seed=sensor_effect_seed,
         )
+    except (TypeError, ValueError) as exc:
+        raise InvalidMetadataError(str(exc)) from exc
+
+    try:
+        exposure_placement = ExposurePlacementModel(
+            highlight_headroom_ev=highlight_headroom_ev,
+            exposure_bias_ev=exposure_bias_ev,
+        )
+        exposure_placement.validate_input_space(input_space)
     except (TypeError, ValueError) as exc:
         raise InvalidMetadataError(str(exc)) from exc
 

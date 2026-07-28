@@ -99,6 +99,7 @@ class PipelineSceneResult:
     semantic_to_raw_status: str | None = None
     semantic_reaction: dict[str, Any] | None = None
     semantic_reactions: list[dict[str, Any]] | None = None
+    exposure_placement: dict[str, float] | None = None
     producer_metadata: dict[str, Any] | None = None
     producer_metadata_artifacts: dict[str, str] | None = None
 
@@ -574,6 +575,10 @@ def _run_capture_graph(
             [reaction.to_dict() for reaction in semantic_reactions]
             if semantic_reactions
             else None
+        ),
+        exposure_placement=_exposure_placement_dict(
+            highlight_headroom_ev=highlight_headroom_ev,
+            exposure_bias_ev=exposure_bias_ev,
         ),
         producer_metadata=producer_metadata,
         producer_metadata_artifacts=producer_metadata_artifacts,

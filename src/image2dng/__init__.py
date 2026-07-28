@@ -18,6 +18,7 @@ from image2dng.models import (
     CameraProfileModel,
     CfaPattern,
     CoreRawModel,
+    ExposurePlacementModel,
     PhotometricName,
     RawMode,
 )
