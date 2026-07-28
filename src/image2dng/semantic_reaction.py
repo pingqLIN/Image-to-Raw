@@ -14,6 +14,7 @@ from image2dng.models import cct_to_as_shot_neutral
 
 REGION_EXPOSURE_REACTION_MODEL = "region-exposure-mask-v1"
 HIGHLIGHT_CLIPPING_REACTION_MODEL = "highlight-clipping-policy-v1"
+SEMANTIC_REACTION_CHAIN_MODEL = "semantic-reaction-chain-v1"
 NOISE_PRIORITY_REACTION_MODEL = "noise-priority-policy-v1"
 TARGET_MIDDLE_GRAY_REACTION_MODEL = "target-middle-gray-policy-v1"
 TARGET_WHITE_BALANCE_REACTION_MODEL = "target-white-balance-policy-v1"
@@ -62,6 +63,17 @@ SEMANTIC_REACTION_MODEL_REGISTRY = {
         boundary=(
             "deterministic soft shoulder for 16-bit scene-linear RGB inputs; "
             "not a camera tone-curve, ISO response, or proof of preserved sensor detail"
+        ),
+    ),
+    SEMANTIC_REACTION_CHAIN_MODEL: SemanticReactionModelInfo(
+        model_id=SEMANTIC_REACTION_CHAIN_MODEL,
+        status="implemented",
+        current_raw_value_effect=True,
+        intended_raw_value_effect=True,
+        scope="ordered composition of implemented deterministic semantic reaction helpers",
+        boundary=(
+            "composition contract only; each child helper keeps its own "
+            "physical-model limitations"
         ),
     ),
     NOISE_PRIORITY_REACTION_MODEL: SemanticReactionModelInfo(
