@@ -1,189 +1,35 @@
 # Image-to-DNG RAW Generator
 
-[繁體中文](README.zh-tw.md)
+`image2dng` is a prototype CLI for generating **truthful synthetic camera-negative DNG files** from 16-bit TIFF/PNG, display-referred RGB, scene-linear RGB, or model-estimated linear camera signals.
 
-![Status](https://img.shields.io/badge/status-prototype-orange)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![License](https://img.shields.io/badge/license-proprietary%20prototype-lightgrey)
+The production path writes uncompressed 16-bit `LinearRaw` DNG. The file is intended to behave like a high-dynamic-range, high-information RAW editing negative, not like an original sensor dump from a real camera. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"`, embed AI/synthetic provenance in a custom XMP namespace, and avoid MakerNote spoofing.
 
-[Features](#features) · [Installation](#install-for-development) · [Compatibility](#generate-compatibility-evidence) · [Validation](#validate-a-dng) · [Testing](#tests) · [License](#prototype-license-status)
+## Product definition
 
-> Convert scene-linear or 16-bit RGB images into truthful synthetic DNG/RAW research artifacts.
+`image2dng` generates a **synthetic camera-negative**:
 
-`image2dng` is a prototype CLI and Python library for turning 16-bit TIFF/PNG or scene-linear RGB images into truthful synthetic DNG files. The MVP writes uncompressed 16-bit `LinearRaw` raw image data, uses a default DNG layout with an IFD0 JPEG preview, embeds AI provenance in a custom XMP namespace, and avoids MakerNote spoofing.
+- It stores a camera-native, linear, high-bit-depth signal suitable for RAW-style editing.
+- It preserves editability through DNG metadata such as black level, white level, white balance, color matrix, simulated exposure/ISO hints, and provenance.
+- It does not claim that the output is a captured Bayer sensor measurement.
+- It does not impersonate a real camera, lens, serial number, MakerNote, or original capture pipeline.
 
-The project direction is expanding from one-shot image-to-raw conversion into **RAW-native AI image generation**: the primary generated artifact should be a synthetic RAW/DNG file, while JPEG/PNG outputs are previews or delivery renders derived from the RAW buffer. The repository now includes a minimal node-style pipeline for Prompt/Scene/Virtual Camera/Sensor/DNG/JPEG/Validation experiments.
+The project treats `scene-linear` as a **working signal representation**, not as directly measurable ground truth for arbitrary real-world scenes. Real-world scene radiance usually has no complete pixelwise reference sample available. Therefore, project validation is based on reference hierarchy and behavioral tests rather than a single universal ground-truth image.
 
-The project intentionally does **not** try to impersonate a real camera RAW file. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"` and XMP metadata marks camera parameters as simulated.
+## Validation philosophy
 
-This product includes DNG technology under license by Adobe.
+Since arbitrary real-world `scene-linear` ground truth is unavailable, validation is defined in layers:
 
----
-
-## Features
-
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Synthetic LinearRaw DNG | MVP | 16-bit uncompressed DNG with explicit synthetic provenance |
-| Simulated CFA mode | Available | Explicit opt-in Bayer mosaic for workflow and compatibility research |
-| Embedded DNG preview | Experimental | Default DNG layout writes IFD0 JPEG preview plus raw SubIFD |
-| RAW-native node batch | Available | Generates DNG, sidecar JPEG preview, validation JSON, and graph manifests |
-| Semantic scene sidecar v1 | Available | Validates and preserves external scene semantics; optional deterministic reaction prototypes |
-| Compatibility evidence | Available | Structural validation plus optional ExifTool/Darktable/RawTherapee smoke evidence |
-| Review bundle | Available | Local-only package with contact sheets, representative DNGs, validation JSON, and manifests |
-
----
-
-## Development status
-
-Current status: active proof of concept. Behavior, metadata fields, DNG tag layout, and compatibility expectations may change while the design is being validated.
-
-## Documentation
-
-Key explanatory documents:
-
-- Design overview: [docs/design.md](docs/design.md) / [docs/i18n/zh-TW/design-overview.md](docs/i18n/zh-TW/design-overview.md)
-- Compatibility evidence: [docs/compatibility.md](docs/compatibility.md) / [docs/i18n/zh-TW/compatibility-evidence.md](docs/i18n/zh-TW/compatibility-evidence.md)
-- Demo workflow: [docs/demo.md](docs/demo.md) / [docs/i18n/zh-TW/demo-visualization-workflow.md](docs/i18n/zh-TW/demo-visualization-workflow.md)
-- Current public status: [docs/current-public-status.md](docs/current-public-status.md) / [docs/i18n/zh-TW/current-public-status.md](docs/i18n/zh-TW/current-public-status.md)
+1. **DNG structural correctness**: required tags, IFD layout, offsets, image geometry, black/white level sanity, XMP parseability, and absence of MakerNote spoofing.
+2. **Signal behavior**: monotonicity, clipping policy, highlight headroom, black offset, channel balance, white-balance behavior, and predictable exposure edits.
+3. **Round-trip rendering**: generated DNG is developed through a fixed reference pipeline and compared against the intended display rendering or source image where appropriate.
+4. **Anchor references**: synthetic renderer outputs, calibrated color charts, HDR brackets, or paired RAW/RGB datasets may be used as calibration anchors, but these are reference cases, not a claim that every output has real-scene ground truth.
+5. **Compatibility**: Camera Raw / Lightroom, darktable, RawTherapee, `exiftool`, `dcraw`, and eventually the Adobe DNG SDK are used as decoder-side oracles.
 
 ## Install for development
 
 ```powershell
 uv sync --extra dev
 ```
-
-## Generate a RAW-native node batch
-
-```powershell
-uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
-```
-
-If the generated DNG files need to be passed into Adobe DNG Converter, write the
-single raw IFD layout:
-
-```powershell
-uv run python scripts/generate_raw_native_batch.py `
-  --output-dir demo-output/raw-native-node-batch-adobe `
-  --dng-layout single-raw-ifd
-```
-
-The batch emits:
-
-- scene-linear TIFF intermediates;
-- `LinearRaw` synthetic DNG files;
-- simulated RGGB CFA synthetic DNG files;
-- DNG files with an embedded IFD0 JPEG preview and raw data in a Raw SubIFD;
-- sidecar JPEG previews rendered from generated DNG raw buffers;
-- validation JSON for each DNG;
-- `manifests/raw-native-node-batch.json` as the node graph manifest;
-- `manifests/sample-index.json` as the sample index.
-
-The current decision is to build the minimal core pipeline inside this repository first. ComfyUI / Stable Diffusion integration has been split into a sibling bridge project, while this core repository keeps the generic external scene-linear manifest and RAW/DNG semantics.
-
-External renderers, AI generators, and simulators can now enter through the scene-linear producer boundary:
-
-```powershell
-uv run python scripts/generate_raw_native_batch.py `
-  --output-dir demo-output/external-scene-linear-batch `
-  --scene-linear path\to\scene-linear.tif
-```
-
-Use a manifest when each image needs producer, prompt, lighting, or semantic sidecar metadata:
-
-```json
-{
-  "schema": "image2dng.external_scene_linear_sources.v1",
-  "scenes": [
-    {
-      "slug": "renderer-frame-001",
-      "path": "renderer-frame-001.tif",
-      "input_space": "linear-rec709",
-      "producer": "external renderer",
-      "prompt": "studio material test",
-      "description": "scene-linear output from an upstream generator",
-      "lighting": "virtual D65 studio",
-      "semantic_manifest": "renderer-frame-001.semantic.json"
-    }
-  ]
-}
-```
-
-## ComfyUI / Stable Diffusion Bridge
-
-The ComfyUI / Stable Diffusion importer now lives in the sibling bridge project `image-to-raw-comfyui-sd-bridge`.
-
-The old `scripts/import_comfyui_output.py` and `image2dng.comfyui_importer` interfaces moved to that bridge project. The new CLI is:
-
-```powershell
-uv run image2dng-comfyui-import `
-  path\to\ComfyUI_00002_.png `
-  --output-dir demo-output/comfyui-import `
-  --run-pipeline
-```
-
-This core repository accepts `image2dng.external_scene_linear_sources.v1` manifests from the bridge or any other external producer, then owns the scene-linear input, semantic sidecar, DNG writer, validation, and RAW-native batch steps. ComfyUI workflow metadata still enters manifests through `producer_metadata` / `producer_metadata_manifest`, but it is no longer a built-in core package API.
-
-When `semantic_manifest` uses `image2dng.semantic_scene.v1`, it is validated before DNG generation. The sidecar and resolvable local assets are copied and recorded in the batch manifest / sample index. By default this remains preservation + validation; when the manifest explicitly sets `apply_semantic_reaction: true`, deterministic reaction models such as `region-exposure-mask-v1`, `target-middle-gray-policy-v1`, `target-white-balance-policy-v1`, and `highlight-clipping-policy-v1` can run. These prototypes are not full physical sensor models. See [docs/i18n/en/semantic-scene-sidecar-contract.md](docs/i18n/en/semantic-scene-sidecar-contract.md) for the detailed format.
-
-Use the CLI to inspect the current implemented and deferred semantic reaction boundaries:
-
-```powershell
-uv run image2dng semantic-reactions
-uv run image2dng semantic-reactions --json
-uv run image2dng validate-semantic renderer-frame-001.semantic.json
-uv run image2dng validate-semantic renderer-frame-001.semantic.json --json
-```
-
-## Run the development baseline verification
-
-```powershell
-uv run python scripts/verify_development_baseline.py --output-dir demo-output/development-baseline
-```
-
-This verification flow runs `pytest`, `ruff check`, demo sample generation, RAW-native batch generation, and checks demo DNG validation, the manifest, sample index, DNG validation JSON, and JPEG previews. It writes `demo-output/development-baseline/verification-report.json`. `demo-output/` is local output and binary samples should not be committed.
-
-## Generate compatibility evidence
-
-```powershell
-uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence
-```
-
-This flow emits deterministic DNG fixtures, validation JSON, `compatibility-report.json`, and `compatibility-summary.md`. Phase 6 reports use `image2dng.compatibility_evidence.v2` and record RAW processor commands, exit codes, stdout/stderr tails, output artifacts, and dry-run install hints. Missing optional RAW tools are recorded as `skipped` instead of failures; installed tools that fail to run or fail to emit their export artifact are recorded as `failed`; Adobe DNG SDK remains `manual-only` in the compatibility matrix, while fuller SDK evidence can be generated only after the user prepares local Adobe resources for the local-only scripts.
-
-For Adobe DNG Converter regression, use the dedicated local script:
-
-```powershell
-uv run python scripts/verify_adobe_dng_converter.py --dry-run
-uv run python scripts/verify_adobe_dng_converter.py --output-dir demo-output/adobe-dng-converter-verification
-```
-
-This keeps validation layers separate: strict `image2dng` contract validation for source DNGs, external processor smoke checks for optional tools, and relaxed Adobe-converted artifact inspection for files rewritten by Adobe DNG Converter.
-
-If Adobe resources, Adobe DNG Converter, and the DNG SDK `dng_validate.exe` have already been prepared by the user on the local machine, run the local-only validation stack:
-
-```powershell
-uv run python scripts/verify_adobe_validation_stack.py --dry-run-converter
-uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/adobe-validation-stack
-```
-
-The stack only reads existing local Adobe resources, generates fresh project DNG fixtures, and consolidates the resource audit, Adobe DNG Converter regression, and DNG SDK validation reports into `adobe-validation-stack-report.json`. It does not download, install, or extract Adobe SDK files, and it does not promote SDK validation into a CI gate. Missing validators or converters are recorded as blocking findings in the local report.
-
-## Generate a demo review bundle
-
-```powershell
-uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
-```
-
-This flow reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence, then collects the externally reviewable contact sheets, representative DNG files, validation JSON, reports, and manifests under `demo-output/review-bundle/`. The human entry point is `index.md`; the machine-readable manifest is `review-bundle-report.json`. `demo-output/` remains local output and binary samples should not be committed.
-
-## Generate a RAW processor setup audit
-
-```powershell
-uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
-```
-
-This dry-run audit detects current availability and package-manager search evidence for `dcraw`, `darktable-cli`, and `rawtherapee-cli`, then writes `setup-audit-report.json`, `setup-runbook.md`, and `external-review-prompt.md`. On Windows, Darktable and RawTherapee are discovered from `PATH` first and then from their standard install paths: `C:\Program Files\darktable\bin\darktable-cli.exe` and `C:\Program Files\RawTherapee\5.12\rawtherapee-cli.exe`. Version hints are recorded only when the package-manager output exactly matches the package identity. It does not install or update any tool; installing one RAW processor requires explicit user approval, and post-install evidence should rerun the setup audit, compatibility evidence, and review bundle.
 
 ## Generate a DNG
 
@@ -199,159 +45,116 @@ uv run image2dng input.tif output.dng `
   --model-version "1.0"
 ```
 
-By default, the CLI refuses to replace an existing output file. Pass `--overwrite` only when replacing the output is intentional.
-
-For advanced virtual camera profile experiments, explicitly override DNG color metadata. This writes `ColorMatrix1` and `AsShotNeutral` tags only; it does not color-grade the input image:
-
-```powershell
-uv run image2dng input.tif output-profile.dng `
-  --color-matrix-1 1 0 0 0 1 0 0 0 1 `
-  --as-shot-neutral 0.5 1 2
-```
-
-The default DNG layout is `preview-subifd`: IFD0 is a JPEG-compressed RGB preview, and the raw image data is stored in a Raw SubIFD. To write the older single raw IFD layout, pass:
-
-```powershell
-uv run image2dng input.tif output.dng --dng-layout single-raw-ifd
-```
-
 Supported input spaces:
 
 - `srgb`: display-referred sRGB; the CLI applies the inverse sRGB OETF.
 - `linear-rec709`: scene-linear Rec.709/sRGB primaries.
 - `acescg`: scene-linear ACEScg/AP1, converted through XYZ into the virtual camera space.
 - `xyz`: scene-linear CIE XYZ, converted into the virtual camera space.
-- `prophoto-rgb`: encoded ProPhoto RGB / ROMM-style 1.8 transfer, adapted from D50 to D65.
 
-Supported output modes:
+## Output modes
 
-- `linearraw`: default three-channel 16-bit LinearRaw DNG.
-- `cfa`: explicit simulated single-channel CFA mosaic DNG.
+### `linearraw` — default production path
 
-Example CFA output:
+Use this mode for high-dynamic-range, high-information synthetic RAW negatives.
 
-```powershell
-uv run image2dng input.tif output-cfa.dng `
-  --mode cfa `
-  --cfa-pattern rggb `
-  --input-space linear-rec709
-```
+Claims:
 
-CFA mode is a simplified simulation intended for compatibility and workflow research. It does not claim to be a real sensor capture and does not add sensor noise by default.
+- The DNG contains a synthetic or estimated camera-native linear signal.
+- The file is designed for RAW-style editing and interchange.
+- Provenance and simulated camera parameters are explicit.
+
+Non-claims:
+
+- The DNG is not an original captured RAW file.
+- The signal is not guaranteed to match an unknown real-world scene-linear sample.
+- The file does not contain a real camera MakerNote or sensor serial identity.
+
+### `cfa` — optional experimental research path
+
+Use this mode only when the downstream task needs Bayer/CFA sampling itself, such as demosaic testing, RAW denoising, ISP research, sensor artifact simulation, or camera-pipeline benchmarking.
+
+Claims:
+
+- The DNG contains a simulated CFA mosaic derived from the project signal model.
+
+Non-claims:
+
+- The DNG is not a real sensor dump unless the source was a real camera RAW and the project is explicitly preserving it.
+- CFA mode is not required for high-information synthetic RAW editing.
 
 ## Validate a DNG
 
 ```powershell
 uv run image2dng validate output.dng
-uv run image2dng validate output.dng --json
 ```
 
-The validator checks required DNG tags, XMP parseability, identity/version/compression tags, image geometry, RawDataUniqueID digest, crop/scale raw area tags, black/white level sanity, camera profile tags, synthetic provenance/raw mode/numeric consistency, and absence of MakerNote. The current tag contract is documented in [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md). If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available through `PATH` or an adapter-supported common install path, it also attempts smoke tests.
-
-Validation exit codes:
-
-- `0`: structural validation passed; optional smoke tools passed or were skipped.
-- `1`: structural DNG validation failed.
-- `2`: an optional smoke tool ran and reported an actual parse/open failure.
-- `3`: CLI usage or configuration error.
-
-See [docs/compatibility.md](docs/compatibility.md) for the compatibility evidence format.
-
-## Use as a Python library
-
-```python
-from pathlib import Path
-
-from image2dng import convert
-
-result = convert(
-    input_path=Path("input.tif"),
-    output_path=Path("output.dng"),
-    input_space="srgb",
-    mode="linearraw",
-    cfa_pattern="rggb",
-    iso=100,
-    white_balance_kelvin=6500,
-    color_matrix_1=None,
-    as_shot_neutral=None,
-    shot_noise=0.0,
-    read_noise=0.0,
-    row_noise=0.0,
-    sensor_effect_seed=None,
-    prompt_hash="sha256:...",
-    scene_description="synthetic test scene",
-    dng_layout="preview-subifd",
-    overwrite=False,
-)
-```
-
-The public API raises `Image2DNGError` subclasses instead of exiting the process. CLI and library outputs are expected to be semantically equivalent under `image2dng validate`.
-
-## Generate demo samples
-
-```powershell
-uv run python scripts/generate_demo_samples.py --output-dir demo-output
-uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch
-uv run python scripts/generate_visual_demo.py --output-dir demo-output/visual-demo
-uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
-uv run python scripts/audit_raw_processor_setup.py --output-dir demo-output/raw-processor-setup-audit
-```
-
-See [docs/demo.md](docs/demo.md) for the architecture demo, sample set, and application scenarios.
+The validator checks required DNG tags, XMP parseability, black/white level sanity, image geometry, synthetic provenance, and absence of MakerNote. If `exiftool`, `dcraw`, `darktable-cli`, or `rawtherapee-cli` are available on `PATH`, it also attempts smoke tests.
 
 ## Tests
 
 ```powershell
 uv run pytest
-uv run ruff check
 ```
 
-## 🤖 AI-Assisted Development
+## Roadmap
 
-This project was developed with AI assistance.
+### Phase 0 — Definition and provenance hardening
 
-| Model | Role |
-| --- | --- |
-| OpenAI Codex CLI | Primary implementation, compatibility evidence workflow, documentation review |
+- Define `LinearRaw` as the production path for synthetic camera-negative DNG.
+- Define `CFA` as an optional experimental sensor-simulation path.
+- Add explicit XMP fields for `synthetic`, `estimated_raw`, simulated camera parameters, source hash, model hash, adapter hash, and workflow digest.
+- Document that scene-linear signal is a working representation and not universal pixelwise ground truth.
 
-> ⚠️ **Disclaimer:** While the author has made every effort to review and validate
-> the AI-generated code, no guarantee can be made regarding its correctness, security,
-> or fitness for any particular purpose. Use at your own risk.
+### Phase 1 — LinearRaw production DNG
 
-## Prototype License Status
+- Maintain 16-bit uncompressed `LinearRaw` DNG output.
+- Write explicit `BlackLevel`, `WhiteLevel`, `ColorMatrix1`, `CalibrationIlluminant1`, `AsShotNeutral`, `RawDataUniqueID`, and `UniqueCameraModel`.
+- Add preview IFD and EXIF IFD for compatibility and usability.
+- Keep prompt plaintext opt-in; default to hashes and high-level provenance.
 
-The current license status remains `Proprietary prototype`, matching `pyproject.toml`. The public documentation describes the current proof-of-concept capabilities and validation workflow; unless a separate license file is added, do not assume this repository is released under MIT or another open-source license.
+### Phase 2 — Validation and reference suite
 
-## Project structure
+- Add deterministic test vectors for gradients, color charts, saturation ramps, gray ramps, HDR ramps, and clipping boundaries.
+- Add reference-render comparison through a fixed development transform.
+- Add optional compatibility tests for Camera Raw / Lightroom, darktable, RawTherapee, `exiftool`, `dcraw`, and Adobe DNG SDK.
+- Track metrics for open success, render stability, white-balance behavior, black/white sanity, metadata retention, and provenance completeness.
 
-- `src/image2dng/cli.py`: command-line entry points for generation and validation.
-- `src/image2dng/image_processing.py`: input loading, color-space conversion, linearization, and quantization.
-- `src/image2dng/models.py`: dataclasses for raw layout, camera profile, and AI metadata.
-- `src/image2dng/dng_writer.py`: DNG/TIFF writing and DNG metadata tags.
-- `src/image2dng/xmp.py`: synthetic AI provenance XMP packet generation.
-- `src/image2dng/validate.py`: structural DNG validation and optional external smoke tests.
+### Phase 3 — Neural inverse-ISP plugin layer
+
+- Add a `NeuralRawEstimator` interface for optional RGB-to-linear-camera or RGB-to-RAW estimation.
+- Integrate SpiralDiff-like / CamLoRA-like adapters as optional plugins, not as core DNG writer dependencies.
+- Store model family, model version, checkpoint hash, adapter hash, training manifest hash, and uncertainty summary in XMP or private payload.
+- Continue to label outputs as synthetic / estimated RAW.
+
+### Phase 4 — Semantic and private payloads
+
+- Add semantic mask IFD, depth IFD, and `DNGPrivateData` support.
+- Store large confidence maps, segmentation maps, depth maps, workflow summaries, and hashes in structured payloads.
+- Ensure the main Raw IFD remains readable when optional semantic/private data is ignored.
+
+### Phase 5 — Experimental CFA mode
+
+- Add CFA Bayer mosaic output only after the LinearRaw path, metadata, and validator are stable.
+- Implement `CFAPattern`, `CFARepeatPatternDim`, `CFAPlaneColor`, active area, black/white level, optional masked pixels, and sensor artifact simulation.
+- Use CFA mode for demosaic/ISP research, RAW denoise benchmarks, or sensor-pipeline simulation—not as the default route for high-information synthetic RAW editing.
 
 ## Scope
 
 Current MVP:
 
-- 16-bit uncompressed LinearRaw DNG.
-- Explicit simulated CFA mosaic mode.
-- Default `preview-subifd` DNG layout with an IFD0 JPEG preview and Raw SubIFD.
-- Built-in minimal RAW-native node pipeline that emits DNG, sidecar JPEG preview, validation JSON, and graph manifest artifacts.
-- `image2dng.semantic_scene.v1` sidecar validation / preservation plus opt-in deterministic reaction prototypes.
-- Optional deterministic synthetic sensor effects for demos and compatibility testing.
+- 16-bit uncompressed `LinearRaw` DNG.
 - RGB input normalization and simple virtual camera transform.
 - XMP custom namespace: `https://example.org/ns/xmp/ai/1.0/`.
 - Synthetic provenance always written.
+- No impersonation of real camera RAW, MakerNote, serial number, or original capture pipeline.
 
 Known limitations:
 
-- Sensor effects are simple synthetic controls, not a physical camera model.
-- Embedded preview is currently an IFD layout experiment, not a full Adobe compatibility claim.
-- No EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet; RAW-native batch manifests record this boundary in `graph.dng_payload_boundary`.
-- Compatibility is validated structurally and with optional local smoke tools; Adobe DNG SDK checks remain local-only/manual-resource evidence and are not a CI gate.
+- The current `scene-linear` signal is a constructed/estimated working representation, not a directly verifiable real-world ground-truth sample.
+- No shot/read noise model yet.
+- No preview IFD, EXIF IFD, semantic mask IFD, depth IFD, or `DNGPrivateData` payload yet.
+- No optional CFA Bayer mosaic research mode yet.
+- Compatibility is validated structurally and with optional local smoke tools, not yet against the Adobe DNG SDK.
 
-See [docs/design.md](docs/design.md) for the design notes.
-See [docs/i18n/en/dng-tag-contract.md](docs/i18n/en/dng-tag-contract.md) for the current DNG tag contract.
-See [docs/i18n/en/raw-native-node-pipeline.md](docs/i18n/en/raw-native-node-pipeline.md) for the RAW-native node pipeline direction.
+See [docs/roadmap-and-definitions.md](docs/roadmap-and-definitions.md) for the current definitions and roadmap. See [docs/design.md](docs/design.md) for the broader design notes.
