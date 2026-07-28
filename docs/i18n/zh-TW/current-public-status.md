@@ -12,6 +12,7 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 - 提供 deterministic synthetic sensor effects，供 demo 與 compatibility testing 使用。
 - 可顯式覆寫 DNG `ColorMatrix1` 與 `AsShotNeutral` metadata，用於 virtual camera profile 實驗。
 - 驗證並保存 `image2dng.semantic_scene.v1` semantic sidecars，並可在明確 opt-in 時執行已實作的 deterministic semantic reactions。
+- Review bundle 在 command failure 時仍保留 source reports / manifests 作為診斷 evidence，並明確記錄 command failure 時的 source report diagnostic preservation。
 - 在 XMP 中嵌入 AI provenance、raw mode、simulated camera parameters 與已啟用的 sensor-effect 設定。
 - 以 structural checks、mode-aware tag checks、XMP checks 與 optional local smoke tools 驗證產出的 DNG。
 - 同時提供 CLI 與 public Python `convert()` API。

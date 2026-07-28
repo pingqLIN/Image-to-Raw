@@ -868,7 +868,12 @@ def _external_scene_from_manifest_item(
     slug = _manifest_string(item, "slug")
     source_path = _manifest_path(item, "path", base)
     semantic_manifest = _optional_manifest_path(item, "semantic_manifest", base)
-    input_space = _optional_manifest_string(item, "input_space", "linear-rec709")
+    input_space = _optional_manifest_string(
+        item,
+        "input_space",
+        "linear-rec709",
+        slug,
+    )
     if input_space not in {"srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"}:
         raise ValueError(f"{slug}: unsupported input_space: {input_space}")
     apply_semantic_reaction = item.get("apply_semantic_reaction", False)

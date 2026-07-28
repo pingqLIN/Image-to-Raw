@@ -12,6 +12,8 @@ This document records the current engineering baseline for public exchange. It a
 - Apply optional deterministic synthetic sensor effects for demos and compatibility testing.
 - Override DNG `ColorMatrix1` and `AsShotNeutral` metadata explicitly for virtual camera profile experiments.
 - Validate and preserve `image2dng.semantic_scene.v1` semantic sidecars, with explicit opt-in support for implemented deterministic semantic reactions.
+- Generate local-only review bundles with contact sheets, representative DNGs, validation JSON, manifests, and reproducibility commands; if an upstream command fails, already generated source reports and manifests are preserved as diagnostic evidence.
+- Track source report diagnostic preservation on command failure as part of the review-bundle contract.
 - Embed AI provenance, selected raw mode, simulated camera parameters, and enabled sensor-effect settings in XMP.
 - Validate generated DNG files with structural checks, mode-aware tag checks, XMP checks, and optional local smoke tools.
 - Use either the CLI or the public Python `convert()` API.

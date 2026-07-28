@@ -19,9 +19,14 @@ NOISE_PRIORITY_REACTION_MODEL = "noise-priority-policy-v1"
 TARGET_MIDDLE_GRAY_REACTION_MODEL = "target-middle-gray-policy-v1"
 TARGET_WHITE_BALANCE_REACTION_MODEL = "target-white-balance-policy-v1"
 SUPPORTED_REACTION_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
-_HIGHLIGHT_POLICY_SHOULDERS = {
-    "preserve-highlights": (0.90, 0.50),
-    "soft-rolloff": (0.75, 0.35),
+HIGHLIGHT_POLICY_THRESHOLDS = {
+    "clip": 65535,
+    "preserve-highlights": 57344,
+    "soft-rolloff": 49152,
+}
+HIGHLIGHT_POLICY_FACTORS = {
+    "preserve-highlights": 0.5,
+    "soft-rolloff": 0.35,
 }
 
 
@@ -257,8 +262,10 @@ def apply_highlight_clipping_policy_reaction(
     policy = sensor_hints.get("clipping_policy")
     if policy is None:
         return image.copy(), None
-    if policy not in {"clip", "preserve-highlights", "soft-rolloff"}:
+    if policy not in HIGHLIGHT_POLICY_THRESHOLDS:
         raise ValueError(f"semantic reaction clipping_policy is unsupported: {policy}")
+    parameters = highlight_clipping_reaction_parameters(policy)
+    threshold = int(parameters["threshold"])
     if policy == "clip":
         return image.copy(), SemanticReactionResult(
             model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
@@ -268,27 +275,26 @@ def apply_highlight_clipping_policy_reaction(
             regions=[],
         )
 
-    threshold = 57344.0 if policy == "preserve-highlights" else 49152.0
-    white = 65535.0
-    source = image.astype(np.float64, copy=False)
-    active = source > threshold
-    affected_pixels = int(np.count_nonzero(np.any(active, axis=2)))
+    active = np.any(image > threshold, axis=2)
+    affected_pixels = int(np.count_nonzero(active))
     if affected_pixels == 0:
         return image.copy(), SemanticReactionResult(
             model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
             applied=False,
             status="no-op",
-            reason=f"no pixels above {int(threshold)} for clipping_policy {policy}",
+            reason=f"no pixels above {threshold} for clipping_policy {policy}",
             regions=[],
         )
 
-    output = source.copy()
+    white = 65535.0
+    output = image.astype(np.float64, copy=True)
+    above = output > threshold
     shoulder_range = white - threshold
-    highlights = output[active]
-    output[active] = threshold + shoulder_range * (
+    highlights = output[above]
+    output[above] = threshold + shoulder_range * (
         1.0 - np.exp(-((highlights - threshold) / shoulder_range))
     )
-    return np.rint(np.clip(output, 0.0, white)).astype(np.uint16), SemanticReactionResult(
+    return np.rint(np.clip(output, 0.0, 65535.0)).astype(np.uint16), SemanticReactionResult(
         model=HIGHLIGHT_CLIPPING_REACTION_MODEL,
         applied=True,
         status="applied",

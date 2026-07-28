@@ -312,7 +312,11 @@ def _load_json_object(path: Path, label: str) -> dict[str, object]:
     return payload
 
 
-def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
+def _inspect_scene(
+    scene: object,
+    repo_root: Path,
+    batch_dir: Path,
+) -> dict[str, object]:
     if not isinstance(scene, dict):
         raise ValueError("scene entry must be an object")
     slug = _string(scene, "slug")

@@ -319,6 +319,17 @@ def _sample_record(path: Path) -> dict[str, Any]:
     }
 
 
+def _all_validations_ok(samples: list[dict[str, Any]]) -> bool:
+    return all(_sample_validation_ok(sample) for sample in samples)
+
+
+def _sample_validation_ok(sample: dict[str, Any]) -> bool:
+    validation_ok = sample["validation_ok"]
+    if not isinstance(validation_ok, bool):
+        raise TypeError("sample validation_ok must be a boolean")
+    return validation_ok
+
+
 def _read_payload(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))

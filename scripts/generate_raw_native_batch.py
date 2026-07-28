@@ -57,17 +57,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    external_scenes = []
-    if args.external_manifest is not None:
-        external_scenes.extend(load_external_scene_manifest(args.external_manifest))
-    external_scenes.extend(
-        ExternalSceneLinearInput(
-            slug=path.stem,
-            path=path,
-            description=f"external scene-linear input: {path.name}",
-            producer="image2dng CLI external scene-linear input",
-            highlight_headroom_ev=args.highlight_headroom_ev,
-            exposure_bias_ev=args.exposure_bias_ev,
+    try:
+        external_scenes = []
+        if args.external_manifest is not None:
+            external_scenes.extend(load_external_scene_manifest(args.external_manifest))
+        external_scenes.extend(
+            ExternalSceneLinearInput(
+                slug=path.stem,
+                path=path,
+                description=f"external scene-linear input: {path.name}",
+                producer="image2dng CLI external scene-linear input",
+                highlight_headroom_ev=args.highlight_headroom_ev,
+                exposure_bias_ev=args.exposure_bias_ev,
+            )
+            for path in args.scene_linear
         )
 
         if external_scenes:

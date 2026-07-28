@@ -150,3 +150,5 @@ image2dng.compatibility_evidence.v2
 - `matrix`：fixture/tool/result/evidence/notes/exit code/duration/output artifacts/missing output artifacts evidence matrix。
 - `compatibility-summary.md`：除了 tool evidence matrix，也呈現 fixture DNG 與 validation JSON 的 byte count / SHA-256，方便人工審查時不用先打開 JSON report 才能核對 artifact integrity。
 - `ok` / `errors`：整體 gate 結果。
+
+本機 SDK evidence 由 dedicated local validation scripts 產出；使用 `scripts/run_adobe_dng_sdk_validation.py` 或 `scripts/verify_adobe_validation_stack.py`，並維持 local-only、非 CI gate 的界線。

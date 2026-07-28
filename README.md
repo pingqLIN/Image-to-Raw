@@ -1,5 +1,7 @@
 # Image-to-DNG RAW Generator
 
+[繁體中文](README.zh-tw.md)
+
 `image2dng` is a prototype CLI for generating **truthful synthetic camera-negative DNG files** from 16-bit TIFF/PNG, display-referred RGB, scene-linear RGB, or model-estimated linear camera signals.
 
 The production path writes uncompressed 16-bit `LinearRaw` DNG. The file is intended to behave like a high-dynamic-range, high-information RAW editing negative, not like an original sensor dump from a real camera. Generated DNGs use `UniqueCameraModel = "Synthetic Camera v1"`, embed AI/synthetic provenance in a custom XMP namespace, and avoid MakerNote spoofing.
@@ -108,6 +110,11 @@ The validator checks required DNG tags, XMP parseability, black/white level sani
 ```powershell
 uv run pytest
 ```
+
+`demo-output/` is local output and binary samples should not be committed.
+`demo-output/` remains local output and binary samples should not be committed.
+The RAW processor setup audit is read-only: It does not install or update any tool, and installing one RAW processor requires explicit user approval.
+The review-bundle workflow preserves already generated source reports and manifests as diagnostic evidence when an upstream command fails.
 
 ## Roadmap
 

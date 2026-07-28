@@ -150,4 +150,4 @@ Sensor-effect fixtures should record the enabled effect parameters and determini
 - fixtures: input path, DNG path, DNG byte count, DNG SHA-256, DNG layout, raw IFD location, IFD0 preview flag, validation JSON path, validation JSON byte count, validation JSON SHA-256, structural validation status, and processor result records;
 - matrix: fixture, tool, command, result, evidence path, environment, notes, exit code, duration, output artifacts, and missing output artifacts.
 
-Adobe DNG SDK remains local-only/manual-resource evidence and the `compatibility-report.json` matrix entry remains `manual-only` until a reproducible public gate policy exists.
+Adobe DNG SDK remains local-only/manual-resource evidence and the `compatibility-report.json` matrix entry remains `manual-only` until a reproducible public gate policy exists. Dedicated local SDK validation scripts can produce sidecar evidence, but those outputs remain local-only and are not CI gates.

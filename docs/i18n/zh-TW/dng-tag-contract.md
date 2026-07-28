@@ -96,4 +96,4 @@ Optional smoke tools 是 compatibility evidence，不是 mandatory gates：
 
 - 可用且 parse/export 成功的 tools 會記錄為 `passed`。
 - 缺少的 tools 會記錄為 `skipped`。
-- Adobe DNG SDK matrix entries 維持 `manual-only`；local-only SDK reports 需要使用者準備 Adobe resources，且不是 mandatory gates。
+- Adobe DNG SDK 在 generic compatibility matrix 維持 `manual-only`；dedicated local scripts 可產出本機 SDK sidecar evidence，且不是 automated gate。
