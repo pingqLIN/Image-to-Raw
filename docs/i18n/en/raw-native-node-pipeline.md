@@ -11,11 +11,11 @@ Rationale:
 - RAW/DNG semantics, XMP provenance, synthetic camera labeling, and validation contracts are the core responsibility of this project. They should stay testable, versioned, and regression-safe inside this repository.
 - The existing `convert()`, DNG writer, validator, and sensor-effect code already provide enough foundation to split the flow into graph artifacts.
 - ComfyUI is a strong visual orchestration and model ecosystem, but it should wrap the core pipeline from a separate bridge project so RAW semantics, model workflow, and UI extension lifecycle do not become coupled too early.
-- The first validation target is to emit DNG files with IFD0 JPEG previews, sidecar JPEG previews, validation JSON, and a graph manifest. That does not require a full diffusion runtime yet.
+- The first validation target is to emit DNG files with IFD0 JPEG previews, sidecar JPEG previews, validation JSON, and a graph manifest; that core validation scope does not depend on a full diffusion runtime.
 
 ComfyUI / Stable Diffusion integration lives in the sibling bridge project `image-to-raw-comfyui-sd-bridge`.
 
-ComfyUI documentation remains useful for future bridge-side custom-node and CLI integration:
+ComfyUI documentation remains useful for the bridge-side custom-node and CLI integration boundary:
 
 - <https://docs.comfy.org/development/core-concepts/custom-nodes>
 - <https://docs.comfy.org/comfy-cli/getting-started>
@@ -50,7 +50,7 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
-The ComfyUI / Stable Diffusion offline importer moved to the bridge project. Its CLI reads ComfyUI output PNG `prompt` / `workflow` metadata, converts the image into a 16-bit TIFF handoff artifact, and writes an external scene manifest:
+The ComfyUI / Stable Diffusion offline importer moved to the bridge project. The CLI provided by that bridge reads ComfyUI output PNG `prompt` / `workflow` metadata, converts the image into a 16-bit TIFF handoff artifact, and writes an external scene manifest:
 
 ```powershell
 uv run image2dng-comfyui-import `
@@ -59,7 +59,7 @@ uv run image2dng-comfyui-import `
   --run-pipeline
 ```
 
-This path lives in `../image-to-raw-comfyui-sd-bridge/` and intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
+This path is provided by the external bridge project and intentionally does not launch ComfyUI, download models, or install custom nodes. Typical ComfyUI PNG outputs should be imported as `srgb`; use `linear-rec709` or another linear-light input space only when the workflow is known to emit scene-linear TIFF.
 
 The bridge importer writes `producer_metadata` and `producer_metadata_manifest` into the external scene manifest. The RAW-native external batch copies the metadata sidecar and records `producer_metadata_artifacts` in the batch manifest / sample index, keeping the ComfyUI workflow summary traceable to the output DNGs. Producer metadata is preserved for traceability only and does not modify raw sample values; deterministic pixel changes live only in the explicit opt-in semantic reaction path.
 
@@ -83,7 +83,7 @@ For multiple images or per-image metadata, use an `image2dng.external_scene_line
 }
 ```
 
-`semantic_manifest` is a deliberate next-stage hook. When the sidecar uses `image2dng.semantic_scene.v1`, the pipeline validates it before DNG generation, copies the sidecar, copies resolvable local assets, and records a validation summary in the batch manifest and sample index. By default, the implementation still does not convert semantic information into raw sample values.
+`semantic_manifest` is a currently implemented semantic sidecar extension point. When the sidecar uses `image2dng.semantic_scene.v1`, the pipeline validates it before DNG generation, copies the sidecar, copies resolvable local assets, and records a validation summary in the batch manifest and sample index. By default, the implementation still does not convert semantic information into raw sample values.
 
 When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline enables implemented deterministic semantic reactions: `region-exposure-mask-v1` can use region masks and `exposure_bias_ev` to apply EV modulation to 16-bit scene-linear RGB input, `target-middle-gray-policy-v1` can apply bounded global gain when `target_middle_gray_policy: global-gain-v1` is explicitly set, `target-white-balance-policy-v1` can derive bounded RGB channel gains from an approximate CCT neutral when `target_white_balance_policy: channel-gain-v1` is explicitly set, and `highlight-clipping-policy-v1` can apply a bounded soft shoulder from `sensor_response_hints.clipping_policy`. This only supports `linear-rec709`, `acescg`, and `xyz`; encoded `srgb` or `prophoto-rgb` inputs cannot apply the reaction directly. See [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md) for the detailed contract.
 
@@ -127,9 +127,8 @@ The current scene generator is deterministic and procedural, not the final AI di
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
-## Next Gate
+## Boundary Notes
 
-1. Continue validating the `preview-subifd` layout with representative samples in RAW tools; this is a format experiment, not a full Adobe compatibility claim.
-2. Build on the validated semantic sidecar contract and define how semantics, material, lighting, mask, and depth data enter photon/sensor-response mapping.
-3. Prototype a ComfyUI custom node in the bridge project that accepts prompt, scene-linear tensor, and semantic sidecar input and returns DNG path, sidecar JPEG path, and manifest.
-4. Add ComfyUI installation and smoke workflow docs in the bridge project after the custom node is stable; the core repository should keep only the generic external manifest contract.
+- `preview-subifd` layout behavior in RAW tools should be validated through compatibility evidence; it remains a format experiment, not a full Adobe compatibility claim.
+- Semantic sidecar reaction describes only how deterministic helpers map raw values; it does not claim a completed photon/sensor-response model.
+- ComfyUI custom nodes, ComfyUI installation, model downloads, and smoke workflows belong in the external bridge project; the core repository keeps only the generic external manifest contract.

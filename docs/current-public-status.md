@@ -20,7 +20,7 @@ This document records the current engineering baseline for public exchange. It a
 
 The project intentionally does not impersonate a real camera RAW file. Generated DNGs identify themselves as synthetic outputs and avoid MakerNote spoofing.
 
-`LinearRaw` remains the compatibility-first output path because it is simple, inspectable, and avoids false claims about sensor capture. The simulated CFA path is explicit and intended for workflow research, compatibility testing, and controlled demos. Sensor effects are simple synthetic controls, not a physical camera model.
+`LinearRaw` remains the compatibility-first output path because it is simple, inspectable, and avoids false claims about sensor capture. The simulated CFA path is explicit and intended for workflow research, compatibility testing, and controlled demos. Sensor effects and semantic reaction helpers are simple deterministic controls, not a physical camera model.
 
 ## Application Interfaces
 
@@ -32,6 +32,9 @@ Primary interfaces:
 - Semantic reaction registry: `uv run image2dng semantic-reactions --json`
 - Python API: `from image2dng import convert`
 - Demo generator: `uv run python scripts/generate_demo_samples.py --output-dir demo-output`
+- RAW-native batch: `uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch`
+- Compatibility evidence: `uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence`
+- Review bundle: `uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle`
 
 See:
 

@@ -64,7 +64,11 @@ English public baseline: [docs/demo.md](../../demo.md)
 | Phase 1.5 | LinearRaw baseline / validator / API | 標準色卡、RGB ramp、灰階 ramp | `linearraw.dng`、validator JSON、preview PNG | source vs LinearRaw preview、灰階連續性、色塊對照 |
 | Phase 2 | simulated CFA mode | 色卡、細節材質、文字/線條、RGB ramp | `cfa-rggb.dng`、`cfa-bggr.dng`、CFA validator JSON | CFA mosaic preview、2x2 pattern overlay、LinearRaw/CFA 對照 |
 | Phase 3 | synthetic sensor effects / demo layer | 人像膚色、日常物品、低光/暗部 patch | `cfa-noisy.dng`、`linearraw-noisy.dng`、demo manifest | before/after crop、noise heatmap、膚色與暗部比較 |
-| Future semantic/depth | 結構化附加資料 | 人像、物品、深度/遮罩樣張 | mask/depth metadata demo | preview overlay、metadata evidence panel |
+| RAW-native semantic sidecar | 語意 sidecar preservation / opt-in reaction | 人像、物品、遮罩樣張、highlight stress input | semantic manifest、copied assets、reaction-applied scene-linear TIFF、sample index | metadata evidence panel、reaction/no-op status、highlight/region before-after |
+
+Development baseline verifier 會寫入 `verification-report.json`，記錄 `pytest`、`ruff check`、`uv build`、RAW-native batch generation 與 isolated wheel install smoke test 的 command result。它也會記錄 artifact path、byte count、SHA-256、JPEG dimensions、validation artifact metadata 與 sample index status。
+
+Demo review bundle 會收斂 visual demo、RAW-native node batch、development baseline 與 compatibility evidence 的 reports / manifests。若上游 command 失敗，bundle 仍會保留已產生的 source reports / manifests 作為診斷 evidence，但不會放寬 gate：`review-bundle-report.json` 的 `ok` 會維持 `false`，script 也會回傳 non-zero exit code。
 
 ## 圖像種類分配
 
@@ -124,9 +128,12 @@ flowchart TD
   D --> D1["CFA DNG + mosaic preview + pattern overlay"]
   B --> E["Phase 3：sensor effects"]
   E --> E1["noisy DNG + before/after crop + diff heatmap"]
+  B --> S["RAW-native semantic sidecar"]
+  S --> S1["manifest + copied assets + reaction evidence"]
   C1 --> F["contact sheet"]
   D1 --> F
   E1 --> F
+  S1 --> F
   F --> G["docs/demo.md 可嵌入或人工檢視"]
 ```
 
@@ -151,7 +158,13 @@ flowchart TD
 - `cfa-pattern-comparison.png`：RGGB、BGGR、GRBG、GBRG。
 - `sensor-effects-comparison.png`：no effect / shot / read / row / combined。
 
-### Task 4：素材類型擴充
+### Task 4：Semantic sidecar evidence
+
+- 使用 `image2dng.semantic_scene.v1` sidecar 與 mask asset 驗證 preservation + validation。
+- 對 opt-in `apply_semantic_reaction: true` 樣張記錄 `semantic_reaction` summary 與 `semantic_to_raw_status`。
+- 保留 reaction-applied scene-linear TIFF，讓 reviewer 可比較 raw value mapping 前後差異。
+
+### Task 5：素材類型擴充
 
 - 標準色卡：使用使用者提供圖卡或生成替代圖。
 - 階調漸層：由 script deterministic 產生。

@@ -30,13 +30,13 @@ English public baseline: [docs/design.md](../../design.md)
 - 先把 synthetic provenance 與 simulated camera metadata 寫誠實；
 - 先以 `LinearRaw` 作為可互通的 MVP；
 - CFA 必須是明確 opt-in 的 simulated mode；
-- noise、depth、semantic mask，以及更接近研究型 inverse-ISP / raw-generation 的方向，不屬於 LinearRaw MVP。
+- depth 與更接近研究型 inverse-ISP / raw-generation 的方向仍不屬於 LinearRaw MVP；noise 與 semantic mask 只以明確 opt-in、deterministic、可追溯的 sidecar/helper 形式進入 pipeline，不宣稱完整 sensor simulation。
 
 ## RAW-native node pipeline direction
 
 專案正在從單次 conversion 擴展成 RAW-native generation pipeline。在這個模型中，DNG 是主要生成 artifact，JPEG/PNG 則是從 generated RAW buffer render 出來的 preview 或交付副產品。
 
-目前實作選擇先把第一版 node graph 放在本 repo 內，而不是把 ComfyUI 作為第一個核心 runtime。這能讓 DNG semantics、XMP provenance、validation、synthetic camera rules 都留在已測試的核心程式碼旁邊。ComfyUI / Stable Diffusion bridge 已分割到 sibling project `../image-to-raw-comfyui-sd-bridge/`；它負責 workflow metadata、SD checkpoint/sampler/scheduler 等外部生成器語意，並包覆 `image2dng` 核心 pipeline，而不是取代核心。
+目前實作選擇先把第一版 node graph 放在本 repo 內，而不是把 ComfyUI 作為第一個核心 runtime。這能讓 DNG semantics、XMP provenance、validation、synthetic camera rules 都留在已測試的核心程式碼旁邊。ComfyUI / Stable Diffusion bridge 已分割到外部 sibling project `image-to-raw-comfyui-sd-bridge`；它負責 workflow metadata、SD checkpoint/sampler/scheduler 等外部生成器語意，並包覆 `image2dng` 核心 pipeline，而不是取代核心。
 
 目前最小 graph：
 
@@ -123,6 +123,10 @@ Phase 3 adds optional deterministic sensor-effect controls for demos and compati
 - `sensor_effect_seed`: deterministic seed for reproducible sample generation。
 
 These effects are applied in virtual camera RGB before quantization or CFA mosaicing. XMP records `xmpAI:sensorNoiseModel="synthetic-simple-v1"` plus the enabled parameters. The model is intentionally simple; it is not a physical sensor simulator and should not be used to impersonate real camera behavior.
+
+## Semantic sidecar and reaction boundaries
+
+RAW-native pipeline 可驗證並保存 `image2dng.semantic_scene.v1` sidecar。預設只做 preservation + validation；只有 external scene manifest 明確設定 `apply_semantic_reaction: true` 時，才會用 deterministic `semantic-reaction-chain-v1` helpers 修改複製後的 scene-linear input。目前 helper 包含 region exposure mask 與 highlight clipping policy，仍只是可追溯的 raw value mapping，不是完整物理 sensor model。
 
 ## DNG tag layout
 

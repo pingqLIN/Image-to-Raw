@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 from dataclasses import dataclass
@@ -21,6 +22,10 @@ from image2dng.compatibility import (
 from image2dng.image_processing import InputSpace
 from image2dng.models import CfaPattern
 from image2dng.validate import validate_dng
+
+MISSING_TOOL_POLICIES = {"skipped"}
+AVAILABLE_TOOL_FAILURE_POLICIES = {"failed"}
+MATRIX_RESULTS = {"passed", "failed", "skipped", "manual-only"}
 
 
 @dataclass(frozen=True)
@@ -109,12 +114,12 @@ def main(argv: list[str] | None = None) -> int:
             processor_dir=processor_dir,
             timeout_seconds=args.timeout_seconds,
         )
-        report["fixtures"].append(fixture)
-        report["matrix"].append(_structural_matrix_entry(fixture))
-        report["matrix"].extend(_processor_matrix_entries(fixture))
+        _fixtures(report).append(fixture)
+        _matrix(report).append(_structural_matrix_entry(fixture))
+        _matrix(report).extend(_processor_matrix_entries(fixture))
 
     _append_failures(report)
-    report["ok"] = not report["errors"]
+    report["ok"] = not _error_messages(report)
 
     report_path = root / "compatibility-report.json"
     summary_path = root / "compatibility-summary.md"
@@ -208,8 +213,15 @@ def _generate_fixture(
         "sensor_effects": spec.sensor_effects,
         "input": str(input_path),
         "dng": str(dng_path),
+        "dng_bytes": dng_path.stat().st_size,
+        "dng_sha256": _sha256_file(dng_path),
+        "dng_layout": validation["dng_layout"],
+        "raw_ifd_location": validation["raw_ifd_location"],
+        "ifd0_preview": validation["ifd0_preview"],
         "validation_json": str(validation_path),
-        "validation_ok": validation["ok"],
+        "validation_json_bytes": validation_path.stat().st_size,
+        "validation_json_sha256": _sha256_file(validation_path),
+        "validation_ok": _validation_ok(validation),
         "structural_validation": validation,
         "processor_output_dir": str(fixture_processor_dir),
         "processor_results": processor_results,
@@ -251,7 +263,7 @@ def _compatibility_chart(size: int = 64) -> np.ndarray:
 
 
 def _structural_matrix_entry(fixture: dict[str, Any]) -> dict[str, str]:
-    result = "passed" if fixture["validation_ok"] else "failed"
+    result = "passed" if _fixture_validation_ok(fixture) else "failed"
     return {
         "fixture": fixture["slug"],
         "tool": "image2dng validate",
@@ -280,35 +292,39 @@ def _processor_matrix_entries(fixture: dict[str, Any]) -> list[dict[str, object]
                 "exit_code": processor["exit_code"],
                 "duration_seconds": processor["duration_seconds"],
                 "output_artifacts": processor["output_artifacts"],
+                "missing_output_artifacts": processor["missing_output_artifacts"],
             }
         )
     return entries
 
 
 def _append_failures(report: dict[str, Any]) -> None:
-    for fixture in report["fixtures"]:
-        if not fixture["validation_ok"]:
-            report["errors"].append(f"{fixture['slug']} structural validation failed")
-    for entry in report["matrix"]:
-        if entry["result"] == "failed":
-            report["errors"].append(f"{entry['fixture']} failed {entry['tool']}: {entry['notes']}")
+    for fixture in _fixtures(report):
+        if not _fixture_validation_ok(fixture):
+            _errors(report).append(f"{_fixture_slug(fixture)} structural validation failed")
+    for entry in _matrix(report):
+        if _matrix_result(entry) == "failed":
+            _errors(report).append(
+                f"{_matrix_fixture(entry)} failed {_matrix_tool(entry)}: {_matrix_notes(entry)}"
+            )
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
+    install_policy = _install_policy(report)
     lines = [
         "# Compatibility Evidence Summary",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- Generated at: `{report['generated_at']}`",
-        f"- Output dir: `{report['output_dir']}`",
-        f"- Overall ok: `{report['ok']}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- Generated at: `{_generated_at(report)}`",
+        f"- Output dir: `{_output_dir(report)}`",
+        f"- Overall ok: `{_report_ok(report)}`",
         "",
         "## Tool Inventory",
         "",
         "| Tool | Available | Version | Notes |",
         "| --- | --- | --- | --- |",
     ]
-    for name, tool in report["tools"].items():
+    for name, tool in _tools(report).items():
         notes = tool.get("notes", "")
         lines.append(
             f"| `{name}` | `{tool.get('available')}` | `{tool.get('version')}` | {notes} |"
@@ -322,28 +338,274 @@ def _summary_markdown(report: dict[str, Any]) -> str:
             "| --- | --- | --- | --- | --- |",
         ]
     )
-    for entry in report["matrix"]:
+    for entry in _matrix(report):
+        entry_fixture = _matrix_fixture(entry)
+        entry_tool = _matrix_tool(entry)
+        fixture = _fixture_by_slug(report, entry_fixture)
+        notes = _matrix_notes(entry)
+        if fixture is not None and entry_tool == "image2dng validate":
+            notes = (
+                f"{notes}; layout={_fixture_dng_layout(fixture)}; "
+                f"raw_ifd_location={_fixture_raw_ifd_location(fixture)}"
+            )
         lines.append(
             "| "
-            f"`{entry['fixture']}` | `{entry['tool']}` | `{entry['result']}` | "
-            f"`{entry['evidence']}` | {entry['notes']} |"
+            f"`{entry_fixture}` | `{entry_tool}` | `{_matrix_result(entry)}` | "
+            f"`{_matrix_evidence(entry)}` | {notes} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Fixture Integrity",
+            "",
+            "| Fixture | DNG bytes | DNG SHA-256 | "
+            "Validation JSON bytes | Validation JSON SHA-256 |",
+            "| --- | ---: | --- | ---: | --- |",
+        ]
+    )
+    for fixture in _fixtures(report):
+        lines.append(
+            "| "
+            f"`{_fixture_slug(fixture)}` | `{_fixture_dng_bytes(fixture)}` | "
+            f"`{_fixture_dng_sha256(fixture)}` | "
+            f"`{_fixture_validation_json_bytes(fixture)}` | "
+            f"`{_fixture_validation_json_sha256(fixture)}` |"
         )
     lines.extend(
         [
             "",
             "## Install Policy",
             "",
-            f"- Auto install: `{report['install_policy']['auto_install']}`",
-            f"- Missing tool policy: `{report['install_policy']['missing_tool_policy']}`",
+            f"- Auto install: `{_install_policy_auto_install(install_policy)}`",
+            f"- Missing tool policy: `{_install_policy_missing_tool_policy(install_policy)}`",
             (
                 "- Available tool failure policy: "
-                f"`{report['install_policy']['available_tool_failure_policy']}`"
+                f"`{_install_policy_available_tool_failure_policy(install_policy)}`"
             ),
             "- Install hints are dry-run guidance only.",
         ]
     )
+    error_messages = _error_messages(report)
+    if error_messages:
+        lines.extend(["", "## Errors", ""])
+        for error in error_messages:
+            lines.append(f"- {error}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _fixture_by_slug(report: dict[str, Any], slug: str) -> dict[str, Any] | None:
+    for fixture in _fixtures(report):
+        if _fixture_slug(fixture) == slug:
+            return fixture
+    return None
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _generated_at(report: dict[str, Any]) -> str:
+    generated_at = report["generated_at"]
+    if not isinstance(generated_at, str):
+        raise TypeError("report generated_at must be a string")
+    return generated_at
+
+
+def _output_dir(report: dict[str, Any]) -> str:
+    output_dir = report["output_dir"]
+    if not isinstance(output_dir, str):
+        raise TypeError("report output_dir must be a string")
+    return output_dir
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _install_policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["install_policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report install_policy must be an object")
+    return policy
+
+
+def _install_policy_auto_install(policy: dict[str, Any]) -> bool:
+    auto_install = policy["auto_install"]
+    if not isinstance(auto_install, bool):
+        raise TypeError("install_policy auto_install must be a boolean")
+    return auto_install
+
+
+def _install_policy_missing_tool_policy(policy: dict[str, Any]) -> str:
+    missing_tool_policy = policy["missing_tool_policy"]
+    if not isinstance(missing_tool_policy, str):
+        raise TypeError("install_policy missing_tool_policy must be a string")
+    if missing_tool_policy not in MISSING_TOOL_POLICIES:
+        raise TypeError("install_policy missing_tool_policy must be skipped")
+    return missing_tool_policy
+
+
+def _install_policy_available_tool_failure_policy(policy: dict[str, Any]) -> str:
+    failure_policy = policy["available_tool_failure_policy"]
+    if not isinstance(failure_policy, str):
+        raise TypeError("install_policy available_tool_failure_policy must be a string")
+    if failure_policy not in AVAILABLE_TOOL_FAILURE_POLICIES:
+        raise TypeError("install_policy available_tool_failure_policy must be failed")
+    return failure_policy
+
+
+def _fixtures(report: dict[str, Any]) -> list[dict[str, Any]]:
+    fixtures = report["fixtures"]
+    if not isinstance(fixtures, list):
+        raise TypeError("report fixtures must be a list")
+    if not all(isinstance(fixture, dict) for fixture in fixtures):
+        raise TypeError("report fixtures must contain objects")
+    return fixtures
+
+
+def _validation_ok(validation: dict[str, Any]) -> bool:
+    ok = validation["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("validation ok must be a boolean")
+    return ok
+
+
+def _fixture_validation_ok(fixture: dict[str, Any]) -> bool:
+    validation_ok = fixture["validation_ok"]
+    if not isinstance(validation_ok, bool):
+        raise TypeError("fixture validation_ok must be a boolean")
+    return validation_ok
+
+
+def _fixture_slug(fixture: dict[str, Any]) -> str:
+    slug = fixture["slug"]
+    if not isinstance(slug, str):
+        raise TypeError("fixture slug must be a string")
+    return slug
+
+
+def _fixture_dng_layout(fixture: dict[str, Any]) -> str:
+    layout = fixture["dng_layout"]
+    if not isinstance(layout, str):
+        raise TypeError("fixture dng_layout must be a string")
+    return layout
+
+
+def _fixture_raw_ifd_location(fixture: dict[str, Any]) -> str:
+    location = fixture["raw_ifd_location"]
+    if not isinstance(location, str):
+        raise TypeError("fixture raw_ifd_location must be a string")
+    return location
+
+
+def _fixture_dng_bytes(fixture: dict[str, Any]) -> int:
+    byte_count = fixture["dng_bytes"]
+    if not isinstance(byte_count, int) or isinstance(byte_count, bool):
+        raise TypeError("fixture dng_bytes must be an integer")
+    return byte_count
+
+
+def _fixture_dng_sha256(fixture: dict[str, Any]) -> str:
+    sha256 = fixture["dng_sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("fixture dng_sha256 must be a string")
+    return sha256
+
+
+def _fixture_validation_json_bytes(fixture: dict[str, Any]) -> int:
+    byte_count = fixture["validation_json_bytes"]
+    if not isinstance(byte_count, int) or isinstance(byte_count, bool):
+        raise TypeError("fixture validation_json_bytes must be an integer")
+    return byte_count
+
+
+def _fixture_validation_json_sha256(fixture: dict[str, Any]) -> str:
+    sha256 = fixture["validation_json_sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("fixture validation_json_sha256 must be a string")
+    return sha256
+
+
+def _tools(report: dict[str, Any]) -> dict[str, Any]:
+    tools = report["tools"]
+    if not isinstance(tools, dict):
+        raise TypeError("report tools must be an object")
+    return tools
+
+
+def _matrix(report: dict[str, Any]) -> list[dict[str, Any]]:
+    matrix = report["matrix"]
+    if not isinstance(matrix, list):
+        raise TypeError("report matrix must be a list")
+    if not all(isinstance(entry, dict) for entry in matrix):
+        raise TypeError("report matrix must contain objects")
+    return matrix
+
+
+def _matrix_fixture(entry: dict[str, Any]) -> str:
+    fixture = entry["fixture"]
+    if not isinstance(fixture, str):
+        raise TypeError("matrix fixture must be a string")
+    return fixture
+
+
+def _matrix_tool(entry: dict[str, Any]) -> str:
+    tool = entry["tool"]
+    if not isinstance(tool, str):
+        raise TypeError("matrix tool must be a string")
+    return tool
+
+
+def _matrix_result(entry: dict[str, Any]) -> str:
+    result = entry["result"]
+    if not isinstance(result, str):
+        raise TypeError("matrix result must be a string")
+    if result not in MATRIX_RESULTS:
+        raise TypeError("matrix result must be passed, failed, skipped, or manual-only")
+    return result
+
+
+def _matrix_evidence(entry: dict[str, Any]) -> str | None:
+    evidence = entry["evidence"]
+    if isinstance(evidence, str) or evidence is None:
+        return evidence
+    raise TypeError("matrix evidence must be a string or null")
+
+
+def _matrix_notes(entry: dict[str, Any]) -> str:
+    notes = entry["notes"]
+    if not isinstance(notes, str):
+        raise TypeError("matrix notes must be a string")
+    return notes
+
+
+def _errors(report: dict[str, Any]) -> list[Any]:
+    errors = report["errors"]
+    if not isinstance(errors, list):
+        raise TypeError("report errors must be a list")
+    return errors
+
+
+def _error_messages(report: dict[str, Any]) -> list[str]:
+    errors = _errors(report)
+    if not all(isinstance(error, str) for error in errors):
+        raise TypeError("report errors must be a string list")
+    return errors
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
 
 
 if __name__ == "__main__":

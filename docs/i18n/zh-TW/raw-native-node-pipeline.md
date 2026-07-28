@@ -11,11 +11,11 @@
 - RAW/DNG 語意、XMP provenance、synthetic camera 標示、validation contract 是本專案的核心責任，應先在本 repo 內保持可測試、可版本化、可回歸。
 - 現有 `convert()`、DNG writer、validator、sensor effects 已經提供足夠基礎，可以快速拆成 graph artifacts。
 - ComfyUI 很適合視覺化節點編排與生成模型生態，但應由獨立 bridge project 包覆核心 pipeline，避免 RAW 格式語意、模型工作流、UI extension 生命週期過早耦合。
-- 第一批驗證目標是產生含 IFD0 JPEG preview 的 DNG、sidecar JPEG preview、validation JSON 與 graph manifest，不需要先引入大型 diffusion runtime。
+- 第一批驗證目標是產生含 IFD0 JPEG preview 的 DNG、sidecar JPEG preview、validation JSON 與 graph manifest；這個核心驗證範圍不依賴大型 diffusion runtime。
 
 ComfyUI / Stable Diffusion 整合位於 sibling bridge project `image-to-raw-comfyui-sd-bridge`。
 
-ComfyUI 官方文件仍是 bridge project 後續 custom-node / CLI 整合的參考：
+ComfyUI 官方文件仍是 bridge project custom-node / CLI 整合邊界的參考：
 
 - <https://docs.comfy.org/development/core-concepts/custom-nodes>
 - <https://docs.comfy.org/comfy-cli/getting-started>
@@ -50,7 +50,7 @@ uv run python scripts/generate_raw_native_batch.py `
   --scene-linear path\to\scene-linear.tif
 ```
 
-ComfyUI / Stable Diffusion 的離線 importer 已搬到 bridge project。新的 CLI 會讀取 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
+ComfyUI / Stable Diffusion 的離線 importer 已搬到 bridge project。bridge 專案提供的 CLI 會讀取 ComfyUI output PNG 內嵌的 `prompt` / `workflow` metadata，轉成 16-bit TIFF handoff artifact，並寫出 external scene manifest：
 
 ```powershell
 uv run image2dng-comfyui-import `
@@ -59,7 +59,7 @@ uv run image2dng-comfyui-import `
   --run-pipeline
 ```
 
-這條路徑位於 `../image-to-raw-comfyui-sd-bridge/`，刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
+這條路徑由外部 bridge project 提供，刻意不啟動 ComfyUI、不下載 model、不安裝 custom node。一般 ComfyUI PNG 應以 `srgb` 匯入；只有在 workflow 明確輸出 scene-linear TIFF 時，才改用 `linear-rec709` 等 linear-light input space。
 
 Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與 `producer_metadata_manifest`。RAW-native external batch 會複製 metadata sidecar，並在 batch manifest / sample index 中記錄 `producer_metadata_artifacts`，讓 ComfyUI workflow 摘要與 output DNG 維持可追溯關係。Producer metadata 只做保存與追蹤，不會改變 raw sample values；會影響像素值的 deterministic transform 只存在於明確 opt-in 的 semantic reaction path。
 
@@ -83,7 +83,7 @@ Bridge importer 會在 external scene manifest 中寫入 `producer_metadata` 與
 }
 ```
 
-`semantic_manifest` 是刻意保留的下一階段接點。若 sidecar 使用 `image2dng.semantic_scene.v1`，pipeline 會在 DNG 產生前驗證它、複製 sidecar、複製可 resolve 的 local assets，並在 batch manifest 與 sample index 記錄 validation summary。預設仍不把語意資訊轉成 raw sample values。
+`semantic_manifest` 是目前已實作的 semantic sidecar extension point。若 sidecar 使用 `image2dng.semantic_scene.v1`，pipeline 會在 DNG 產生前驗證它、複製 sidecar、複製可 resolve 的 local assets，並在 batch manifest 與 sample index 記錄 validation summary。預設仍不把語意資訊轉成 raw sample values。
 
 若 external scene manifest 明確設定 `apply_semantic_reaction: true`，pipeline 會啟用已實作的 deterministic semantic reactions：`region-exposure-mask-v1` 可用 region mask 與 `exposure_bias_ev` 對 16-bit scene-linear RGB input 進行 EV modulation；`target-middle-gray-policy-v1` 可在明確設定 `target_middle_gray_policy: global-gain-v1` 時套用 bounded global gain；`target-white-balance-policy-v1` 可在明確設定 `target_white_balance_policy: channel-gain-v1` 時用 approximate CCT neutral 推導 bounded RGB channel gains；`highlight-clipping-policy-v1` 可依 `sensor_response_hints.clipping_policy` 套用 bounded soft shoulder。這只支援 `linear-rec709`、`acescg`、`xyz`，不支援 encoded `srgb` 或 `prophoto-rgb` 直接套用 reaction。詳細 contract 見 [Semantic Scene Sidecar Contract v1](semantic-scene-sidecar-contract.md)。
 
@@ -127,9 +127,8 @@ uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
-## 下一個 gate
+## Boundary notes
 
-1. 用代表樣本持續驗證 `preview-subifd` layout 在 RAW tools 中的行為；這是格式實驗，不直接宣稱完整 Adobe 相容。
-2. 在已驗證的 semantic sidecar contract 上，設計語意、材質、光照、mask/depth 等如何進入 photon/sensor-response mapping。
-3. 在 bridge project 中原型化 ComfyUI custom node：輸入 prompt/scene-linear tensor/semantic sidecar，輸出 DNG path、sidecar JPEG path、manifest。
-4. 若 ComfyUI custom node 穩定，再於 bridge project 加入 ComfyUI 安裝與 smoke workflow 文件；核心 repo 仍只保留 generic external manifest contract。
+- `preview-subifd` layout 的 RAW tool 行為應由 compatibility evidence 驗證；目前仍是格式實驗，不宣稱完整 Adobe 相容。
+- Semantic sidecar reaction 只描述 deterministic helper 如何映射 raw values；不宣稱 photon/sensor-response model 已完成。
+- ComfyUI custom node、ComfyUI 安裝、model 下載與 smoke workflow 屬於外部 bridge project；核心 repo 只保留 generic external manifest contract。

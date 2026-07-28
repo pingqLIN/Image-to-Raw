@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -95,14 +98,20 @@ def main() -> int:
             _write_report(output_dir, report)
             return 1
 
+    wheel_smoke = _run_wheel_smoke_step(output_dir=output_dir, repo_root=repo_root)
+    _append_step(report, wheel_smoke)
+    if wheel_smoke["status"] == "failed":
+        _write_report(output_dir, report)
+        return 1
+
     try:
         report["demo_samples"] = _inspect_demo_samples(output_dir / "demo-samples")
         report["batch"] = _inspect_batch(output_dir / "raw-native-node-batch", repo_root)
     except ValueError as exc:
         _append_error(report, str(exc))
 
-    report["ok"] = not report["errors"] and all(
-        step["status"] == "passed" for step in report["steps"]  # type: ignore[index]
+    report["ok"] = not _error_messages(report) and all(
+        _step_status(step) == "passed" for step in _steps(report)
     )
     _write_report(output_dir, report)
     return 0 if report["ok"] else 1
@@ -149,13 +158,107 @@ def _run_step(name: str, command: list[str], cwd: Path) -> dict[str, object]:
     }
 
 
+def _run_wheel_smoke_step(*, output_dir: Path, repo_root: Path) -> dict[str, object]:
+    try:
+        wheel = _latest_wheel(repo_root)
+    except FileNotFoundError as exc:
+        return {
+            "name": "wheel-install-smoke",
+            "command": [],
+            "exit_code": 1,
+            "duration_seconds": 0.0,
+            "status": "failed",
+            "stdout_tail": [],
+            "stderr_tail": [str(exc)],
+        }
+    venv = output_dir / "wheel-smoke-venv"
+    if venv.exists():
+        shutil.rmtree(venv)
+
+    python_executable = _venv_python(venv)
+    image2dng_executable = _venv_script(venv, "image2dng")
+    commands = [
+        ["uv", "venv", str(venv)],
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python_executable),
+            str(wheel),
+        ],
+        [str(image2dng_executable), "--help"],
+        [str(image2dng_executable), "validate", "--help"],
+    ]
+
+    started = time.perf_counter()
+    stdout = []
+    stderr = []
+    for command in commands:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        stdout.extend(_tail(completed.stdout, max_lines=12))
+        stderr.extend(_tail(completed.stderr, max_lines=12))
+        if completed.returncode != 0:
+            duration = round(time.perf_counter() - started, 3)
+            return {
+                "name": "wheel-install-smoke",
+                "command": commands,
+                "exit_code": completed.returncode,
+                "duration_seconds": duration,
+                "status": "failed",
+                "stdout_tail": stdout[-40:],
+                "stderr_tail": stderr[-40:],
+            }
+
+    duration = round(time.perf_counter() - started, 3)
+    return {
+        "name": "wheel-install-smoke",
+        "command": commands,
+        "exit_code": 0,
+        "duration_seconds": duration,
+        "status": "passed",
+        "stdout_tail": stdout[-40:],
+        "stderr_tail": stderr[-40:],
+    }
+
+
+def _venv_python(venv: Path) -> Path:
+    if platform.system() == "Windows":
+        return venv / "Scripts" / "python.exe"
+    return venv / "bin" / "python"
+
+
+def _latest_wheel(repo_root: Path) -> Path:
+    wheels = sorted(
+        (repo_root / "dist").glob("image2dng-*.whl"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if not wheels:
+        raise FileNotFoundError("no built image2dng wheel found under dist/")
+    return wheels[-1]
+
+
+def _venv_script(venv: Path, name: str) -> Path:
+    if platform.system() == "Windows":
+        return venv / "Scripts" / f"{name}.exe"
+    return venv / "bin" / name
+
+
 def _append_step(report: dict[str, object], step: dict[str, object]) -> None:
-    steps = report["steps"]
-    if not isinstance(steps, list):
-        raise TypeError("report steps must be a list")
-    steps.append(step)
-    if step["status"] == "failed":
-        _append_error(report, f"{step['name']} failed with exit code {step['exit_code']}")
+    _steps(report).append(step)
+    status = _step_status(step)
+    if status == "failed":
+        _append_error(
+            report,
+            f"{_step_name(step)} failed with exit code {_step_exit_code(step)}",
+        )
+    _step_duration_seconds(step)
 
 
 def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
@@ -183,18 +286,16 @@ def _inspect_batch(batch_dir: Path, repo_root: Path) -> dict[str, object]:
         sample_index.get("scene_count") == len(scenes),
         "sample index scene count does not match manifest",
     )
-    _require(
-        sample_index.get("all_validations_ok") is True,
-        "sample index reports validation failure",
-    )
+    sample_index_all_validations_ok = _sample_index_all_validations_ok(sample_index)
+    _require(sample_index_all_validations_ok, "sample index reports validation failure")
 
-    scene_reports = [_inspect_scene(scene, repo_root) for scene in scenes]
+    scene_reports = [_inspect_scene(scene, repo_root, batch_dir) for scene in scenes]
     return {
         "batch_dir": str(batch_dir),
         "manifest_path": str(manifest_path),
         "sample_index_path": str(sample_index_path),
         "scene_count": len(scene_reports),
-        "sample_index_all_validations_ok": sample_index.get("all_validations_ok"),
+        "sample_index_all_validations_ok": sample_index_all_validations_ok,
         "scenes": scene_reports,
     }
 
@@ -215,18 +316,10 @@ def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
     if not isinstance(scene, dict):
         raise ValueError("scene entry must be an object")
     slug = _string(scene, "slug")
-    outputs = scene.get("outputs")
-    validations = scene.get("validations")
-    raw_ids = scene.get("raw_data_unique_ids")
-    nodes = scene.get("nodes")
-    if not isinstance(outputs, dict):
-        raise ValueError(f"{slug}: outputs must be an object")
-    if not isinstance(validations, dict):
-        raise ValueError(f"{slug}: validations must be an object")
-    if not isinstance(raw_ids, dict):
-        raise ValueError(f"{slug}: raw_data_unique_ids must be an object")
-    if not isinstance(nodes, list) or not nodes:
-        raise ValueError(f"{slug}: nodes must be a non-empty list")
+    outputs = _scene_outputs(scene, slug)
+    validations = _scene_validations(scene, slug)
+    raw_ids = _scene_raw_data_unique_ids(scene, slug)
+    nodes = _scene_nodes(scene, slug)
 
     expected_outputs = {
         "scene_linear_tiff",
@@ -238,28 +331,35 @@ def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
     missing_outputs = sorted(expected_outputs - set(outputs))
     if missing_outputs:
         raise ValueError(f"{slug}: missing outputs: {', '.join(missing_outputs)}")
+    for key in ("linearraw", "cfa"):
+        if not _validation_summary_ok(validations, key, slug):
+            raise ValueError(f"{slug}: validation summary for {key} is not ok")
+        if not _raw_data_unique_id(raw_ids, key, slug):
+            raise ValueError(f"{slug}: raw data unique id for {key} is missing")
 
-    linear_dng_path = _resolve_path(str(outputs["linearraw_dng"]), repo_root)
+    linear_dng_path = _output_path(outputs, "linearraw_dng", repo_root, batch_dir, slug)
     validation_dir = linear_dng_path.parent.parent / "validation"
 
     artifact_reports = [
-        _artifact_record(key, _resolve_path(str(outputs[key]), repo_root))
+        _artifact_record(key, _output_path(outputs, key, repo_root, batch_dir, slug))
         for key in sorted(expected_outputs)
     ]
     artifact_reports.extend(
         [
-            _artifact_record("linearraw_validation", validation_dir / f"{slug}-linearraw.json"),
-            _artifact_record("cfa_validation", validation_dir / f"{slug}-cfa.json"),
+            _validation_artifact_record(
+                "linearraw_validation",
+                validation_dir / f"{slug}-linearraw.json",
+            ),
+            _validation_artifact_record("cfa_validation", validation_dir / f"{slug}-cfa.json"),
         ]
     )
     for key in ("linearraw_jpeg", "cfa_jpeg"):
-        _inspect_jpeg(slug, key, _resolve_path(str(outputs[key]), repo_root), artifact_reports)
-    for key in ("linearraw", "cfa"):
-        validation = validations.get(key)
-        if not isinstance(validation, dict) or validation.get("ok") is not True:
-            raise ValueError(f"{slug}: validation summary for {key} is not ok")
-        if not raw_ids.get(key):
-            raise ValueError(f"{slug}: raw data unique id for {key} is missing")
+        _inspect_jpeg(
+            slug,
+            key,
+            _output_path(outputs, key, repo_root, batch_dir, slug),
+            artifact_reports,
+        )
 
     return {
         "slug": slug,
@@ -271,6 +371,71 @@ def _inspect_scene(scene: object, repo_root: Path) -> dict[str, object]:
     }
 
 
+def _scene_outputs(scene: dict[str, object], slug: str) -> dict[str, object]:
+    outputs = scene.get("outputs")
+    if not isinstance(outputs, dict):
+        raise ValueError(f"{slug}: outputs must be an object")
+    return outputs
+
+
+def _scene_validations(scene: dict[str, object], slug: str) -> dict[str, object]:
+    validations = scene.get("validations")
+    if not isinstance(validations, dict):
+        raise ValueError(f"{slug}: validations must be an object")
+    return validations
+
+
+def _scene_raw_data_unique_ids(scene: dict[str, object], slug: str) -> dict[str, object]:
+    raw_ids = scene.get("raw_data_unique_ids")
+    if not isinstance(raw_ids, dict):
+        raise ValueError(f"{slug}: raw_data_unique_ids must be an object")
+    return raw_ids
+
+
+def _scene_nodes(scene: dict[str, object], slug: str) -> list[object]:
+    nodes = scene.get("nodes")
+    if not isinstance(nodes, list) or not nodes:
+        raise ValueError(f"{slug}: nodes must be a non-empty list")
+    return nodes
+
+
+def _output_path(
+    outputs: dict[str, object],
+    key: str,
+    repo_root: Path,
+    batch_dir: Path,
+    slug: str,
+) -> Path:
+    value = outputs[key]
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{slug}: output {key} must be a non-empty string")
+    return _resolve_batch_path(value, repo_root, batch_dir)
+
+
+def _validation_summary_ok(validations: dict[str, object], key: str, slug: str) -> bool:
+    validation = validations.get(key)
+    if not isinstance(validation, dict):
+        raise ValueError(f"{slug}: validation summary for {key} must be an object")
+    ok = validation.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError(f"{slug}: validation summary for {key} ok must be a boolean")
+    return ok
+
+
+def _sample_index_all_validations_ok(sample_index: dict[str, object]) -> bool:
+    ok = sample_index.get("all_validations_ok")
+    if not isinstance(ok, bool):
+        raise ValueError("sample index all_validations_ok must be a boolean")
+    return ok
+
+
+def _raw_data_unique_id(raw_ids: dict[str, object], key: str, slug: str) -> str | None:
+    value = raw_ids.get(key)
+    if isinstance(value, str) or value is None:
+        return value
+    raise ValueError(f"{slug}: raw data unique id for {key} must be a string or null")
+
+
 def _artifact_record(key: str, path: Path) -> dict[str, object]:
     if not path.exists():
         raise ValueError(f"{key} missing: {path}")
@@ -278,7 +443,26 @@ def _artifact_record(key: str, path: Path) -> dict[str, object]:
         "key": key,
         "path": str(path),
         "bytes": path.stat().st_size,
+        "sha256": _sha256(path),
     }
+
+
+def _validation_artifact_record(key: str, path: Path) -> dict[str, object]:
+    record = _artifact_record(key, path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{key}: validation JSON must be an object")
+    ok = payload.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError(f"{key}: validation JSON ok must be a boolean")
+    if ok is not True:
+        raise ValueError(f"{key}: validation JSON is not ok")
+    errors = payload.get("errors")
+    if not isinstance(errors, list):
+        raise ValueError(f"{key}: validation JSON errors must be a list")
+    record["validation_ok"] = ok
+    record["validation_error_count"] = len(errors)
+    return record
 
 
 def _inspect_jpeg(
@@ -304,6 +488,26 @@ def _resolve_path(value: str, repo_root: Path) -> Path:
     return path if path.is_absolute() else repo_root / path
 
 
+def _resolve_batch_path(value: str, repo_root: Path, batch_dir: Path) -> Path:
+    path = _resolve_path(value, repo_root).resolve()
+    if not _is_path_within(path, batch_dir):
+        raise ValueError(f"batch artifact path is outside batch dir: {path}")
+    return path
+
+
+def _is_path_within(path: Path, root: Path) -> bool:
+    root = root.resolve()
+    return path == root or root in path.parents
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _string(payload: dict[str, object], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
@@ -317,10 +521,62 @@ def _require(condition: bool, message: str) -> None:
 
 
 def _append_error(report: dict[str, object], message: str) -> None:
+    _errors(report).append(message)
+
+
+def _steps(report: dict[str, object]) -> list[dict[str, object]]:
+    steps = report["steps"]
+    if not isinstance(steps, list):
+        raise TypeError("report steps must be a list")
+    if not all(isinstance(step, dict) for step in steps):
+        raise TypeError("report steps must contain objects")
+    return steps
+
+
+def _errors(report: dict[str, object]) -> list[object]:
     errors = report["errors"]
     if not isinstance(errors, list):
         raise TypeError("report errors must be a list")
-    errors.append(message)
+    return errors
+
+
+def _error_messages(report: dict[str, object]) -> list[str]:
+    errors = _errors(report)
+    if not all(isinstance(error, str) for error in errors):
+        raise TypeError("report errors must be a string list")
+    return errors
+
+
+def _step_status(step: dict[str, object]) -> StepStatus:
+    status = step["status"]
+    if status not in ("passed", "failed"):
+        raise TypeError("step status must be passed or failed")
+    return status
+
+
+def _step_name(step: dict[str, object]) -> str:
+    name = step["name"]
+    if not isinstance(name, str) or not name:
+        raise TypeError("step name must be a non-empty string")
+    return name
+
+
+def _step_exit_code(step: dict[str, object]) -> int:
+    exit_code = step["exit_code"]
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        return exit_code
+    raise TypeError("step exit_code must be an integer")
+
+
+def _step_duration_seconds(step: dict[str, object]) -> float | int:
+    duration = step["duration_seconds"]
+    if (
+        isinstance(duration, int | float)
+        and not isinstance(duration, bool)
+        and math.isfinite(duration)
+    ):
+        return duration
+    raise TypeError("step duration_seconds must be finite numeric")
 
 
 def _tail(text: str, *, max_lines: int = 40) -> list[str]:

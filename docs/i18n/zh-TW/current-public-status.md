@@ -20,7 +20,7 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 
 本專案刻意不偽裝成真實相機 RAW 檔。產出的 DNG 會明確標示為 synthetic output，並避免 MakerNote spoofing。
 
-`LinearRaw` 仍是 compatibility-first 的主要輸出路徑，因為它簡單、可檢查，也避免對 sensor capture 做出不實宣稱。simulated CFA 路徑則是明確 opt-in，定位在 workflow research、compatibility testing 與可控 demo。sensor effects 只是簡化的 synthetic control，不是完整物理相機模型。
+`LinearRaw` 仍是 compatibility-first 的主要輸出路徑，因為它簡單、可檢查，也避免對 sensor capture 做出不實宣稱。simulated CFA 路徑則是明確 opt-in，定位在 workflow research、compatibility testing 與可控 demo。sensor effects 與 semantic reaction helpers 只是簡化的 deterministic controls，不是完整物理相機模型。
 
 ## 對外介面
 
@@ -32,6 +32,9 @@ English public baseline: [docs/current-public-status.md](../../current-public-st
 - Semantic reaction registry：`uv run image2dng semantic-reactions --json`
 - Python API：`from image2dng import convert`
 - Demo generator：`uv run python scripts/generate_demo_samples.py --output-dir demo-output`
+- RAW-native batch：`uv run python scripts/generate_raw_native_batch.py --output-dir demo-output/raw-native-node-batch`
+- Compatibility evidence：`uv run python scripts/generate_compatibility_evidence.py --output-dir demo-output/compatibility-evidence`
+- Review bundle：`uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle`
 
 參考文件：
 

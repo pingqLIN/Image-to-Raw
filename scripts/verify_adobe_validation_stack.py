@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from image2dng import __version__
 
 REPORT_SCHEMA = "image2dng.adobe_validation_stack_report.v1"
+STEP_STATUSES = {"failed", "passed"}
 
 DEFAULT_OUTPUT_DIR = Path("demo-output/adobe-validation-stack")
 DEFAULT_ADOBE_DIR = Path("Adobe")
@@ -171,11 +172,7 @@ def build_report(
     )
     steps.append(project_step)
     _extend_blocking_findings(blocking_findings, project_step)
-    project_fixture_roots = [
-        Path(record["absolute"])
-        for record in project_step.get("project_fixture_roots", [])
-        if isinstance(record, dict) and isinstance(record.get("absolute"), str)
-    ]
+    project_fixture_roots = _project_fixture_roots(project_step)
 
     converter_command = [
         sys.executable,
@@ -312,7 +309,7 @@ def _run_project_dng_fixture_step(
     )
     inspection, inspection_errors = _inspect_project_dng_fixtures(output_dir, repo_root)
     step["project_fixture_inspection"] = inspection
-    step["project_fixture_roots"] = inspection.get("fixture_roots", [])
+    step["project_fixture_roots"] = _project_fixture_inspection_roots(inspection)
     step["blocking_findings"].extend(inspection_errors)
     _finalize_step_status(step)
     return step
@@ -345,7 +342,7 @@ def _run_child_step(
     step["child_report_path"] = _path_record(report_path, repo_root)
     step["child_report"] = child_report
     step["blocking_findings"].extend(report_errors)
-    if child_report is not None and child_report.get("ok") is not True:
+    if child_report is not None and not _child_report_ok(child_report):
         for finding in _child_blocking_findings(child_report):
             step["blocking_findings"].append(f"{name}: {finding}")
     _finalize_step_status(step)
@@ -421,12 +418,13 @@ def _load_current_child_report(
     if not isinstance(report, dict):
         return None, [f"child report is not an object: {_display_path(report_path, repo_root)}"]
     errors = []
-    if report.get("schema") != expected_schema:
+    schema = _child_report_schema(report)
+    if schema != expected_schema:
         errors.append(
-            f"child report schema mismatch: expected {expected_schema}, got {report.get('schema')}"
+            f"child report schema mismatch: expected {expected_schema}, got {schema}"
         )
-    generated_at = report.get("generated_at")
-    if not isinstance(generated_at, str):
+    generated_at = _child_report_generated_at(report)
+    if generated_at is None:
         errors.append("child report missing generated_at")
     else:
         child_generated_at = _parse_datetime(generated_at)
@@ -476,20 +474,21 @@ def _inspect_project_dng_fixtures(
     if not isinstance(manifest, dict) or not isinstance(sample_index, dict):
         return inspection, ["project fixture manifest and sample index must be JSON objects"]
 
-    inspection["schema"] = manifest.get("schema")
-    inspection["sample_index_schema"] = sample_index.get("schema")
-    if manifest.get("schema") != "image2dng.raw_native_node_batch.v1":
+    manifest_schema = _project_fixture_manifest_schema(manifest)
+    sample_index_schema = _project_fixture_sample_index_schema(sample_index)
+    inspection["schema"] = manifest_schema
+    inspection["sample_index_schema"] = sample_index_schema
+    if manifest_schema != "image2dng.raw_native_node_batch.v1":
         errors.append("project fixture manifest schema mismatch")
-    if sample_index.get("schema") != "image2dng.raw_native_sample_index.v1":
+    if sample_index_schema != "image2dng.raw_native_sample_index.v1":
         errors.append("project fixture sample index schema mismatch")
-    if sample_index.get("all_validations_ok") is not True:
+    if not _sample_index_all_validations_ok(sample_index):
         errors.append("project fixture sample index reports validation failure")
-    scenes = manifest.get("scenes")
-    if not isinstance(scenes, list) or not scenes:
+    scenes = _project_fixture_scenes(manifest)
+    if not scenes:
         errors.append("project fixture manifest has no scenes")
-        scenes = []
     inspection["scene_count"] = len(scenes)
-    inspection["all_validations_ok"] = sample_index.get("all_validations_ok") is True
+    inspection["all_validations_ok"] = _sample_index_all_validations_ok(sample_index)
 
     dng_paths: list[Path] = []
     validation_failures = 0
@@ -497,27 +496,36 @@ def _inspect_project_dng_fixtures(
         if not isinstance(scene, dict):
             errors.append("project fixture scene entry is not an object")
             continue
-        outputs = scene.get("outputs")
-        validations = scene.get("validations")
-        if not isinstance(outputs, dict):
+        outputs = _project_fixture_scene_outputs(scene)
+        validations = _project_fixture_scene_validations(scene)
+        if outputs is None:
             errors.append("project fixture scene outputs missing")
             continue
         for key in ("linearraw_dng", "cfa_dng"):
-            value = outputs.get(key)
-            if not isinstance(value, str):
+            value = _project_fixture_output_path(outputs, key)
+            if value is None:
                 errors.append(f"project fixture output missing: {key}")
                 continue
             dng_path = _resolve_from_repo(Path(value), repo_root)
-            if not dng_path.exists():
+            resolved_dng_path = dng_path.resolve()
+            if not _is_path_within(resolved_dng_path, batch_dir):
+                errors.append(
+                    f"project fixture DNG outside batch dir: "
+                    f"{_display_path(resolved_dng_path, repo_root)}"
+                )
+            elif not resolved_dng_path.exists():
                 errors.append(f"project fixture DNG missing: {_display_path(dng_path, repo_root)}")
             else:
-                dng_paths.append(dng_path.resolve())
+                dng_paths.append(resolved_dng_path)
         if not isinstance(validations, dict):
             errors.append("project fixture scene validations missing")
             continue
         for key in ("linearraw", "cfa"):
-            validation = validations.get(key)
-            if not isinstance(validation, dict) or validation.get("ok") is not True:
+            validation = _project_fixture_validation_record(validations, key)
+            if validation is None or not _validation_ok(
+                validation,
+                f"project fixture validation {key}",
+            ):
                 validation_failures += 1
     if validation_failures:
         errors.append(f"project fixture validation failure count: {validation_failures}")
@@ -555,26 +563,162 @@ def _sdk_fixture_roots(
     return roots
 
 
+def _project_fixture_roots(step: dict[str, Any]) -> list[Path]:
+    records = step.get("project_fixture_roots", [])
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise TypeError("step project_fixture_roots must be an object list")
+    return [Path(_path_record_absolute(record)) for record in records]
+
+
+def _project_fixture_inspection_roots(inspection: dict[str, Any]) -> list[dict[str, Any]]:
+    records = inspection.get("fixture_roots")
+    if records is None:
+        return []
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise TypeError("project fixture inspection fixture_roots must be an object list")
+    return records
+
+
 def _child_blocking_findings(report: dict[str, Any]) -> list[str]:
-    findings = report.get("blocking_findings")
-    if isinstance(findings, list) and findings:
-        return [str(finding) for finding in findings]
-    errors = report.get("errors")
-    if isinstance(errors, list) and errors:
-        return [str(error) for error in errors]
-    status = report.get("status")
-    if isinstance(status, str) and status not in {"passed", "dry-run"}:
+    findings = _child_report_string_list(report, "blocking_findings")
+    if findings:
+        return findings
+    errors = _child_report_string_list(report, "errors")
+    if errors:
+        return errors
+    status = _child_report_status(report)
+    if status is not None and status not in {"passed", "dry-run"}:
         return [f"child report status is {status}"]
     return ["child report ok is false"]
 
 
+def _child_report_schema(report: dict[str, Any]) -> str:
+    schema = report.get("schema")
+    if not isinstance(schema, str):
+        raise TypeError("child report schema must be a string")
+    return schema
+
+
+def _child_report_generated_at(report: dict[str, Any]) -> str | None:
+    generated_at = report.get("generated_at")
+    if generated_at is None:
+        return None
+    if not isinstance(generated_at, str):
+        raise TypeError("child report generated_at must be a string")
+    return generated_at
+
+
+def _child_report_status(report: dict[str, Any]) -> str | None:
+    status = report.get("status")
+    if status is None:
+        return None
+    if not isinstance(status, str):
+        raise TypeError("child report status must be a string")
+    return status
+
+
+def _child_report_string_list(report: dict[str, Any], key: str) -> list[str]:
+    value = report.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise TypeError(f"child report {key} must be a string list")
+    return value
+
+
+def _child_report_ok(report: dict[str, Any]) -> bool:
+    ok = report.get("ok")
+    if not isinstance(ok, bool):
+        raise TypeError("child report ok must be a boolean")
+    return ok
+
+
+def _sample_index_all_validations_ok(sample_index: dict[str, Any]) -> bool:
+    ok = sample_index.get("all_validations_ok")
+    if not isinstance(ok, bool):
+        raise TypeError("project fixture sample index all_validations_ok must be a boolean")
+    return ok
+
+
+def _project_fixture_manifest_schema(manifest: dict[str, Any]) -> str | None:
+    schema = manifest.get("schema")
+    if schema is None:
+        return None
+    if not isinstance(schema, str):
+        raise TypeError("project fixture manifest schema must be a string")
+    return schema
+
+
+def _project_fixture_sample_index_schema(sample_index: dict[str, Any]) -> str | None:
+    schema = sample_index.get("schema")
+    if schema is None:
+        return None
+    if not isinstance(schema, str):
+        raise TypeError("project fixture sample index schema must be a string")
+    return schema
+
+
+def _project_fixture_scenes(manifest: dict[str, Any]) -> list[Any]:
+    scenes = manifest.get("scenes")
+    if scenes is None:
+        return []
+    if not isinstance(scenes, list):
+        raise TypeError("project fixture manifest scenes must be a list")
+    return scenes
+
+
+def _project_fixture_scene_outputs(scene: dict[str, Any]) -> dict[str, Any] | None:
+    outputs = scene.get("outputs")
+    if outputs is None:
+        return None
+    if not isinstance(outputs, dict):
+        raise TypeError("project fixture scene outputs must be an object")
+    return outputs
+
+
+def _project_fixture_scene_validations(scene: dict[str, Any]) -> dict[str, Any] | None:
+    validations = scene.get("validations")
+    if validations is None:
+        return None
+    if not isinstance(validations, dict):
+        raise TypeError("project fixture scene validations must be an object")
+    return validations
+
+
+def _project_fixture_output_path(outputs: dict[str, Any], key: str) -> str | None:
+    value = outputs.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"project fixture output {key} must be a string")
+    return value
+
+
+def _project_fixture_validation_record(
+    validations: dict[str, Any],
+    key: str,
+) -> dict[str, Any] | None:
+    validation = validations.get(key)
+    if validation is None:
+        return None
+    if not isinstance(validation, dict):
+        raise TypeError(f"project fixture validation {key} must be an object")
+    return validation
+
+
+def _validation_ok(validation: dict[str, Any], label: str) -> bool:
+    ok = validation.get("ok")
+    if not isinstance(ok, bool):
+        raise TypeError(f"{label} ok must be a boolean")
+    return ok
+
+
 def _extend_blocking_findings(blocking_findings: list[str], step: dict[str, Any]) -> None:
-    for finding in step.get("blocking_findings", []):
-        blocking_findings.append(str(finding))
+    blocking_findings.extend(_step_blocking_findings(step))
 
 
 def _finalize_step_status(step: dict[str, Any]) -> None:
-    step["blocking_findings"] = _dedupe([str(item) for item in step["blocking_findings"]])
+    step["blocking_findings"] = _dedupe(_step_blocking_findings(step))
     step["status"] = "passed" if not step["blocking_findings"] else "failed"
 
 
@@ -620,34 +764,154 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Adobe Validation Stack",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Run ID: `{report['run_id']}`",
-        f"- Output: `{report['output_dir']['display']}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Run ID: `{_run_id(report)}`",
+        f"- Output: `{_output_dir_display(report)}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
         "",
         "## Summary",
         "",
     ]
-    for key, value in report["summary"].items():
+    for key, value in _summary(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.extend(["", "## Blocking Findings", ""])
-    if report["blocking_findings"]:
-        lines.extend(f"- {finding}" for finding in report["blocking_findings"])
+    blocking_findings = _blocking_findings_record(report)
+    if blocking_findings:
+        lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Steps", ""])
-    for step in report["steps"]:
-        lines.append(f"- `{step['name']}`: `{step['status']}`")
-        lines.append(f"  - Exit code: `{step['exit_code']}`")
-        child_report_path = step.get("child_report_path")
-        if isinstance(child_report_path, dict):
-            lines.append(f"  - Child report: `{child_report_path['display']}`")
-        if step.get("blocking_findings"):
+    for step in _steps(report):
+        lines.append(f"- `{_step_name(step)}`: `{_step_status(step)}`")
+        lines.append(f"  - Exit code: `{_step_exit_code(step)}`")
+        child_report_path = _step_child_report_path(step)
+        if child_report_path is not None:
+            lines.append(f"  - Child report: `{_child_report_display(child_report_path)}`")
+        step_findings = _step_blocking_findings(step)
+        if step_findings:
             lines.append("  - Findings:")
-            lines.extend(f"    - {finding}" for finding in step["blocking_findings"])
+            lines.extend(f"    - {finding}" for finding in step_findings)
     lines.append("")
     return "\n".join(lines)
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _run_id(report: dict[str, Any]) -> str:
+    run_id = report["run_id"]
+    if not isinstance(run_id, str):
+        raise TypeError("report run_id must be a string")
+    return run_id
+
+
+def _output_dir_display(report: dict[str, Any]) -> str:
+    output_dir = report["output_dir"]
+    if not isinstance(output_dir, dict):
+        raise TypeError("report output_dir must be an object")
+    _path_record_absolute(output_dir)
+    display = output_dir["display"]
+    if not isinstance(display, str):
+        raise TypeError("report output_dir display must be a string")
+    return display
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
+
+
+def _summary(report: dict[str, Any]) -> dict[str, Any]:
+    summary = report["summary"]
+    if not isinstance(summary, dict):
+        raise TypeError("report summary must be an object")
+    return summary
+
+
+def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
+    findings = report["blocking_findings"]
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("report blocking_findings must be a string list")
+    return findings
+
+
+def _steps(report: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = report["steps"]
+    if not isinstance(steps, list):
+        raise TypeError("report steps must be a list")
+    if not all(isinstance(step, dict) for step in steps):
+        raise TypeError("report steps must contain objects")
+    return steps
+
+
+def _step_blocking_findings(step: dict[str, Any]) -> list[str]:
+    findings = step.get("blocking_findings", [])
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("step blocking_findings must be a string list")
+    return findings
+
+
+def _step_name(step: dict[str, Any]) -> str:
+    name = step["name"]
+    if not isinstance(name, str):
+        raise TypeError("step name must be a string")
+    return name
+
+
+def _step_status(step: dict[str, Any]) -> str:
+    status = step["status"]
+    if not isinstance(status, str):
+        raise TypeError("step status must be a string")
+    if status not in STEP_STATUSES:
+        raise TypeError("step status must be passed or failed")
+    return status
+
+
+def _step_exit_code(step: dict[str, Any]) -> int | None:
+    exit_code = step["exit_code"]
+    if isinstance(exit_code, bool):
+        raise TypeError("step exit_code must be an integer or null")
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("step exit_code must be an integer or null")
+
+
+def _step_child_report_path(step: dict[str, Any]) -> dict[str, Any] | None:
+    child_report_path = step.get("child_report_path")
+    if child_report_path is None:
+        return None
+    if not isinstance(child_report_path, dict):
+        raise TypeError("step child_report_path must be an object")
+    _path_record_absolute(child_report_path)
+    return child_report_path
+
+
+def _child_report_display(child_report_path: dict[str, Any]) -> str:
+    display = child_report_path["display"]
+    if not isinstance(display, str):
+        raise TypeError("child report display must be a string")
+    return display
+
+
+def _path_record_absolute(path_record: dict[str, Any]) -> str:
+    absolute = path_record["absolute"]
+    if not isinstance(absolute, str):
+        raise TypeError("path record absolute must be a string")
+    return absolute
 
 
 def _resolve_from_repo(path: Path, repo_root: Path) -> Path:

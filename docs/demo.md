@@ -53,6 +53,7 @@ The samples are generated locally and should not be committed as binary fixtures
 The RAW-native node batch creates:
 
 - `inputs/*-scene-linear.tif`
+- `inputs/*-semantic-reaction.tif` when opt-in semantic reaction changes the copied scene-linear input
 - `raw/*-linearraw.dng`
 - `raw/*-cfa-rggb.dng`
 - `jpeg/*-linearraw.jpg`
@@ -61,9 +62,11 @@ The RAW-native node batch creates:
 - `manifests/raw-native-node-batch.json`
 - `manifests/sample-index.json`
 
-The development baseline verifier writes `verification-report.json` with command results, artifact paths, JPEG dimensions, validation status, and sample index status.
+When a batch scene includes an `image2dng.semantic_scene.v1` sidecar, the manifests record preservation/validation status, copied sidecar assets, and opt-in `semantic_reaction` summaries for deterministic region exposure and highlight clipping helpers.
 
-The demo review bundle generator reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence into a work directory, then writes a portable review package at `demo-output/review-bundle/`. Use `index.md` as the human review entry point and `review-bundle-report.json` as the machine-readable artifact manifest with bundle-relative paths, byte counts, and SHA-256 checksums.
+The development baseline verifier writes `verification-report.json` with command results for `pytest`, `ruff check`, `uv build`, RAW-native batch generation, and isolated wheel install smoke tests. It also records artifact paths, byte counts, SHA-256 checksums, JPEG dimensions, validation artifact metadata, and sample index status.
+
+The demo review bundle generator reruns the visual demo, RAW-native node batch, development baseline, and compatibility evidence into a work directory, then writes a portable review package at `demo-output/review-bundle/`. Use `index.md` as the human review entry point and `review-bundle-report.json` as the machine-readable artifact manifest with bundle-relative paths, byte counts, and SHA-256 checksums. If an upstream command fails, the bundle still preserves available source reports and manifests as diagnostic evidence, while keeping `ok: false` and a non-zero exit code.
 
 Generate staged visual demo outputs with PNG previews, validation JSON, and contact sheets:
 

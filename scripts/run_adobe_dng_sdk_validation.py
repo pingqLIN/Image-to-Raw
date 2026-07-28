@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import re
 import subprocess
@@ -370,10 +371,11 @@ def _fixture_root_record(root: Path, repo_root: Path) -> dict[str, Any]:
 
 
 def _summary_counts(results: list[dict[str, Any]], *, selected_count: int) -> dict[str, int]:
-    passed = sum(1 for result in results if result["status"] == "passed")
-    failed = sum(1 for result in results if result["status"] == "failed")
-    timed_out = sum(1 for result in results if result["status"] == "timeout")
-    marker_blocked = sum(1 for result in results if result["status"] == "marker-blocked")
+    statuses = [_result_status(result) for result in results]
+    passed = statuses.count("passed")
+    failed = statuses.count("failed")
+    timed_out = statuses.count("timeout")
+    marker_blocked = statuses.count("marker-blocked")
     return {
         "selected": selected_count,
         "passed": passed,
@@ -453,45 +455,199 @@ def _safe_text(value: str | bytes | None) -> str:
 
 
 def _summary_markdown(report: dict[str, Any]) -> str:
-    summary = report["summary"]
+    summary = _summary(report)
     lines = [
         "# Adobe DNG SDK Validation Report",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
-        f"- Validator: `{report['validator']['path']['repo_relative']}`",
-        f"- Version: `{report['validator']['version_probe'].get('version_text')}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
+        f"- Validator: `{_validator_repo_relative(_validator(report))}`",
+        f"- Version: `{_validator_version_text(_validator(report))}`",
         "",
         "## Summary",
         "",
     ]
     for key in ("selected", "passed", "failed", "marker_blocked", "timeout", "skipped"):
-        lines.append(f"- `{key}`: `{summary[key]}`")
+        lines.append(f"- `{key}`: `{_summary_count(summary, key)}`")
     lines.extend(["", "## Blocking Findings", ""])
-    if report["blocking_findings"]:
-        lines.extend(f"- {finding}" for finding in report["blocking_findings"])
+    blocking_findings = _blocking_findings_record(report)
+    if blocking_findings:
+        lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Error Markers", ""])
-    if report["error_markers"]:
-        for record in report["error_markers"]:
+    error_markers = _error_marker_records(report)
+    if error_markers:
+        for record in error_markers:
             lines.append(
-                f"- `{record['fixture']}` ({record['status']}): "
-                f"{', '.join(record['markers'])}"
+                f"- `{_error_marker_fixture(record)}` ({_error_marker_status(record)}): "
+                f"{', '.join(_error_marker_markers(record))}"
             )
     else:
         lines.append("- none")
     lines.extend(["", "## Results", ""])
-    for result in report["results"]:
-        fixture = result["fixture"]["repo_relative"]
+    for result in _result_records(report):
         lines.append(
-            f"- `{fixture}`: {result['status']} "
-            f"(exit={result['exit_code']}, timeout={result['timeout']}, "
-            f"{result['duration_seconds']}s)"
+            f"- `{_result_fixture_repo_relative(result)}`: {_result_status(result)} "
+            f"(exit={_result_exit_code(result)}, timeout={_result_timeout(result)}, "
+            f"{_result_duration_seconds(result)}s)"
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
+
+
+def _validator(report: dict[str, Any]) -> dict[str, Any]:
+    validator = report["validator"]
+    if not isinstance(validator, dict):
+        raise TypeError("report validator must be an object")
+    return validator
+
+
+def _validator_repo_relative(validator: dict[str, Any]) -> str | None:
+    path = validator["path"]
+    if not isinstance(path, dict):
+        raise TypeError("validator path must be an object")
+    repo_relative = path["repo_relative"]
+    if isinstance(repo_relative, str) or repo_relative is None:
+        return repo_relative
+    raise TypeError("validator repo_relative path must be a string or null")
+
+
+def _validator_version_text(validator: dict[str, Any]) -> str | None:
+    version_probe = validator["version_probe"]
+    if not isinstance(version_probe, dict):
+        raise TypeError("validator version_probe must be an object")
+    version_text = version_probe.get("version_text")
+    if isinstance(version_text, str) or version_text is None:
+        return version_text
+    raise TypeError("validator version_text must be a string or null")
+
+
+def _summary(report: dict[str, Any]) -> dict[str, Any]:
+    summary = report["summary"]
+    if not isinstance(summary, dict):
+        raise TypeError("report summary must be an object")
+    return summary
+
+
+def _summary_count(summary: dict[str, Any], key: str) -> int:
+    count = summary[key]
+    if not isinstance(count, int) or isinstance(count, bool):
+        raise TypeError(f"summary {key} must be an integer")
+    return count
+
+
+def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
+    findings = report["blocking_findings"]
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("report blocking_findings must be a string list")
+    return findings
+
+
+def _error_marker_records(report: dict[str, Any]) -> list[dict[str, Any]]:
+    records = report["error_markers"]
+    if not isinstance(records, list) or not all(isinstance(item, dict) for item in records):
+        raise TypeError("report error_markers must be an object list")
+    return records
+
+
+def _error_marker_fixture(record: dict[str, Any]) -> str:
+    fixture = record["fixture"]
+    if not isinstance(fixture, str):
+        raise TypeError("error marker fixture must be a string")
+    return fixture
+
+
+def _error_marker_status(record: dict[str, Any]) -> str:
+    status = record["status"]
+    if not isinstance(status, str):
+        raise TypeError("error marker status must be a string")
+    return status
+
+
+def _error_marker_markers(record: dict[str, Any]) -> list[str]:
+    markers = record["markers"]
+    if not isinstance(markers, list) or not all(isinstance(item, str) for item in markers):
+        raise TypeError("error marker markers must be a string list")
+    return markers
+
+
+def _result_records(report: dict[str, Any]) -> list[dict[str, Any]]:
+    results = report["results"]
+    if not isinstance(results, list) or not all(isinstance(item, dict) for item in results):
+        raise TypeError("report results must be an object list")
+    return results
+
+
+def _result_fixture_repo_relative(result: dict[str, Any]) -> str | None:
+    fixture = result["fixture"]
+    if not isinstance(fixture, dict):
+        raise TypeError("result fixture must be an object")
+    repo_relative = fixture["repo_relative"]
+    if isinstance(repo_relative, str) or repo_relative is None:
+        return repo_relative
+    raise TypeError("result fixture repo_relative must be a string or null")
+
+
+def _result_status(result: dict[str, Any]) -> str:
+    status = result["status"]
+    if not isinstance(status, str) or status not in {
+        "passed",
+        "failed",
+        "timeout",
+        "marker-blocked",
+    }:
+        raise TypeError("result status must be passed, failed, timeout, or marker-blocked")
+    return status
+
+
+def _result_exit_code(result: dict[str, Any]) -> int | None:
+    exit_code = result["exit_code"]
+    if isinstance(exit_code, bool):
+        raise TypeError("result exit_code must be an integer or null")
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("result exit_code must be an integer or null")
+
+
+def _result_timeout(result: dict[str, Any]) -> bool:
+    timeout = result["timeout"]
+    if not isinstance(timeout, bool):
+        raise TypeError("result timeout must be a boolean")
+    return timeout
+
+
+def _result_duration_seconds(result: dict[str, Any]) -> float | int:
+    duration = result["duration_seconds"]
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, int | float)
+        or not math.isfinite(duration)
+    ):
+        raise TypeError("result duration_seconds must be finite numeric")
+    return duration
 
 
 def _path_record(path: Path, repo_root: Path) -> dict[str, str | None]:

@@ -4,12 +4,13 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import shutil
 import subprocess
 import sys
 import time
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from image2dng.pipeline import run_raw_native_batch
@@ -22,6 +23,15 @@ BASELINE_SCHEMA = "image2dng.development_baseline_report.v1"
 COMPATIBILITY_SCHEMAS = {
     "image2dng.compatibility_evidence.v1",
     "image2dng.compatibility_evidence.v2",
+}
+COMMAND_STATUSES = {"failed", "passed"}
+ARTIFACT_KINDS = {
+    "contact-sheet",
+    "index",
+    "manifest",
+    "report",
+    "representative-dng",
+    "validation-json",
 }
 
 
@@ -44,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--skip-baseline-quality-gates",
         action="store_true",
-        help="write a lightweight baseline report without recursively running pytest/ruff",
+        help="write a lightweight baseline report without recursively running quality gates",
     )
     args = parser.parse_args(argv)
 
@@ -90,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if _has_command_failure(report):
+        _collect_available_source_reports(paths=paths, report=report)
         _write_outputs(paths.output_dir, report)
         return 1
 
@@ -99,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         _append_error(report, str(exc))
 
-    report["ok"] = not report["errors"]
+    report["ok"] = not _errors(report)
     _write_outputs(paths.output_dir, report)
     return 0 if report["ok"] else 1
 
@@ -213,7 +224,7 @@ def _collect_bundle(*, paths: BundlePaths, repo_root: Path, report: dict[str, An
         f"missing compatibility summary: {compatibility_summary_path}",
     )
 
-    source_reports = report["source_reports"]
+    source_reports = _source_reports(report)
     source_reports["visual_manifest"] = _copy_artifact(
         paths=paths,
         report=report,
@@ -274,7 +285,7 @@ def _collect_contact_sheets(
     report: dict[str, Any],
     visual_manifest: dict[str, Any],
 ) -> None:
-    for sheet in visual_manifest.get("contact_sheets", []):
+    for sheet in _object_list(visual_manifest, "contact_sheets", "visual manifest"):
         path_value = _string(sheet, "path")
         source = _join_reported_path(paths.visual_dir, path_value)
         name = _portable_stem(path_value)
@@ -294,11 +305,11 @@ def _collect_visual_representatives(
     report: dict[str, Any],
     visual_manifest: dict[str, Any],
 ) -> None:
-    assets = {
-        _string(asset, "slug"): asset
-        for asset in visual_manifest.get("assets", [])
-        if isinstance(asset, dict)
-    }
+    assets = _object_map_by_string_key(
+        _object_list(visual_manifest, "assets", "visual manifest"),
+        "slug",
+        "visual manifest asset",
+    )
     chart = assets.get("chart-gradient")
     if not isinstance(chart, dict):
         raise ValueError("visual manifest missing chart-gradient asset")
@@ -309,8 +320,10 @@ def _collect_visual_representatives(
         "phase_3_linearraw_noisy",
         "phase_3_cfa_noisy",
     ]
+    outputs = _object(chart, "outputs", "visual chart-gradient asset")
+    validations = _object(chart, "validations", "visual chart-gradient asset")
     for key in output_keys:
-        source = _resolve_source_path(_string(chart["outputs"], key), paths.visual_dir, repo_root)
+        source = _resolve_source_path(_string(outputs, key), paths.visual_dir, repo_root)
         _copy_artifact(
             paths=paths,
             report=report,
@@ -320,8 +333,10 @@ def _collect_visual_representatives(
             name=f"visual:{key}",
             group="visual-demo",
         )
-    for key, value in chart.get("validations", {}).items():
-        source = _resolve_source_path(str(value), paths.visual_dir, repo_root)
+    for key, value in validations.items():
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"visual chart-gradient validation path must be a string: {key}")
+        source = _resolve_source_path(value, paths.visual_dir, repo_root)
         _copy_artifact(
             paths=paths,
             report=report,
@@ -339,16 +354,15 @@ def _collect_raw_native_representatives(
     report: dict[str, Any],
     raw_manifest: dict[str, Any],
 ) -> None:
-    scenes = raw_manifest.get("scenes")
-    if not isinstance(scenes, list) or not scenes:
+    scenes = _object_list(raw_manifest, "scenes", "raw-native manifest")
+    if not scenes:
         raise ValueError("raw-native manifest contains no scenes")
-    for scene in scenes:
-        if not isinstance(scene, dict):
-            raise ValueError("raw-native scene must be an object")
-        slug = _string(scene, "slug")
-        outputs = scene.get("outputs")
-        if not isinstance(outputs, dict):
-            raise ValueError(f"{slug}: missing outputs")
+    for slug, scene in _object_map_by_string_key(
+        scenes,
+        "slug",
+        "raw-native scene",
+    ).items():
+        outputs = _object(scene, "outputs", f"{slug}: raw-native scene")
         for key in ("linearraw_dng", "cfa_dng"):
             source = _resolve_source_path(_string(outputs, key), paths.raw_native_dir, repo_root)
             _copy_artifact(
@@ -387,14 +401,13 @@ def _collect_compatibility_representatives(
         "linear-rec709-cfa-rggb",
         "linear-rec709-cfa-rggb-noisy",
     }
-    fixtures = compatibility_report.get("fixtures")
-    if not isinstance(fixtures, list):
-        raise ValueError("compatibility report fixtures must be a list")
+    fixtures = _object_map_by_string_key(
+        _object_list(compatibility_report, "fixtures", "compatibility report"),
+        "slug",
+        "compatibility fixture",
+    )
     found = set()
-    for fixture in fixtures:
-        if not isinstance(fixture, dict):
-            continue
-        slug = _string(fixture, "slug")
+    for slug, fixture in fixtures.items():
         if slug not in wanted:
             continue
         found.add(slug)
@@ -431,18 +444,77 @@ def _collect_compatibility_representatives(
         raise ValueError(f"missing compatibility representatives: {', '.join(sorted(missing))}")
 
 
+def _collect_available_source_reports(*, paths: BundlePaths, report: dict[str, Any]) -> None:
+    source_specs = (
+        (
+            "visual_manifest",
+            paths.visual_dir / "manifest.json",
+            Path("artifacts/manifests/visual-demo-manifest.json"),
+            "manifest",
+            "visual-demo-manifest",
+        ),
+        (
+            "raw_native_manifest",
+            paths.raw_native_dir / "manifests" / "raw-native-node-batch.json",
+            Path("artifacts/manifests/raw-native-node-batch.json"),
+            "manifest",
+            "raw-native-node-batch",
+        ),
+        (
+            "raw_native_sample_index",
+            paths.raw_native_dir / "manifests" / "sample-index.json",
+            Path("artifacts/manifests/raw-native-sample-index.json"),
+            "manifest",
+            "raw-native-sample-index",
+        ),
+        (
+            "development_baseline_report",
+            paths.baseline_dir / "verification-report.json",
+            Path("artifacts/reports/development-baseline-report.json"),
+            "report",
+            "development-baseline-report",
+        ),
+        (
+            "compatibility_report",
+            paths.compatibility_dir / "compatibility-report.json",
+            Path("artifacts/reports/compatibility-report.json"),
+            "report",
+            "compatibility-report",
+        ),
+        (
+            "compatibility_summary",
+            paths.compatibility_dir / "compatibility-summary.md",
+            Path("artifacts/reports/compatibility-summary.md"),
+            "report",
+            "compatibility-summary",
+        ),
+    )
+    source_reports = _source_reports(report)
+    for key, source, relative_target, kind, name in source_specs:
+        if not source.exists():
+            continue
+        source_reports[key] = _copy_artifact(
+            paths=paths,
+            report=report,
+            source=source,
+            relative_target=relative_target,
+            kind=kind,
+            name=name,
+        )["bundle_path"]
+
+
 def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
-    artifacts = report["artifacts"]
+    artifacts = _artifacts(report)
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for artifact in artifacts:
-        by_kind.setdefault(artifact["kind"], []).append(artifact)
+        by_kind.setdefault(_artifact_kind(artifact), []).append(artifact)
 
     lines = [
         "# image2dng Demo Review Bundle",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- Generated at: `{report['generated_at']}`",
-        f"- Overall ok: `{report['ok']}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- Generated at: `{_generated_at(report)}`",
+        f"- Overall ok: `{_report_ok(report)}`",
         "",
         "## Review Entry Points",
         "",
@@ -465,26 +537,28 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
         "",
     ]
     for artifact in by_kind.get("contact-sheet", []):
-        path = artifact["bundle_path"]
-        lines.append(f"![{artifact['name']}]({path})")
+        path = _artifact_bundle_path(artifact)
+        lines.append(f"![{_artifact_name(artifact)}]({path})")
         lines.append("")
 
     lines.extend(["## Representative DNG Files", ""])
     for artifact in by_kind.get("representative-dng", []):
+        path = _artifact_bundle_path(artifact)
         lines.append(
-            f"- `{artifact['name']}`: "
-            f"[{artifact['bundle_path']}]({artifact['bundle_path']})"
+            f"- `{_artifact_name(artifact)}`: "
+            f"[{path}]({path})"
         )
 
     lines.extend(["", "## Validation JSON", ""])
     for artifact in by_kind.get("validation-json", []):
+        path = _artifact_bundle_path(artifact)
         lines.append(
-            f"- `{artifact['name']}`: "
-            f"[{artifact['bundle_path']}]({artifact['bundle_path']})"
+            f"- `{_artifact_name(artifact)}`: "
+            f"[{path}]({path})"
         )
 
     lines.extend(["", "## Reports And Manifests", ""])
-    for key, value in report["source_reports"].items():
+    for key, value in _source_report_paths(report).items():
         lines.append(f"- `{key}`: [{value}]({value})")
 
     lines.extend(
@@ -495,29 +569,30 @@ def _write_index(output_dir: Path, report: dict[str, Any]) -> None:
             "```powershell",
             (
                 "uv run python scripts/generate_demo_review_bundle.py "
-                "--output-dir demo-output/review-bundle"
+                f"--output-dir {_powershell_quote(_output_dir(report))}"
             ),
             "```",
         ]
     )
 
     lines.extend(["", "## Command Results", ""])
-    for command in report["commands"]:
+    for command in _commands(report):
         lines.append(
-            f"- `{command['name']}`: `{command['status']}` "
-            f"(exit `{command['exit_code']}`, {command['duration_seconds']}s)"
+            f"- `{_command_name(command)}`: `{_command_status(command)}` "
+            f"(exit `{_command_exit_code(command)}`, {_command_duration_seconds(command)}s)"
         )
 
-    if report["errors"]:
+    error_messages = _error_messages(report)
+    if error_messages:
         lines.extend(["", "## Errors", ""])
-        for error in report["errors"]:
+        for error in error_messages:
             lines.append(f"- {error}")
 
     (output_dir / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_outputs(output_dir: Path, report: dict[str, Any]) -> None:
-    report["ok"] = not report["errors"] and not _has_command_failure(report)
+    report["ok"] = not _errors(report) and not _has_command_failure(report)
     _write_index(output_dir, report)
     _append_existing_artifact(
         output_dir=output_dir,
@@ -530,6 +605,11 @@ def _write_outputs(output_dir: Path, report: dict[str, Any]) -> None:
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Wrote review bundle index to {output_dir / 'index.md'}")
     print(f"Wrote review bundle report to {report_path}")
+
+
+def _powershell_quote(value: object) -> str:
+    text = str(value)
+    return "'" + text.replace("'", "''") + "'"
 
 
 def _copy_artifact(
@@ -559,7 +639,7 @@ def _copy_artifact(
     }
     if group is not None:
         record["group"] = group
-    report["artifacts"].append(record)
+    _artifacts(report).append(record)
     return record
 
 
@@ -572,9 +652,9 @@ def _append_existing_artifact(
     name: str,
 ) -> None:
     bundle_path = _relative_posix(source, output_dir)
-    if any(artifact.get("bundle_path") == bundle_path for artifact in report["artifacts"]):
+    if any(_artifact_bundle_path(artifact) == bundle_path for artifact in _artifacts(report)):
         return
-    report["artifacts"].append(
+    _artifacts(report).append(
         {
             "kind": kind,
             "category": _category_for_kind(kind),
@@ -589,18 +669,45 @@ def _append_existing_artifact(
 
 
 def _validate_bundle_report(output_dir: Path, report: dict[str, Any]) -> None:
-    for artifact in report["artifacts"]:
-        _validate_relative_existing_path(output_dir, _string(artifact, "bundle_path"))
-    for value in report["source_reports"].values():
-        _validate_relative_existing_path(output_dir, str(value))
+    artifact_paths = set()
+    for artifact in _artifacts(report):
+        artifact_path = _validate_relative_existing_path(
+            output_dir,
+            _string(artifact, "bundle_path"),
+        )
+        artifact_paths.add(artifact["bundle_path"])
+        _artifact_name(artifact)
+        _artifact_group(artifact)
+        if _artifact_category(artifact) != _category_for_kind(_artifact_kind(artifact)):
+            raise ValueError("artifact category must match kind")
+        if _artifact_path(artifact) != artifact["bundle_path"]:
+            raise ValueError("artifact path must match bundle_path")
+        if _artifact_bytes(artifact) != artifact_path.stat().st_size:
+            raise ValueError(f"artifact byte count mismatch: {artifact['bundle_path']}")
+        if _artifact_sha256(artifact) != _sha256(artifact_path):
+            raise ValueError(f"artifact sha256 mismatch: {artifact['bundle_path']}")
+    for source_path in _source_report_paths(report).values():
+        _validate_relative_existing_path(output_dir, source_path)
+        if source_path not in artifact_paths:
+            raise ValueError(f"source report is not a registered artifact: {source_path}")
 
 
-def _validate_relative_existing_path(output_dir: Path, value: str) -> None:
+def _validate_relative_existing_path(output_dir: Path, value: str) -> Path:
     path = Path(value)
-    if path.is_absolute() or ".." in path.parts:
+    posix_path = PurePosixPath(value.replace("\\", "/"))
+    windows_path = PureWindowsPath(value)
+    if (
+        path.is_absolute()
+        or posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or ".." in posix_path.parts
+    ):
         raise ValueError(f"bundle path must be relative and local: {value}")
-    if not (output_dir / path).exists():
+    resolved = output_dir / path
+    if not resolved.exists():
         raise ValueError(f"bundle path missing: {value}")
+    return resolved
 
 
 def _record_callable_command(
@@ -615,7 +722,7 @@ def _record_callable_command(
         exit_code = int(function())
         status = "passed" if exit_code == 0 else "failed"
         error = None
-    except Exception as exc:  # pragma: no cover - exercised by failure path tests if needed.
+    except Exception as exc:
         exit_code = 1
         status = "failed"
         error = str(exc)
@@ -632,7 +739,7 @@ def _record_callable_command(
         _append_error(report, f"{name} failed: {error}")
     elif exit_code != 0:
         _append_error(report, f"{name} failed with exit code {exit_code}")
-    report["commands"].append(record)
+    _commands(report).append(record)
 
 
 def _record_subprocess_command(
@@ -656,7 +763,7 @@ def _record_subprocess_command(
     }
     if completed.returncode != 0:
         _append_error(report, f"{name} failed with exit code {completed.returncode}")
-    report["commands"].append(record)
+    _commands(report).append(record)
 
 
 def _run_raw_native(output_dir: Path) -> int:
@@ -692,6 +799,15 @@ def _write_lightweight_baseline(output_dir: Path) -> int:
                 "stderr_tail": [],
             },
             {
+                "name": "build",
+                "command": ["skipped", "by", "--skip-baseline-quality-gates"],
+                "exit_code": 0,
+                "duration_seconds": 0,
+                "status": "passed",
+                "stdout_tail": ["Skipped in lightweight bundle test mode."],
+                "stderr_tail": [],
+            },
+            {
                 "name": "raw-native-batch",
                 "command": [
                     "python",
@@ -703,6 +819,15 @@ def _write_lightweight_baseline(output_dir: Path) -> int:
                 "duration_seconds": 0,
                 "status": "passed",
                 "stdout_tail": [f"Wrote raw-native node batch to {batch.output_dir}"],
+                "stderr_tail": [],
+            },
+            {
+                "name": "wheel-install-smoke",
+                "command": ["skipped", "by", "--skip-baseline-quality-gates"],
+                "exit_code": 0,
+                "duration_seconds": 0,
+                "status": "passed",
+                "stdout_tail": ["Skipped in lightweight bundle test mode."],
                 "stderr_tail": [],
             },
         ],
@@ -735,8 +860,8 @@ def _load_script_module(name: str):
 def _read_json(path: Path, schema: str) -> dict[str, Any]:
     payload = _load_json_object(path)
     _require(
-        payload.get("schema") == schema,
-        f"unexpected schema in {path}: {payload.get('schema')}",
+        payload_schema == schema,
+        f"unexpected schema in {path}: {payload_schema}",
     )
     return payload
 
@@ -744,8 +869,8 @@ def _read_json(path: Path, schema: str) -> dict[str, Any]:
 def _read_json_any(path: Path, schemas: set[str]) -> dict[str, Any]:
     payload = _load_json_object(path)
     _require(
-        payload.get("schema") in schemas,
-        f"unexpected schema in {path}: {payload.get('schema')}",
+        payload_schema in schemas,
+        f"unexpected schema in {path}: {payload_schema}",
     )
     return payload
 
@@ -769,6 +894,10 @@ def _resolve_under_repo(path: Path, repo_root: Path) -> Path:
 def _resolve_source_path(value: str, default_root: Path, repo_root: Path) -> Path:
     path = Path(value)
     if path.is_absolute():
+        resolved = path.resolve()
+        allowed_roots = (default_root.resolve(), repo_root.resolve())
+        if not any(_is_relative_to(resolved, root) for root in allowed_roots):
+            raise ValueError(f"unsafe source path in report: {value}")
         return path
     repo_path = repo_root / path
     if repo_path.exists():
@@ -777,6 +906,10 @@ def _resolve_source_path(value: str, default_root: Path, repo_root: Path) -> Pat
 
 
 def _join_reported_path(root: Path, value: str) -> Path:
+    posix_path = PurePosixPath(value.replace("\\", "/"))
+    windows_path = PureWindowsPath(value)
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+        raise ValueError(f"unsafe relative path in report: {value}")
     parts = [part for part in value.replace("\\", "/").split("/") if part and part != "."]
     if not parts or any(part == ".." for part in parts):
         raise ValueError(f"unsafe relative path in report: {value}")
@@ -785,6 +918,10 @@ def _join_reported_path(root: Path, value: str) -> Path:
 
 def _relative_posix(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
 
 def _sha256(path: Path) -> str:
@@ -800,14 +937,20 @@ def _portable_stem(value: str) -> str:
 
 
 def _category_for_kind(kind: str) -> str:
-    return {
+    categories = {
         "contact-sheet": "contact-sheets",
         "representative-dng": "representative-dng",
         "validation-json": "validation",
         "report": "reports",
         "manifest": "manifests",
         "index": "index",
-    }.get(kind, kind)
+    }
+    if kind not in ARTIFACT_KINDS:
+        raise TypeError(
+            "artifact kind must be contact-sheet, index, manifest, report, "
+            "representative-dng, or validation-json"
+        )
+    return categories[kind]
 
 
 def _string(payload: dict[str, Any], key: str) -> str:
@@ -817,17 +960,220 @@ def _string(payload: dict[str, Any], key: str) -> str:
     return value
 
 
+def _object(payload: dict[str, Any], key: str, label: str) -> dict[str, Any]:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} {key} must be an object")
+    return value
+
+
+def _object_list(payload: dict[str, Any], key: str, label: str) -> list[dict[str, Any]]:
+    value = payload.get(key)
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError(f"{label} {key} must be an object list")
+    return value
+
+
+def _object_map_by_string_key(
+    rows: list[dict[str, Any]],
+    key: str,
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    mapped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        value = _string(row, key)
+        if value in mapped:
+            raise ValueError(f"duplicate {label} {key}: {value}")
+        mapped[value] = row
+    return mapped
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
 
 
 def _append_error(report: dict[str, Any], message: str) -> None:
-    report["errors"].append(message)
+    _errors(report).append(message)
 
 
 def _has_command_failure(report: dict[str, Any]) -> bool:
-    return any(command["status"] != "passed" for command in report["commands"])
+    return any(_command_status(command) != "passed" for command in _commands(report))
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _generated_at(report: dict[str, Any]) -> str:
+    generated_at = report["generated_at"]
+    if not isinstance(generated_at, str):
+        raise TypeError("report generated_at must be a string")
+    return generated_at
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _output_dir(report: dict[str, Any]) -> str:
+    output_dir = report["output_dir"]
+    if not isinstance(output_dir, str):
+        raise TypeError("report output_dir must be a string")
+    return output_dir
+
+
+def _commands(report: dict[str, Any]) -> list[dict[str, Any]]:
+    commands = report["commands"]
+    if not isinstance(commands, list):
+        raise TypeError("report commands must be a list")
+    if not all(isinstance(command, dict) for command in commands):
+        raise TypeError("report commands must contain objects")
+    return commands
+
+
+def _command_name(command: dict[str, Any]) -> str:
+    name = command["name"]
+    if not isinstance(name, str):
+        raise TypeError("command name must be a string")
+    return name
+
+
+def _command_status(command: dict[str, Any]) -> str:
+    status = command["status"]
+    if not isinstance(status, str):
+        raise TypeError("command status must be a string")
+    if status not in COMMAND_STATUSES:
+        raise TypeError("command status must be passed or failed")
+    return status
+
+
+def _command_exit_code(command: dict[str, Any]) -> int | None:
+    exit_code = command["exit_code"]
+    if isinstance(exit_code, bool):
+        raise TypeError("command exit_code must be an integer or null")
+    if isinstance(exit_code, int) or exit_code is None:
+        return exit_code
+    raise TypeError("command exit_code must be an integer or null")
+
+
+def _command_duration_seconds(command: dict[str, Any]) -> float | int:
+    duration = command["duration_seconds"]
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, int | float)
+        or not math.isfinite(duration)
+    ):
+        raise TypeError("command duration_seconds must be finite numeric")
+    return duration
+
+
+def _artifacts(report: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts = report["artifacts"]
+    if not isinstance(artifacts, list):
+        raise TypeError("report artifacts must be a list")
+    if not all(isinstance(artifact, dict) for artifact in artifacts):
+        raise TypeError("report artifacts must contain objects")
+    return artifacts
+
+
+def _artifact_kind(artifact: dict[str, Any]) -> str:
+    kind = artifact["kind"]
+    if not isinstance(kind, str):
+        raise TypeError("artifact kind must be a string")
+    if kind not in ARTIFACT_KINDS:
+        raise TypeError(
+            "artifact kind must be contact-sheet, index, manifest, report, "
+            "representative-dng, or validation-json"
+        )
+    return kind
+
+
+def _artifact_category(artifact: dict[str, Any]) -> str:
+    category = artifact["category"]
+    if not isinstance(category, str):
+        raise TypeError("artifact category must be a string")
+    return category
+
+
+def _artifact_name(artifact: dict[str, Any]) -> str:
+    name = artifact["name"]
+    if not isinstance(name, str):
+        raise TypeError("artifact name must be a string")
+    return name
+
+
+def _artifact_group(artifact: dict[str, Any]) -> str | None:
+    group = artifact.get("group")
+    if isinstance(group, str) or group is None:
+        return group
+    raise TypeError("artifact group must be a string or null")
+
+
+def _artifact_bundle_path(artifact: dict[str, Any]) -> str:
+    bundle_path = artifact["bundle_path"]
+    if not isinstance(bundle_path, str):
+        raise TypeError("artifact bundle_path must be a string")
+    return bundle_path
+
+
+def _artifact_path(artifact: dict[str, Any]) -> str:
+    path = artifact["path"]
+    if not isinstance(path, str):
+        raise TypeError("artifact path must be a string")
+    return path
+
+
+def _artifact_bytes(artifact: dict[str, Any]) -> int:
+    bytes_value = artifact["bytes"]
+    if isinstance(bytes_value, bool) or not isinstance(bytes_value, int):
+        raise TypeError("artifact bytes must be an integer")
+    return bytes_value
+
+
+def _artifact_sha256(artifact: dict[str, Any]) -> str:
+    sha256 = artifact["sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("artifact sha256 must be a string")
+    return sha256
+
+
+def _source_reports(report: dict[str, Any]) -> dict[str, Any]:
+    source_reports = report["source_reports"]
+    if not isinstance(source_reports, dict):
+        raise TypeError("report source_reports must be an object")
+    return source_reports
+
+
+def _source_report_paths(report: dict[str, Any]) -> dict[str, str]:
+    paths: dict[str, str] = {}
+    for key, value in _source_reports(report).items():
+        if not isinstance(key, str):
+            raise TypeError("source report name must be a string")
+        if not isinstance(value, str):
+            raise TypeError("source report path must be a string")
+        paths[key] = value
+    return paths
+
+
+def _errors(report: dict[str, Any]) -> list[Any]:
+    errors = report["errors"]
+    if not isinstance(errors, list):
+        raise TypeError("report errors must be a list")
+    return errors
+
+
+def _error_messages(report: dict[str, Any]) -> list[str]:
+    errors = _errors(report)
+    if not all(isinstance(error, str) for error in errors):
+        raise TypeError("report errors must be a string list")
+    return errors
 
 
 def _tail(text: str, *, max_lines: int = 40) -> list[str]:

@@ -110,7 +110,7 @@ uv run python scripts/generate_raw_native_batch.py `
 
 ComfyUI / Stable Diffusion 專屬 importer 已分割到 sibling bridge project `image-to-raw-comfyui-sd-bridge`。
 
-原本位於本 repo 的 `scripts/import_comfyui_output.py` 與 `image2dng.comfyui_importer` 已搬到該 bridge 專案。新的 CLI 是：
+原本位於本 repo 的 `scripts/import_comfyui_output.py` 與 `image2dng.comfyui_importer` 已搬到該 bridge 專案。新的 CLI 由 bridge 專案提供，不是本 repo 的 console script：
 
 ```powershell
 uv run image2dng-comfyui-import `
@@ -172,7 +172,7 @@ uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/
 uv run python scripts/generate_demo_review_bundle.py --output-dir demo-output/review-bundle
 ```
 
-這個流程會重跑 visual demo、RAW-native node batch、development baseline 與 compatibility evidence，並把外部審查需要的 contact sheets、代表性 DNG、validation JSON、reports 與 manifests 收斂到 `demo-output/review-bundle/`。人讀入口是 `index.md`，機器可讀 manifest 是 `review-bundle-report.json`。`demo-output/` 仍是本機輸出資料夾，不應提交 binary 樣片。
+這個流程會重跑 visual demo、RAW-native node batch、development baseline 與 compatibility evidence，並把外部審查需要的 contact sheets、代表性 DNG、validation JSON、reports 與 manifests 收斂到 `demo-output/review-bundle/`。人讀入口是 `index.md`，機器可讀 manifest 是 `review-bundle-report.json`。若上游 command 失敗，bundle 仍會保留已產生的 source reports / manifests 作為診斷 evidence，但 `ok` 仍會是 `false` 且 exit code 為 non-zero。`demo-output/` 仍是本機輸出資料夾，不應提交 binary 樣片。
 
 ## 產生 RAW processor setup audit
 

@@ -723,7 +723,7 @@ def _sample_index(root: Path, scenes: list[PipelineSceneResult]) -> dict[str, An
         "output_dir": str(root),
         "scene_count": len(scenes),
         "all_validations_ok": all(
-            report["ok"] for scene in scenes for report in scene.validations.values()
+            _validation_ok(report) for scene in scenes for report in scene.validations.values()
         ),
         "samples": [_sample_index_scene(scene) for scene in scenes],
     }
@@ -738,7 +738,7 @@ def _sample_index_scene(scene: PipelineSceneResult) -> dict[str, Any]:
         "prompt_hash": scene.prompt_hash,
         "artifacts": scene.outputs,
         "validation_ok": {
-            name: report["ok"] for name, report in scene.validations.items()
+            name: _validation_ok(report) for name, report in scene.validations.items()
         },
         "raw_data_unique_ids": scene.raw_data_unique_ids,
     }
@@ -800,13 +800,7 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
         "producer_metadata_artifacts": scene.producer_metadata_artifacts or {},
         "raw_data_unique_ids": scene.raw_data_unique_ids,
         "validations": {
-            key: {
-                "ok": report["ok"],
-                "dng_layout": report["dng_layout"],
-                "raw_ifd_location": report["raw_ifd_location"],
-                "errors": report["errors"],
-                "warnings": report["warnings"],
-            }
+            key: _validation_summary(report)
             for key, report in scene.validations.items()
         },
         "nodes": [
@@ -825,6 +819,46 @@ def _scene_result_to_dict(scene: PipelineSceneResult) -> dict[str, Any]:
     return result
 
 
+def _validation_summary(report: dict[str, Any]) -> dict[str, Any]:
+    required_keys = ("ok", "dng_layout", "raw_ifd_location", "errors", "warnings")
+    missing = [key for key in required_keys if key not in report]
+    if missing:
+        raise ValueError(f"validation report missing keys: {', '.join(missing)}")
+    return {
+        "ok": _validation_report_ok(report),
+        "dng_layout": _validation_report_string(report, "dng_layout"),
+        "raw_ifd_location": _validation_report_string(report, "raw_ifd_location"),
+        "errors": _validation_report_string_list(report, "errors"),
+        "warnings": _validation_report_string_list(report, "warnings"),
+    }
+
+
+def _validation_ok(report: dict[str, Any]) -> bool:
+    ok = _validation_report_ok(report)
+    return ok
+
+
+def _validation_report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise ValueError("validation report ok must be a boolean")
+    return ok
+
+
+def _validation_report_string(report: dict[str, Any], key: str) -> str:
+    value = report[key]
+    if not isinstance(value, str):
+        raise ValueError(f"validation report {key} must be a string")
+    return value
+
+
+def _validation_report_string_list(report: dict[str, Any], key: str) -> list[str]:
+    value = report[key]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"validation report {key} must be a string list")
+    return value
+
+
 def _external_scene_from_manifest_item(
     item: object,
     base: Path,
@@ -833,10 +867,8 @@ def _external_scene_from_manifest_item(
         raise ValueError("external scene manifest entries must be objects")
     slug = _manifest_string(item, "slug")
     source_path = _manifest_path(item, "path", base)
-    semantic_manifest = (
-        _manifest_path(item, "semantic_manifest", base) if item.get("semantic_manifest") else None
-    )
-    input_space = item.get("input_space", "linear-rec709")
+    semantic_manifest = _optional_manifest_path(item, "semantic_manifest", base)
+    input_space = _optional_manifest_string(item, "input_space", "linear-rec709")
     if input_space not in {"srgb", "linear-rec709", "acescg", "xyz", "prophoto-rgb"}:
         raise ValueError(f"{slug}: unsupported input_space: {input_space}")
     apply_semantic_reaction = item.get("apply_semantic_reaction", False)
@@ -851,6 +883,8 @@ def _external_scene_from_manifest_item(
         item,
         ("producer_metadata_manifest", "comfyui_metadata"),
         base,
+        slug=slug,
+        label="producer metadata manifest",
     )
     return ExternalSceneLinearInput(
         slug=slug,
@@ -1090,13 +1124,40 @@ def _manifest_path(item: dict[str, object], key: str, base: Path) -> Path:
 
 def _optional_manifest_path(
     item: dict[str, object],
-    keys: tuple[str, ...],
+    keys: str | tuple[str, ...],
     base: Path,
+    *,
+    slug: str | None = None,
+    label: str | None = None,
 ) -> Path | None:
-    for key in keys:
-        if item.get(key):
-            return _manifest_path(item, key, base)
+    manifest_keys = (keys,) if isinstance(keys, str) else keys
+    present_keys = [key for key in manifest_keys if key in item and item[key] is not None]
+    if len(present_keys) > 1:
+        prefix = f"{slug}: " if slug else ""
+        field_label = label or "manifest path"
+        raise ValueError(f"{prefix}use only one {field_label} field")
+    for key in manifest_keys:
+        if key not in item or item[key] is None:
+            continue
+        return _manifest_path(item, key, base)
     return None
+
+
+def _optional_alias_object(
+    item: dict[str, object],
+    keys: tuple[str, ...],
+    slug: str,
+    label: str,
+) -> dict[str, Any] | None:
+    present_keys = [key for key in keys if key in item and item[key] is not None]
+    if len(present_keys) > 1:
+        raise ValueError(f"{slug}: use only one {label} field")
+    if not present_keys:
+        return None
+    value = item[present_keys[0]]
+    if not isinstance(value, dict):
+        raise ValueError(f"{slug}: {label} must be an object when present")
+    return value
 
 
 def _external_prompt_hash(

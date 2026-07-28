@@ -16,6 +16,7 @@ from image2dng.compatibility import processor_tool_inventory
 REPORT_SCHEMA = "image2dng.raw_processor_setup_audit.v1"
 TARGET_TOOLS = ("dcraw", "darktable-cli", "rawtherapee-cli")
 PACKAGE_MANAGERS = ("winget", "scoop", "choco")
+PACKAGE_SEARCH_STATUSES = {"completed", "failed", "not-found", "not-run", "skipped"}
 
 TOOL_QUERIES = {
     "dcraw": {
@@ -61,6 +62,7 @@ RECOMMENDED_PRIORITY = {
     "rawtherapee-cli": "recommended-second",
     "dcraw": "legacy-optional",
 }
+RECOMMENDATION_PRIORITIES = set(RECOMMENDED_PRIORITY.values())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -334,9 +336,9 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# RAW Processor Setup Audit Runbook",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- Generated at: `{report['generated_at']}`",
-        f"- Auto install: `{report['policy']['auto_install']}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- Generated at: `{_generated_at(report)}`",
+        f"- Auto install: `{_policy_auto_install(_policy(report))}`",
         "- This document is a dry-run setup guide. Do not install tools until the user approves.",
         "",
         "## Current Tool State",
@@ -344,26 +346,29 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
         "| Tool | Available | Executable | Discovery | Recommendation |",
         "| --- | --- | --- | --- | --- |",
     ]
-    for tool, info in report["tools"].items():
-        current = info["current"]
+    for tool, info in _tools(report).items():
+        current = _tool_current(info)
+        recommendation = _tool_recommendation_record(info)
         lines.append(
-            f"| `{tool}` | `{current['available']}` | `{current['executable']}` | "
-            f"`{current.get('discovery')}` | "
-            f"{info['recommendation']['priority']} |"
+            f"| `{tool}` | `{_current_available(current)}` | `{_current_executable(current)}` | "
+            f"`{_current_discovery(current)}` | "
+            f"{_recommendation_priority(recommendation)} |"
         )
 
     lines.extend(["", "## Package Search Evidence", ""])
-    for tool, info in report["tools"].items():
+    for tool, info in _tools(report).items():
+        recommendation = _tool_recommendation_record(info)
         lines.append(f"### `{tool}`")
         lines.append("")
-        lines.append(info["recommendation"]["rationale"])
+        lines.append(_recommendation_rationale(recommendation))
         lines.append("")
         lines.append("| Manager | Query | Status | Version hint | Notes |")
         lines.append("| --- | --- | --- | --- | --- |")
-        for search in info["package_searches"]:
+        for search in _tool_package_searches(info):
             lines.append(
-                f"| `{search['manager']}` | `{search['query']}` | `{search['status']}` | "
-                f"`{search['version_hint']}` | {search['notes']} |"
+                f"| `{_search_manager(search)}` | `{_search_query(search)}` | "
+                f"`{_search_status(search)}` | "
+                f"`{_search_version_hint(search)}` | {_search_notes(search)} |"
             )
         lines.append("")
 
@@ -379,7 +384,7 @@ def _runbook_markdown(report: dict[str, Any]) -> str:
             "```powershell",
         ]
     )
-    lines.extend(report["rerun_commands"])
+    lines.extend(_rerun_commands(report))
     lines.extend(
         [
             "```",
@@ -409,7 +414,7 @@ def _external_review_prompt(report: dict[str, Any]) -> str:
             "",
             "Important constraints:",
             "",
-            f"- Auto install is `{report['policy']['auto_install']}`.",
+            f"- Auto install is `{_policy_auto_install(_policy(report))}`.",
             "- Missing tools are allowed to remain `skipped`.",
             "- Available tools that fail should remain hard failures in the compatibility report.",
             "- Binary demo outputs stay local-only under `demo-output/`.",
@@ -424,6 +429,144 @@ def _version_hint(*, manager: str, query: str, lines: list[str]) -> str | None:
         if hint:
             return hint
     return None
+
+
+def _tools(report: dict[str, Any]) -> dict[str, Any]:
+    tools = report["tools"]
+    if not isinstance(tools, dict):
+        raise TypeError("report tools must be an object")
+    return tools
+
+
+def _policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report policy must be an object")
+    return policy
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _generated_at(report: dict[str, Any]) -> str:
+    generated_at = report["generated_at"]
+    if not isinstance(generated_at, str):
+        raise TypeError("report generated_at must be a string")
+    return generated_at
+
+
+def _rerun_commands(report: dict[str, Any]) -> list[str]:
+    commands = report["rerun_commands"]
+    if not isinstance(commands, list) or not all(isinstance(command, str) for command in commands):
+        raise TypeError("report rerun_commands must be a string list")
+    return commands
+
+
+def _policy_auto_install(policy: dict[str, Any]) -> bool:
+    auto_install = policy["auto_install"]
+    if not isinstance(auto_install, bool):
+        raise TypeError("report policy auto_install must be a boolean")
+    return auto_install
+
+
+def _tool_current(tool: dict[str, Any]) -> dict[str, Any]:
+    current = tool["current"]
+    if not isinstance(current, dict):
+        raise TypeError("tool current must be an object")
+    return current
+
+
+def _tool_recommendation_record(tool: dict[str, Any]) -> dict[str, Any]:
+    recommendation = tool["recommendation"]
+    if not isinstance(recommendation, dict):
+        raise TypeError("tool recommendation must be an object")
+    return recommendation
+
+
+def _tool_package_searches(tool: dict[str, Any]) -> list[dict[str, Any]]:
+    searches = tool["package_searches"]
+    if not isinstance(searches, list) or not all(isinstance(item, dict) for item in searches):
+        raise TypeError("tool package_searches must be an object list")
+    return searches
+
+
+def _current_available(current: dict[str, Any]) -> bool:
+    available = current["available"]
+    if not isinstance(available, bool):
+        raise TypeError("tool current available must be a boolean")
+    return available
+
+
+def _current_executable(current: dict[str, Any]) -> str | None:
+    executable = current["executable"]
+    if isinstance(executable, str) or executable is None:
+        return executable
+    raise TypeError("tool current executable must be a string or null")
+
+
+def _current_discovery(current: dict[str, Any]) -> str | None:
+    discovery = current.get("discovery")
+    if isinstance(discovery, str) or discovery is None:
+        return discovery
+    raise TypeError("tool current discovery must be a string or null")
+
+
+def _recommendation_priority(recommendation: dict[str, Any]) -> str:
+    priority = recommendation["priority"]
+    if not isinstance(priority, str) or priority not in RECOMMENDATION_PRIORITIES:
+        raise TypeError(
+            "tool recommendation priority must be recommended-first, "
+            "recommended-second, or legacy-optional"
+        )
+    return priority
+
+
+def _recommendation_rationale(recommendation: dict[str, Any]) -> str:
+    rationale = recommendation["rationale"]
+    if not isinstance(rationale, str):
+        raise TypeError("tool recommendation rationale must be a string")
+    return rationale
+
+
+def _search_manager(search: dict[str, Any]) -> str:
+    manager = search["manager"]
+    if not isinstance(manager, str) or manager not in PACKAGE_MANAGERS:
+        raise TypeError("package search manager must be winget, scoop, or choco")
+    return manager
+
+
+def _search_query(search: dict[str, Any]) -> str:
+    query = search["query"]
+    if not isinstance(query, str):
+        raise TypeError("package search query must be a string")
+    return query
+
+
+def _search_status(search: dict[str, Any]) -> str:
+    status = search["status"]
+    if not isinstance(status, str) or status not in PACKAGE_SEARCH_STATUSES:
+        raise TypeError(
+            "package search status must be completed, failed, not-found, not-run, or skipped"
+        )
+    return status
+
+
+def _search_version_hint(search: dict[str, Any]) -> str | None:
+    version_hint = search["version_hint"]
+    if isinstance(version_hint, str) or version_hint is None:
+        return version_hint
+    raise TypeError("package search version_hint must be a string or null")
+
+
+def _search_notes(search: dict[str, Any]) -> str:
+    notes = search["notes"]
+    if not isinstance(notes, str):
+        raise TypeError("package search notes must be a string")
+    return notes
 
 
 def _version_hint_from_exact_line(

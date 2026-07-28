@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
             "image2dng_version": __version__,
         },
         "sample_count": len(samples),
-        "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+        "all_validations_ok": _all_validations_ok(samples),
         "samples": samples,
     }
 
@@ -77,6 +77,7 @@ def _sample_record(path: Path) -> dict[str, Any]:
     return {
         "sample_id": _sample_id(path, scene),
         "semantic_sidecar_path": str(path),
+        "semantic_sidecar_bytes": path.stat().st_size if path.exists() else None,
         "semantic_sidecar_sha256": _sha256_file(path) if path.exists() else None,
         "validation_ok": validation.ok,
         "validation": validation.to_dict(),
@@ -94,6 +95,17 @@ def _sample_record(path: Path) -> dict[str, Any]:
             "region_raw_statistics_count": _region_raw_statistics_count(regions),
         },
     }
+
+
+def _all_validations_ok(samples: list[dict[str, Any]]) -> bool:
+    return all(_sample_validation_ok(sample) for sample in samples)
+
+
+def _sample_validation_ok(sample: dict[str, Any]) -> bool:
+    validation_ok = sample["validation_ok"]
+    if not isinstance(validation_ok, bool):
+        raise TypeError("sample validation_ok must be a boolean")
+    return validation_ok
 
 
 def _read_payload(path: Path) -> dict[str, Any]:

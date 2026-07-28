@@ -28,7 +28,7 @@ uv run python scripts/generate_compatibility_evidence.py --output-dir demo-outpu
 - `validation/*.json`：每個 DNG 的 validation report。
 - `processor-output/*`：RAW processor export/open smoke 輸出，僅在工具存在且成功時產生。
 - `compatibility-report.json`：machine-readable evidence report。
-- `compatibility-summary.md`：人工可讀 evidence matrix。
+- `compatibility-summary.md`：人工可讀 evidence matrix 與 fixture integrity 表，列出每個 fixture 的 DNG / validation JSON byte count 與 SHA-256。
 
 `demo-output/` 是本機輸出，不應提交 binary fixtures。
 
@@ -87,7 +87,8 @@ uv run python scripts/verify_adobe_validation_stack.py --output-dir demo-output/
 限制：
 
 - SDK validation path 必須 local-configurable，不應 hard-code 私人機器路徑。
-- 沒有可重現 SDK 路徑前，`compatibility-report.json` 中的 Adobe DNG SDK entry 應維持 `manual-only`。
+- `compatibility-report.json` 中的 Adobe DNG SDK entry 仍維持 `manual-only`；可重現的本機 SDK evidence 應由 dedicated local scripts 產出，不混入一般 optional RAW processor matrix。
+- 若需要產生本機 SDK evidence，可使用 `scripts/run_adobe_dng_sdk_validation.py` 或外層 `scripts/verify_adobe_validation_stack.py`，輸出仍應留在 ignored `demo-output/` 或 local-only notes。
 - 若 SDK 或 Adobe tool 回報 DNG 結構問題，該結果應升級成下一輪 Phase 6 blocking compatibility finding。
 
 ## Adobe DNG Converter regression
@@ -145,6 +146,7 @@ image2dng.compatibility_evidence.v2
 - `environment`：平台、Python、image2dng 版本。
 - `tools`：工具 availability、version command、version、timeout、dry-run install hint。
 - `install_policy`：不自動安裝、missing tool policy、available tool failure policy。
-- `fixtures`：每個 fixture 的 input、DNG、validation JSON、validation status、processor result records。
-- `matrix`：fixture/tool/result/evidence/notes/exit code/duration/output artifacts evidence matrix。
+- `fixtures`：每個 fixture 的 input、DNG、DNG byte count、DNG SHA-256、DNG layout、raw IFD location、IFD0 preview flag、validation JSON、validation JSON byte count、validation JSON SHA-256、validation status、processor result records。
+- `matrix`：fixture/tool/result/evidence/notes/exit code/duration/output artifacts/missing output artifacts evidence matrix。
+- `compatibility-summary.md`：除了 tool evidence matrix，也呈現 fixture DNG 與 validation JSON 的 byte count / SHA-256，方便人工審查時不用先打開 JSON report 才能核對 artifact integrity。
 - `ok` / `errors`：整體 gate 結果。

@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 import numpy as np
 import png
@@ -105,6 +107,191 @@ from image2dng.xmp import XMP_AI_NAMESPACE, build_xmp_packet
 
 def _fake_processor_executable(command: str) -> str:
     return f"C:/fake/{command}.exe"
+
+
+def _missing_local_markdown_links(markdown_path: Path) -> list[str]:
+    link_pattern = re.compile(r"!?\[[^\]]+\]\(([^)]+)\)")
+    markdown = markdown_path.read_text(encoding="utf-8")
+    missing = []
+
+    for match in link_pattern.finditer(markdown):
+        href = match.group(1).split("#", 1)[0]
+        if not href or href.startswith(("http://", "https://", "#")):
+            continue
+
+        target = (markdown_path.parent / unquote(href)).resolve()
+        if not target.exists():
+            missing.append(href)
+
+    return missing
+
+
+def _first_markdown_link_with_label(markdown_path: Path, label: str) -> Path:
+    markdown = markdown_path.read_text(encoding="utf-8")
+    pattern = re.compile(rf"{re.escape(label)}:\s*\[[^\]]+\]\(([^)]+)\)")
+    match = pattern.search(markdown)
+    if match is None:
+        raise AssertionError(f"missing {label!r} link in {markdown_path}")
+    href = match.group(1).split("#", 1)[0]
+    return (markdown_path.parent / unquote(href)).resolve()
+
+
+def test_readme_local_markdown_links_resolve():
+    repo_root = Path(__file__).resolve().parents[1]
+
+    for readme_name in ("README.md", "README.zh-tw.md"):
+        readme_path = repo_root / readme_name
+        assert _missing_local_markdown_links(readme_path) == []
+
+
+def test_readme_language_links_are_reciprocal():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "README.md").read_text(encoding="utf-8")
+    zh_tw = (repo_root / "README.zh-tw.md").read_text(encoding="utf-8")
+
+    assert "[繁體中文](README.zh-tw.md)" in english
+    assert "[English](README.md)" in zh_tw
+
+
+def test_readme_workflows_keep_local_output_and_install_boundaries():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "README.md").read_text(encoding="utf-8")
+    zh_tw = (repo_root / "README.zh-tw.md").read_text(encoding="utf-8")
+
+    assert "`demo-output/` is local output and binary samples should not be committed." in english
+    assert (
+        "`demo-output/` remains local output and binary samples should not be committed."
+        in english
+    )
+    assert "It does not install or update any tool" in english
+    assert "installing one RAW processor requires explicit user approval" in english
+    assert (
+        "preserves already generated source reports and manifests as diagnostic evidence"
+        in english
+    )
+    assert "`demo-output/` 是本機輸出資料夾，不應提交 binary 樣片。" in zh_tw
+    assert "`demo-output/` 仍是本機輸出資料夾，不應提交 binary 樣片。" in zh_tw
+    assert "它不會安裝或更新任何工具" in zh_tw
+    assert "安裝其中一個 RAW processor 必須等使用者明確批准" in zh_tw
+    assert "source reports / manifests 作為診斷 evidence" in zh_tw
+
+
+def test_docs_local_markdown_links_resolve():
+    repo_root = Path(__file__).resolve().parents[1]
+    broken_links = {}
+
+    for path in sorted((repo_root / "docs").rglob("*.md")):
+        missing = _missing_local_markdown_links(path)
+        if missing:
+            broken_links[str(path.relative_to(repo_root))] = missing
+
+    assert broken_links == {}
+
+
+def test_public_docs_reference_zh_tw_sources_bidirectionally():
+    repo_root = Path(__file__).resolve().parents[1]
+    public_docs = sorted(
+        path
+        for path in (repo_root / "docs").glob("*.md")
+        if "Traditional Chinese source manuscript:" in path.read_text(encoding="utf-8")
+    )
+
+    assert public_docs
+    for public_doc in public_docs:
+        zh_source = _first_markdown_link_with_label(
+            public_doc,
+            "Traditional Chinese source manuscript",
+        )
+        assert zh_source.is_relative_to(repo_root / "docs" / "i18n" / "zh-TW")
+        english_baseline = _first_markdown_link_with_label(
+            zh_source,
+            "English public baseline",
+        )
+        assert english_baseline == public_doc.resolve()
+
+
+def test_i18n_english_docs_have_zh_tw_counterparts():
+    repo_root = Path(__file__).resolve().parents[1]
+    en_docs = sorted((repo_root / "docs" / "i18n" / "en").glob("*.md"))
+    zh_tw_dir = repo_root / "docs" / "i18n" / "zh-TW"
+
+    assert en_docs
+    missing = [path.name for path in en_docs if not (zh_tw_dir / path.name).exists()]
+
+    assert missing == []
+
+
+def test_compatibility_docs_keep_setup_audit_safety_boundary():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "docs" / "compatibility.md").read_text(encoding="utf-8")
+    zh_tw = (
+        repo_root / "docs" / "i18n" / "zh-TW" / "compatibility-evidence.md"
+    ).read_text(encoding="utf-8")
+
+    assert "The setup audit never installs or upgrades RAW processor tools." in english
+    assert "If a tool is approved and installed later" in english
+    assert (
+        "generated fixtures live under `demo-output/compatibility-evidence/` "
+        "and should not be committed as binary artifacts."
+        in english
+    )
+    assert (
+        "fixture integrity table with DNG / validation JSON byte counts and SHA-256"
+        in english
+    )
+    assert "Dedicated local SDK validation scripts can produce sidecar evidence" in english
+    assert "scripts/run_adobe_dng_sdk_validation.py" in english
+    assert "scripts/verify_adobe_validation_stack.py" in english
+    assert "不會安裝、不會升級任何 RAW processor。" in zh_tw
+    assert "若使用者後續批准安裝其中一個工具" in zh_tw
+    assert "`demo-output/` 是本機輸出，不應提交 binary fixtures。" in zh_tw
+    assert "fixture integrity 表" in zh_tw
+    assert "本機 SDK evidence 由 dedicated local validation scripts" in zh_tw
+    assert "scripts/run_adobe_dng_sdk_validation.py" in zh_tw
+    assert "scripts/verify_adobe_validation_stack.py" in zh_tw
+
+
+def test_dng_tag_contract_keeps_adobe_sdk_local_evidence_boundary():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "docs" / "i18n" / "en" / "dng-tag-contract.md").read_text(
+        encoding="utf-8"
+    )
+    zh_tw = (repo_root / "docs" / "i18n" / "zh-TW" / "dng-tag-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "generic compatibility matrix" in english
+    assert "dedicated local scripts can produce local SDK sidecar evidence" in english
+    assert "without a reproducible local validation path" not in english
+    assert "generic compatibility matrix" in zh_tw
+    assert "dedicated local scripts 可產出本機 SDK sidecar evidence" in zh_tw
+    assert "沒有可重現的本機驗證路徑前" not in zh_tw
+
+
+def test_current_public_status_mentions_review_bundle_failure_diagnostics():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "docs" / "current-public-status.md").read_text(encoding="utf-8")
+    zh_tw = (
+        repo_root / "docs" / "i18n" / "zh-TW" / "current-public-status.md"
+    ).read_text(encoding="utf-8")
+
+    assert "source reports and manifests are preserved as diagnostic evidence" in english
+    assert "source report diagnostic preservation on command failure" in english
+    assert "source reports / manifests 作為診斷 evidence" in zh_tw
+    assert "command failure 時的 source report diagnostic preservation" in zh_tw
+
+
+def test_repo_agent_instructions_keep_zh_tw_source_pair():
+    repo_root = Path(__file__).resolve().parents[1]
+    english = (repo_root / "AGENTS.md").read_text(encoding="utf-8")
+    zh_tw = (repo_root / "AGENTS.zh-tw.md").read_text(encoding="utf-8")
+
+    assert "`AGENTS.zh-tw.md` is the Traditional Chinese original source manuscript" in english
+    assert "`AGENTS.md` remains the English canonical baseline" in english
+    assert "edit `AGENTS.zh-tw.md` first, then update this English file" in english
+    assert "`AGENTS.zh-tw.md` 是本專案 repo-local agent 指令的繁體中文原始母檔" in zh_tw
+    assert "`AGENTS.md` 是英文 canonical baseline" in zh_tw
+    assert "先修改 `AGENTS.zh-tw.md`，再同步更新英文 `AGENTS.md`" in zh_tw
 
 
 def test_generate_64x64_gradient_dng(tmp_path):
@@ -1001,6 +1188,86 @@ def test_raw_native_pipeline_generates_dng_jpeg_and_manifest(tmp_path):
     with Image.open(outputs["cfa_jpeg"]) as image:
         assert image.format == "JPEG"
         assert image.size == (32, 32)
+
+
+def test_raw_native_validation_summary_requires_contract_keys():
+    summary = _validation_summary(
+        {
+            "ok": True,
+            "dng_layout": "preview-subifd",
+            "raw_ifd_location": "IFD0/SubIFD0",
+            "errors": [],
+            "warnings": [],
+            "extra": "kept out of manifest summary",
+        }
+    )
+
+    assert summary == {
+        "ok": True,
+        "dng_layout": "preview-subifd",
+        "raw_ifd_location": "IFD0/SubIFD0",
+        "errors": [],
+        "warnings": [],
+    }
+    with pytest.raises(ValueError, match="validation report missing keys: warnings"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report ok must be a boolean"):
+        _validation_summary(
+            {
+                "ok": "yes",
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report dng_layout must be a string"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": [],
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report raw_ifd_location must be a string"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": False,
+                "errors": [],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report errors must be a string list"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": ["ok", 7],
+                "warnings": [],
+            }
+        )
+    with pytest.raises(ValueError, match="validation report warnings must be a string list"):
+        _validation_summary(
+            {
+                "ok": True,
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "errors": [],
+                "warnings": "none",
+            }
+        )
 
 
 def test_raw_native_manifest_contract_is_stable(tmp_path):
@@ -2048,8 +2315,17 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
     reacted_scene = json.loads(reacted.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     assert preserved_scene["semantic_to_raw_status"] == "preserved-not-applied"
     assert reacted_scene["semantic_to_raw_status"] == "applied"
-    assert reacted_scene["semantic_reaction"]["model"] == "region-exposure-mask-v1"
-    assert reacted_scene["semantic_reaction"]["affected_pixels"] == 180
+    assert reacted_scene["semantic_reaction"]["model"] == "semantic-reaction-chain-v1"
+    assert reacted_scene["semantic_reaction"]["affected_pixels"] == 340
+    assert (
+        reacted_scene["semantic_reaction"]["affected_pixel_count_semantics"]
+        == "sum-of-child-affected-pixels"
+    )
+    assert [
+        entry["model"] for entry in reacted_scene["semantic_reaction"]["regions"]
+    ] == ["region-exposure-mask-v1", "highlight-clipping-policy-v1"]
+    assert reacted_scene["semantic_reaction"]["regions"][0]["affected_pixels"] == 180
+    assert reacted_scene["semantic_reaction"]["regions"][1]["affected_pixels"] == 160
     assert Path(reacted_scene["outputs"]["original_scene_linear_input"]).exists()
     assert Path(reacted_scene["outputs"]["scene_linear_input"]).name.endswith(
         "-semantic-reaction.tif"
@@ -2066,10 +2342,11 @@ def test_external_scene_linear_batch_applies_semantic_reaction_when_opted_in(tmp
     sample = json.loads(reacted.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
     assert sample["semantic_to_raw_status"] == "applied"
     assert sample["semantic_reaction"] == {
-        "model": "region-exposure-mask-v1",
+        "model": "semantic-reaction-chain-v1",
         "applied": True,
-        "region_count": 1,
-        "affected_pixels": 180,
+        "region_count": 2,
+        "affected_pixels": 340,
+        "affected_pixel_count_semantics": "sum-of-child-affected-pixels",
     }
 
 
@@ -2153,6 +2430,9 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
         height=18,
         exposure_bias_ev=None,
     )
+    payload = load_semantic_payload(semantic_path)
+    payload["sensor_response_hints"]["clipping_policy"] = "clip"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
 
     result = run_external_scene_linear_batch(
         tmp_path / "noop-batch",
@@ -2169,9 +2449,22 @@ def test_external_scene_linear_batch_semantic_reaction_noop(tmp_path):
     scene_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     assert scene_manifest["semantic_to_raw_status"] == "no-op"
     assert scene_manifest["semantic_reaction"]["applied"] is False
-    assert scene_manifest["semantic_reaction"]["reason"] == (
-        "no regions with exposure_bias_ev and mask_asset_id"
-    )
+    assert "no regions with exposure_bias_ev and mask_asset_id" in scene_manifest[
+        "semantic_reaction"
+    ]["reason"]
+    assert "no highlight clipping policy requiring value mapping" in scene_manifest[
+        "semantic_reaction"
+    ]["reason"]
+
+    sample = json.loads(result.sample_index_path.read_text(encoding="utf-8"))["samples"][0]
+    assert sample["semantic_to_raw_status"] == "no-op"
+    assert sample["semantic_reaction"]["applied"] is False
+    assert "no regions with exposure_bias_ev and mask_asset_id" in sample[
+        "semantic_reaction"
+    ]["reason"]
+    assert "no highlight clipping policy requiring value mapping" in sample[
+        "semantic_reaction"
+    ]["reason"]
 
 
 def test_external_scene_linear_batch_applies_target_middle_gray_policy(tmp_path):
@@ -2442,8 +2735,10 @@ def test_external_scene_linear_batch_semantic_reaction_hashes_mask_asset_bytes(t
     first_scene = json.loads(first.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     second_scene = json.loads(second.manifest_path.read_text(encoding="utf-8"))["scenes"][0]
     assert first_scene["prompt_hash"] != second_scene["prompt_hash"]
-    assert first_scene["semantic_reaction"]["affected_pixels"] == 90
-    assert second_scene["semantic_reaction"]["affected_pixels"] == 360
+    assert first_scene["semantic_reaction"]["regions"][0]["affected_pixels"] == 90
+    assert first_scene["semantic_reaction"]["regions"][1]["affected_pixels"] == 112
+    assert second_scene["semantic_reaction"]["regions"][0]["affected_pixels"] == 360
+    assert second_scene["semantic_reaction"]["regions"][1]["affected_pixels"] == 288
     assert (
         first_scene["raw_data_unique_ids"]["linearraw"]
         != second_scene["raw_data_unique_ids"]["linearraw"]
@@ -2677,9 +2972,28 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     }
     assert len(report["fixtures"]) >= 11
     assert all(fixture["validation_ok"] is True for fixture in report["fixtures"])
+    assert {fixture["dng_layout"] for fixture in report["fixtures"]} == {"preview-subifd"}
+    assert {fixture["raw_ifd_location"] for fixture in report["fixtures"]} == {
+        "IFD0/SubIFD0"
+    }
+    assert {fixture["ifd0_preview"] for fixture in report["fixtures"]} == {True}
     assert all(Path(fixture["dng"]).exists() for fixture in report["fixtures"])
     assert all(Path(fixture["validation_json"]).exists() for fixture in report["fixtures"])
+    assert all(fixture["dng_bytes"] > 0 for fixture in report["fixtures"])
+    assert all(fixture["dng_sha256"].startswith("sha256:") for fixture in report["fixtures"])
+    assert all(fixture["validation_json_bytes"] > 0 for fixture in report["fixtures"])
+    assert all(
+        fixture["validation_json_sha256"].startswith("sha256:")
+        for fixture in report["fixtures"]
+    )
     assert all("processor_results" in fixture for fixture in report["fixtures"])
+    first_fixture = report["fixtures"][0]
+    first_dng = Path(first_fixture["dng"])
+    first_validation = Path(first_fixture["validation_json"])
+    assert first_fixture["dng_bytes"] == first_dng.stat().st_size
+    assert first_fixture["dng_sha256"] == _sha256_test_file(first_dng)
+    assert first_fixture["validation_json_bytes"] == first_validation.stat().st_size
+    assert first_fixture["validation_json_sha256"] == _sha256_test_file(first_validation)
 
     optional_tools = {"exiftool", "dcraw", "darktable-cli", "rawtherapee-cli"}
     optional_entries = [entry for entry in report["matrix"] if entry["tool"] in optional_tools]
@@ -2687,12 +3001,21 @@ def test_compatibility_evidence_handles_missing_optional_tools(tmp_path, monkeyp
     assert {entry["result"] for entry in optional_entries} == {"skipped"}
     assert all(entry["notes"] == "skipped: not found" for entry in optional_entries)
     assert all(entry["exit_code"] is None for entry in optional_entries)
+    assert all(entry["missing_output_artifacts"] == [] for entry in optional_entries)
 
     adobe_entries = [entry for entry in report["matrix"] if entry["tool"] == "adobe-dng-sdk"]
     assert adobe_entries
     assert {entry["result"] for entry in adobe_entries} == {"manual-only"}
     summary = summary_path.read_text(encoding="utf-8")
     assert "| Fixture | Tool | Result | Evidence | Notes |" in summary
+    assert (
+        "| Fixture | DNG bytes | DNG SHA-256 | "
+        "Validation JSON bytes | Validation JSON SHA-256 |"
+    ) in summary
+    assert first_fixture["dng_sha256"] in summary
+    assert first_fixture["validation_json_sha256"] in summary
+    assert "layout=preview-subifd" in summary
+    assert "raw_ifd_location=IFD0/SubIFD0" in summary
     assert "adobe-dng-sdk" in summary
     assert "Auto install: `False`" in summary
 
@@ -2716,6 +3039,240 @@ def test_compatibility_evidence_fails_when_available_processor_fails(tmp_path, m
     failed_entries = [entry for entry in report["matrix"] if entry["result"] == "failed"]
     assert failed_entries
     assert {entry["exit_code"] for entry in failed_entries} == {7}
+    assert all("missing_output_artifacts" in entry for entry in failed_entries)
+
+
+def test_compatibility_evidence_rejects_malformed_fixture_validation_flag():
+    module = _load_script_module("generate_compatibility_evidence")
+
+    with pytest.raises(TypeError, match="fixture validation_ok must be a boolean"):
+        module._structural_matrix_entry(
+            {
+                "validation_ok": "yes",
+                "slug": "sample",
+                "dng": "sample.dng",
+                "validation_json": "sample.validation.json",
+            }
+        )
+
+
+def test_compatibility_evidence_failure_aggregation_uses_matrix_accessors():
+    module = _load_script_module("generate_compatibility_evidence")
+    report = {
+        "fixtures": [
+            {
+                "slug": "sample",
+                "validation_ok": True,
+            }
+        ],
+        "matrix": [
+            {
+                "fixture": "sample",
+                "tool": "image2dng validate",
+                "result": "failed",
+                "notes": "simulated failure",
+            }
+        ],
+        "errors": [],
+    }
+
+    module._append_failures(report)
+    assert report["errors"] == ["sample failed image2dng validate: simulated failure"]
+
+    malformed = report | {
+        "matrix": [
+            report["matrix"][0] | {"fixture": []},
+        ],
+        "errors": [],
+    }
+    with pytest.raises(TypeError, match="matrix fixture must be a string"):
+        module._append_failures(malformed)
+
+    malformed = report | {
+        "matrix": [
+            report["matrix"][0] | {"tool": False},
+        ],
+        "errors": [],
+    }
+    with pytest.raises(TypeError, match="matrix tool must be a string"):
+        module._append_failures(malformed)
+
+
+def test_compatibility_evidence_rejects_malformed_report_accessors():
+    module = _load_script_module("generate_compatibility_evidence")
+    report = {
+        "schema": "image2dng.compatibility_evidence.v2",
+        "generated_at": "2026-05-23T00:00:00Z",
+        "output_dir": "demo-output/compatibility-evidence",
+        "ok": True,
+        "tools": {},
+        "matrix": [
+            {
+                "fixture": "sample",
+                "tool": "image2dng validate",
+                "result": "passed",
+                "evidence": "sample.validation.json",
+                "notes": "ok",
+            }
+        ],
+        "fixtures": [
+            {
+                "slug": "sample",
+                "dng_layout": "preview-subifd",
+                "raw_ifd_location": "IFD0/SubIFD0",
+                "dng_bytes": 128,
+                "dng_sha256": "sha256:dng",
+                "validation_json_bytes": 64,
+                "validation_json_sha256": "sha256:validation",
+            }
+        ],
+        "errors": [],
+        "install_policy": {
+            "auto_install": False,
+            "missing_tool_policy": "skipped",
+            "available_tool_failure_policy": "failed",
+        },
+    }
+
+    malformed = report | {"schema": 1}
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"generated_at": []}
+    with pytest.raises(TypeError, match="report generated_at must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"output_dir": False}
+    with pytest.raises(TypeError, match="report output_dir must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"ok": "true"}
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"install_policy": []}
+    with pytest.raises(TypeError, match="report install_policy must be an object"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"install_policy": report["install_policy"] | {"auto_install": "no"}}
+    with pytest.raises(TypeError, match="install_policy auto_install must be a boolean"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"] | {"missing_tool_policy": []}
+    }
+    with pytest.raises(TypeError, match="install_policy missing_tool_policy must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"] | {"missing_tool_policy": "ignore"}
+    }
+    with pytest.raises(TypeError, match="install_policy missing_tool_policy must be skipped"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"]
+        | {"available_tool_failure_policy": False}
+    }
+    with pytest.raises(
+        TypeError,
+        match="install_policy available_tool_failure_policy must be a string",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "install_policy": report["install_policy"]
+        | {"available_tool_failure_policy": "warning"}
+    }
+    with pytest.raises(
+        TypeError,
+        match="install_policy available_tool_failure_policy must be failed",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"matrix": [report["matrix"][0] | {"fixture": []}]}
+    with pytest.raises(TypeError, match="matrix fixture must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"matrix": [report["matrix"][0] | {"tool": False}]}
+    with pytest.raises(TypeError, match="matrix tool must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"matrix": [report["matrix"][0] | {"evidence": []}]}
+    with pytest.raises(TypeError, match="matrix evidence must be a string or null"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"slug": []}]}
+    with pytest.raises(TypeError, match="fixture slug must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"dng_layout": False}]}
+    with pytest.raises(TypeError, match="fixture dng_layout must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "fixtures": [report["fixtures"][0] | {"raw_ifd_location": []}]
+    }
+    with pytest.raises(TypeError, match="fixture raw_ifd_location must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"dng_bytes": True}]}
+    with pytest.raises(TypeError, match="fixture dng_bytes must be an integer"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {"fixtures": [report["fixtures"][0] | {"dng_sha256": 7}]}
+    with pytest.raises(TypeError, match="fixture dng_sha256 must be a string"):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "fixtures": [report["fixtures"][0] | {"validation_json_bytes": False}]
+    }
+    with pytest.raises(
+        TypeError,
+        match="fixture validation_json_bytes must be an integer",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = report | {
+        "fixtures": [report["fixtures"][0] | {"validation_json_sha256": []}]
+    }
+    with pytest.raises(
+        TypeError,
+        match="fixture validation_json_sha256 must be a string",
+    ):
+        module._summary_markdown(malformed)
+
+    with pytest.raises(TypeError, match="report fixtures must contain objects"):
+        module._fixtures({"fixtures": ["not-a-fixture"]})
+
+    with pytest.raises(TypeError, match="report tools must be an object"):
+        module._tools({"tools": []})
+
+    with pytest.raises(TypeError, match="report matrix must contain objects"):
+        module._matrix({"matrix": ["not-a-matrix-entry"]})
+
+    with pytest.raises(TypeError, match="matrix result must be a string"):
+        module._matrix_result({"result": False})
+
+    with pytest.raises(
+        TypeError,
+        match="matrix result must be passed, failed, skipped, or manual-only",
+    ):
+        module._matrix_result({"result": "warning"})
+
+    with pytest.raises(TypeError, match="matrix notes must be a string"):
+        module._matrix_notes({"notes": []})
+
+    with pytest.raises(TypeError, match="report errors must be a list"):
+        module._errors({"errors": "none"})
+
+    malformed = report | {"errors": [False]}
+    with pytest.raises(TypeError, match="report errors must be a string list"):
+        module._summary_markdown(malformed)
+
+    summary = module._summary_markdown(report | {"ok": False, "errors": ["synthetic failure"]})
+    assert "## Errors" in summary
+    assert "- synthetic failure" in summary
 
 
 def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeypatch):
@@ -2739,6 +3296,7 @@ def test_processor_compatibility_records_successful_fake_tools(tmp_path, monkeyp
     assert Path(payload["dcraw"]["output_artifacts"][0]).exists()
     assert "\\" not in " ".join(payload["darktable-cli"]["command"][1:])
     assert "\\" not in " ".join(payload["rawtherapee-cli"]["command"][1:])
+    assert "-t" in payload["rawtherapee-cli"]["command"]
 
 
 def test_adobe_converted_artifact_inspection_is_relaxed_for_rewritten_tags(tmp_path):
@@ -2828,6 +3386,19 @@ def test_adobe_dng_converter_verifier_dry_run_fails_invalid_source(tmp_path, mon
     assert report["status"] == "failed"
     assert report["ok"] is False
     assert report["errors"] == ["source image2dng contract validation failed"]
+
+
+def test_adobe_dng_converter_verifier_rejects_malformed_validation_ok():
+    module = _load_script_module("verify_adobe_dng_converter")
+
+    with pytest.raises(TypeError, match="source contract validation ok must be a boolean"):
+        module._report_ok({"ok": "yes"}, "source contract validation")
+
+    with pytest.raises(
+        TypeError,
+        match="Adobe-converted artifact inspection ok must be a boolean",
+    ):
+        module._report_ok({"ok": None}, "Adobe-converted artifact inspection")
 
 
 def test_adobe_dng_converter_verifier_records_fake_conversion(tmp_path, monkeypatch):
@@ -2970,7 +3541,22 @@ def test_adobe_local_resource_audit_writes_readiness_report(tmp_path):
         "profile_sdk_or_tools": True,
     }
     assert report["missing_required_kinds"] == []
-    assert (output_dir / "adobe-local-resource-summary.md").exists()
+    resource_hashes = {
+        resource["name"]: resource["sha256"] for resource in report["resources"]
+    }
+    assert resource_hashes["AdobeDNGConverter_x64_18_3_1.exe"] == _sha256_test_file(
+        adobe_dir / "AdobeDNGConverter_x64_18_3_1.exe"
+    )
+    assert resource_hashes["DNG_Spec_1_7_1_0.pdf"] == _sha256_test_file(
+        adobe_dir / "DNG_Spec_1_7_1_0.pdf"
+    )
+    assert resource_hashes["dng_sdk_1_7_1_2573_20260512.zip"] == _sha256_test_file(
+        adobe_dir / "dng_sdk_1_7_1_2573_20260512.zip"
+    )
+    summary = (output_dir / "adobe-local-resource-summary.md").read_text(encoding="utf-8")
+    assert resource_hashes["AdobeDNGConverter_x64_18_3_1.exe"] in summary
+    assert resource_hashes["DNG_Spec_1_7_1_0.pdf"] in summary
+    assert resource_hashes["dng_sdk_1_7_1_2573_20260512.zip"] in summary
 
 
 def test_adobe_local_resource_audit_refuses_tracked_output(tmp_path):
@@ -3023,6 +3609,143 @@ def test_adobe_local_resource_audit_reports_missing_required_resources(tmp_path)
         "missing required resource kind: dng-sdk-archive",
     ]
     assert any("local-only/manual-resource" in step for step in report["next_steps"])
+
+
+def test_adobe_local_resource_audit_rejects_malformed_summary_lists(tmp_path):
+    module = _load_script_module("audit_adobe_local_resources")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    report = module.build_report(adobe_dir)
+
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["ok"] = "true"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["adobe_dir"] = []
+    with pytest.raises(TypeError, match="report adobe_dir must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["readiness"] = {"dng_sdk_archive": []}
+    with pytest.raises(TypeError, match="report readiness must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["readiness"] = {False: True}
+    with pytest.raises(TypeError, match="report readiness must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["readiness"]["dng_converter_resource_state"] = "unknown"
+    with pytest.raises(
+        TypeError,
+        match=(
+            "readiness dng_converter_resource_state must be installed-executable, "
+            "missing, or resource-present-not-installed"
+        ),
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["missing_required_kinds"] = ["dng-sdk-archive", 7]
+    with pytest.raises(
+        TypeError,
+        match="report missing_required_kinds must be a string list",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["blocking_findings"] = "missing"
+    with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"] = ["not-a-resource"]
+    with pytest.raises(TypeError, match="report resources must be an object list"):
+        module._summary_markdown(report)
+
+    resource_path = adobe_dir / "DNG_Spec_1_7_1_0.pdf"
+    resource_path.write_bytes(b"fake dng spec")
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["name"] = []
+    with pytest.raises(TypeError, match="resource name must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["kind"] = False
+    with pytest.raises(TypeError, match="resource kind must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["kind"] = "unknown"
+    with pytest.raises(
+        TypeError,
+        match=(
+            "resource kind must be adobe-documentation, dng-converter-resource, "
+            "dng-profile-editor, dng-sdk-archive, dng-specification, "
+            "lens-profile-creator-archive, other, profile-sdk-archive, or tiff-reference"
+        ),
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["size_bytes"] = True
+    with pytest.raises(TypeError, match="resource size_bytes must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir)
+    report["resources"][0]["sha256"] = 7
+    with pytest.raises(TypeError, match="resource sha256 must be a string"):
+        module._summary_markdown(report)
+
+    with pytest.raises(TypeError, match="resource kind must be a string"):
+        module._converter_resource_state([{"kind": False, "name": "Adobe DNG Converter.exe"}])
+
+    with pytest.raises(
+        TypeError,
+        match=(
+            "resource kind must be adobe-documentation, dng-converter-resource, "
+            "dng-profile-editor, dng-sdk-archive, dng-specification, "
+            "lens-profile-creator-archive, other, profile-sdk-archive, or tiff-reference"
+        ),
+    ):
+        module._converter_resource_state(
+            [{"kind": "installer", "name": "Adobe DNG Converter.exe"}]
+        )
+
+    with pytest.raises(TypeError, match="resource name must be a string"):
+        module._converter_resource_state([{"kind": "dng-converter-resource", "name": []}])
+
+    with pytest.raises(TypeError, match="resource zip must be an object"):
+        module._zip_findings([{"kind": "dng-sdk-archive", "zip": []}])
+
+    with pytest.raises(TypeError, match="resource zip findings must be an object"):
+        module._zip_findings([{"kind": "dng-sdk-archive", "zip": {"findings": []}}])
+
+    with pytest.raises(
+        TypeError,
+        match="resource zip finding dng_validate_solution must be a boolean",
+    ):
+        module._zip_findings(
+            [
+                {
+                    "kind": "dng-sdk-archive",
+                    "zip": {"findings": {"dng_validate_solution": "yes"}},
+                }
+            ]
+        )
 
 
 def test_adobe_local_resource_audit_recognizes_spaced_converter_name(tmp_path):
@@ -3159,8 +3882,19 @@ def test_prepare_adobe_dng_sdk_manual_validation_writes_plan(tmp_path):
     }
     assert report["selected_sdk_archive"]["name"] == "dng_sdk_1_7_1.zip"
     assert report["representative_fixtures"][0]["dng_count"] == 1
+    assert report["representative_fixtures"][0]["sample_dngs"] == [
+        {
+            "path": str(fixture_dir / "sample.dng"),
+            "size_bytes": (fixture_dir / "sample.dng").stat().st_size,
+            "sha256": _sha256_test_file(fixture_dir / "sample.dng"),
+        }
+    ]
     assert all(step["manual_only"] is True for step in report["manual_steps"])
-    assert (output_dir / "adobe-dng-sdk-manual-validation-plan.md").exists()
+    summary = (output_dir / "adobe-dng-sdk-manual-validation-plan.md").read_text(
+        encoding="utf-8"
+    )
+    assert str(fixture_dir / "sample.dng") in summary
+    assert _sha256_test_file(fixture_dir / "sample.dng") in summary
 
 
 def test_prepare_adobe_dng_sdk_manual_validation_refuses_tracked_output(tmp_path):
@@ -3207,6 +3941,154 @@ def test_prepare_adobe_dng_sdk_manual_validation_reports_missing_sdk(tmp_path):
     assert report["ok"] is False
     assert report["status"] == "missing-sdk-validate-project"
     assert report["selected_sdk_archive"] is None
+
+
+def test_prepare_adobe_dng_sdk_manual_validation_rejects_malformed_summary_records(tmp_path):
+    module = _load_script_module("prepare_adobe_dng_sdk_manual_validation")
+    adobe_dir = tmp_path / "Adobe"
+    adobe_dir.mkdir()
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.dng").write_bytes(b"fake dng")
+    report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
+
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["ok"] = "false"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["status"] = []
+    with pytest.raises(TypeError, match="report status must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["status"] = "ready"
+    with pytest.raises(
+        TypeError,
+        match="report status must be missing-sdk-validate-project or prepared",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["archive_extraction"] = False
+    with pytest.raises(TypeError, match="report policy archive_extraction must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["archive_extraction"] = "auto"
+    with pytest.raises(TypeError, match="report policy archive_extraction must be not-attempted"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["sdk_build"] = "automatic"
+    with pytest.raises(TypeError, match="report policy sdk_build must be manual-only"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["sdk_execution"] = "queued"
+    with pytest.raises(TypeError, match="report policy sdk_execution must be not-attempted"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["ci_gate"] = "false"
+    with pytest.raises(TypeError, match="report policy ci_gate must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["policy"]["ci_gate"] = True
+    with pytest.raises(TypeError, match="report policy ci_gate must be false"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["selected_sdk_archive"] = {"path": []}
+    with pytest.raises(TypeError, match="selected SDK archive path must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["selected_sdk_archive"] = "dng_sdk.zip"
+    with pytest.raises(
+        TypeError,
+        match="report selected_sdk_archive must be an object or null",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
+    report["representative_fixtures"] = ["not-a-fixture"]
+    with pytest.raises(
+        TypeError,
+        match="report representative_fixtures must be an object list",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["directory"] = []
+    with pytest.raises(TypeError, match="fixture directory must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["exists"] = "yes"
+    with pytest.raises(TypeError, match="fixture exists must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["dng_count"] = False
+    with pytest.raises(TypeError, match="fixture dng_count must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"] = ["sample.dng"]
+    with pytest.raises(TypeError, match="fixture sample_dngs must be an object list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"][0]["path"] = []
+    with pytest.raises(TypeError, match="sample path must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"][0]["size_bytes"] = True
+    with pytest.raises(TypeError, match="sample size_bytes must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["representative_fixtures"][0]["sample_dngs"][0]["sha256"] = 7
+    with pytest.raises(TypeError, match="sample sha256 must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["step"] = []
+    with pytest.raises(TypeError, match="manual step name must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["manual_only"] = "yes"
+    with pytest.raises(TypeError, match="manual step manual_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["manual_only"] = False
+    with pytest.raises(TypeError, match="manual step manual_only must be true"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(fixture_dir,))
+    report["manual_steps"][0]["command_template"] = []
+    with pytest.raises(TypeError, match="manual step command_template must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(adobe_dir, fixture_dirs=(tmp_path / "fixtures",))
+    report["manual_steps"] = ["not-a-step"]
+    with pytest.raises(TypeError, match="report manual_steps must be an object list"):
+        module._summary_markdown(report)
 
 
 def test_run_adobe_dng_sdk_validation_writes_passing_batch_report(tmp_path):
@@ -3303,6 +4185,296 @@ def test_run_adobe_dng_sdk_validation_reports_missing_validator_and_empty_fixtur
         in report["blocking_findings"]
     )
     assert "no DNG fixtures selected" in report["blocking_findings"]
+
+
+def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_lists(tmp_path):
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+    runner = _FakeDngValidateRunner()
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["ok"] = "false"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["summary"]["failed"] = True
+    with pytest.raises(TypeError, match="summary failed must be an integer"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"] = []
+    with pytest.raises(TypeError, match="report validator must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["path"] = []
+    with pytest.raises(TypeError, match="validator path must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["path"]["repo_relative"] = False
+    with pytest.raises(
+        TypeError,
+        match="validator repo_relative path must be a string or null",
+    ):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["version_probe"] = []
+    with pytest.raises(TypeError, match="validator version_probe must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["validator"]["version_probe"]["version_text"] = []
+    with pytest.raises(TypeError, match="validator version_text must be a string or null"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["blocking_findings"] = [False]
+    with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = ["not-a-marker-record"]
+    with pytest.raises(TypeError, match="report error_markers must be an object list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = [{"fixture": [], "status": "failed", "markers": ["error"]}]
+    with pytest.raises(TypeError, match="error marker fixture must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = [{"fixture": "sample.dng", "status": False, "markers": ["error"]}]
+    with pytest.raises(TypeError, match="error marker status must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["error_markers"] = [{"fixture": "sample.dng", "status": "failed", "markers": [7]}]
+    with pytest.raises(TypeError, match="error marker markers must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=False,
+        runner=runner,
+    )
+    report["results"] = ["not-a-result-record"]
+    with pytest.raises(TypeError, match="report results must be an object list"):
+        module._summary_markdown(report)
+
+    result_report = module.build_report(
+        validator=tmp_path / "missing.exe",
+        fixture_roots=(tmp_path / "missing-fixtures",),
+        output_dir=tmp_path / "reports",
+        timeout_seconds=1,
+        allow_empty=True,
+        runner=runner,
+    )
+    result_report["results"] = [
+        {
+            "fixture": {"repo_relative": "sample.dng"},
+            "status": "failed",
+            "exit_code": 1,
+            "timeout": False,
+            "duration_seconds": 0.1,
+        }
+    ]
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"fixture": []}]
+    }
+    with pytest.raises(TypeError, match="result fixture must be an object"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [
+            result_report["results"][0]
+            | {"fixture": {"repo_relative": False}}
+        ]
+    }
+    with pytest.raises(
+        TypeError,
+        match="result fixture repo_relative must be a string or null",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"status": []}]
+    }
+    with pytest.raises(
+        TypeError,
+        match="result status must be passed, failed, timeout, or marker-blocked",
+    ):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"exit_code": True}]
+    }
+    with pytest.raises(TypeError, match="result exit_code must be an integer or null"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"timeout": "false"}]
+    }
+    with pytest.raises(TypeError, match="result timeout must be a boolean"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"duration_seconds": "slow"}]
+    }
+    with pytest.raises(TypeError, match="result duration_seconds must be finite numeric"):
+        module._summary_markdown(malformed)
+
+    malformed = result_report | {
+        "results": [result_report["results"][0] | {"duration_seconds": float("nan")}]
+    }
+    with pytest.raises(TypeError, match="result duration_seconds must be finite numeric"):
+        module._summary_markdown(malformed)
+
+
+def test_run_adobe_dng_sdk_validation_rejects_malformed_summary_count_status():
+    module = _load_script_module("run_adobe_dng_sdk_validation")
+
+    assert module._summary_counts(
+        [
+            {"status": "passed"},
+            {"status": "failed"},
+            {"status": "timeout"},
+            {"status": "marker-blocked"},
+        ],
+        selected_count=4,
+    ) == {
+        "selected": 4,
+        "passed": 1,
+        "failed": 1,
+        "marker_blocked": 1,
+        "timeout": 1,
+        "skipped": 0,
+    }
+
+    with pytest.raises(
+        TypeError,
+        match="result status must be passed, failed, timeout, or marker-blocked",
+    ):
+        module._summary_counts([{"status": "skipped"}], selected_count=1)
+
+    with pytest.raises(
+        TypeError,
+        match="result status must be passed, failed, timeout, or marker-blocked",
+    ):
+        module._summary_counts([{"status": False}], selected_count=1)
 
 
 def test_run_adobe_dng_sdk_validation_blocks_version_probe_timeout_with_version_text(
@@ -3679,6 +4851,365 @@ def test_verify_adobe_validation_stack_writes_passing_report(tmp_path):
     )
 
 
+def test_verify_adobe_validation_stack_rejects_malformed_summary_findings(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    adobe_dir = repo_root / "Adobe"
+    adobe_dir.mkdir()
+    validator = adobe_dir / "dng_validate.exe"
+    validator.write_text("fake validator", encoding="utf-8")
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+
+    report["schema"] = 1
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["ok"] = "false"
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["run_id"] = []
+    with pytest.raises(TypeError, match="report run_id must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["output_dir"] = []
+    with pytest.raises(TypeError, match="report output_dir must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["output_dir"]["display"] = False
+    with pytest.raises(TypeError, match="report output_dir display must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["output_dir"]["absolute"] = []
+    with pytest.raises(TypeError, match="path record absolute must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["local_only"] = "yes"
+    with pytest.raises(TypeError, match="report local_only must be a boolean"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["blocking_findings"] = [False]
+    with pytest.raises(TypeError, match="report blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["name"] = []
+    with pytest.raises(TypeError, match="step name must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["status"] = False
+    with pytest.raises(TypeError, match="step status must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["status"] = "skipped"
+    with pytest.raises(TypeError, match="step status must be passed or failed"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["exit_code"] = True
+    with pytest.raises(TypeError, match="step exit_code must be an integer or null"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["child_report_path"] = []
+    with pytest.raises(TypeError, match="step child_report_path must be an object"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["child_report_path"]["display"] = []
+    with pytest.raises(TypeError, match="child report display must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["child_report_path"]["absolute"] = []
+    with pytest.raises(TypeError, match="path record absolute must be a string"):
+        module._summary_markdown(report)
+
+    report = module.build_report(
+        output_dir=repo_root / "demo-output" / "adobe-validation-stack",
+        adobe_dir=adobe_dir,
+        converter=None,
+        validator=validator,
+        timeout_seconds=1,
+        dry_run_converter=False,
+        repo_root=repo_root,
+        runner=_FakeAdobeValidationStackRunner(),
+    )
+    report["steps"][0]["blocking_findings"] = ["ok", False]
+    with pytest.raises(TypeError, match="step blocking_findings must be a string list"):
+        module._summary_markdown(report)
+
+
+def test_verify_adobe_validation_stack_rejects_malformed_integration_booleans():
+    module = _load_script_module("verify_adobe_validation_stack")
+
+    with pytest.raises(TypeError, match="child report ok must be a boolean"):
+        module._child_report_ok({"ok": "true"})
+
+    with pytest.raises(TypeError, match="child report schema must be a string"):
+        module._child_report_schema({"schema": False})
+
+    with pytest.raises(TypeError, match="child report generated_at must be a string"):
+        module._child_report_generated_at({"generated_at": False})
+
+    assert module._child_report_generated_at({}) is None
+
+    with pytest.raises(TypeError, match="child report status must be a string"):
+        module._child_report_status({"status": False})
+
+    assert module._child_report_status({}) is None
+
+    with pytest.raises(
+        TypeError,
+        match="child report blocking_findings must be a string list",
+    ):
+        module._child_blocking_findings({"blocking_findings": ["ok", False]})
+
+    with pytest.raises(TypeError, match="child report errors must be a string list"):
+        module._child_blocking_findings({"errors": ["ok", False]})
+
+    assert module._child_blocking_findings({"errors": ["synthetic child failure"]}) == [
+        "synthetic child failure"
+    ]
+
+    with pytest.raises(TypeError, match="step blocking_findings must be a string list"):
+        module._extend_blocking_findings([], {"blocking_findings": ["ok", False]})
+
+    with pytest.raises(TypeError, match="step blocking_findings must be a string list"):
+        module._finalize_step_status({"blocking_findings": [False]})
+
+    with pytest.raises(TypeError, match="step project_fixture_roots must be an object list"):
+        module._project_fixture_roots({"project_fixture_roots": ["not-a-root-record"]})
+
+    with pytest.raises(TypeError, match="path record absolute must be a string"):
+        module._project_fixture_roots({"project_fixture_roots": [{"absolute": []}]})
+
+    assert module._project_fixture_roots(
+        {"project_fixture_roots": [{"absolute": str(Path.cwd())}]}
+    ) == [Path.cwd()]
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture inspection fixture_roots must be an object list",
+    ):
+        module._project_fixture_inspection_roots({"fixture_roots": ["not-a-root-record"]})
+
+    assert module._project_fixture_inspection_roots({}) == []
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture manifest schema must be a string",
+    ):
+        module._project_fixture_manifest_schema({"schema": False})
+
+    assert module._project_fixture_manifest_schema({}) is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture sample index schema must be a string",
+    ):
+        module._project_fixture_sample_index_schema({"schema": []})
+
+    assert module._project_fixture_sample_index_schema({}) is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture manifest scenes must be a list",
+    ):
+        module._project_fixture_scenes({"scenes": {}})
+
+    assert module._project_fixture_scenes({}) == []
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture scene outputs must be an object",
+    ):
+        module._project_fixture_scene_outputs({"outputs": []})
+
+    assert module._project_fixture_scene_outputs({}) is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture scene validations must be an object",
+    ):
+        module._project_fixture_scene_validations({"validations": []})
+
+    assert module._project_fixture_scene_validations({}) is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture output linearraw_dng must be a string",
+    ):
+        module._project_fixture_output_path({"linearraw_dng": []}, "linearraw_dng")
+
+    assert module._project_fixture_output_path({}, "linearraw_dng") is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture validation linearraw must be an object",
+    ):
+        module._project_fixture_validation_record({"linearraw": []}, "linearraw")
+
+    assert module._project_fixture_validation_record({}, "linearraw") is None
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture sample index all_validations_ok must be a boolean",
+    ):
+        module._sample_index_all_validations_ok({"all_validations_ok": "yes"})
+
+    with pytest.raises(
+        TypeError,
+        match="project fixture validation linearraw ok must be a boolean",
+    ):
+        module._validation_ok({"ok": []}, "project fixture validation linearraw")
+
+
 def test_verify_adobe_validation_stack_dry_run_converter_is_not_readiness(tmp_path):
     module = _load_script_module("verify_adobe_validation_stack")
     repo_root = tmp_path / "repo"
@@ -3793,6 +5324,48 @@ def test_verify_adobe_validation_stack_reports_missing_child_report(tmp_path):
         finding.startswith("child report missing:")
         for finding in converter_step["blocking_findings"]
     )
+
+
+def test_verify_adobe_validation_stack_rejects_external_project_fixture_paths(tmp_path):
+    module = _load_script_module("verify_adobe_validation_stack")
+    repo_root = tmp_path / "repo"
+    batch_dir = repo_root / "demo-output" / "adobe-validation-stack" / "project-fixtures"
+    manifest_dir = batch_dir / "manifests"
+    external_dir = tmp_path / "external-fixtures"
+    manifest_dir.mkdir(parents=True)
+    external_dir.mkdir()
+    external_dng = external_dir / "outside.dng"
+    external_dng.write_bytes(b"outside dng")
+    manifest = {
+        "schema": "image2dng.raw_native_node_batch.v1",
+        "scenes": [
+            {
+                "slug": "sample",
+                "outputs": {
+                    "linearraw_dng": str(external_dng),
+                    "cfa_dng": str(batch_dir / "raw" / "sample-cfa.dng"),
+                },
+                "validations": {"linearraw": {"ok": True}, "cfa": {"ok": True}},
+            }
+        ],
+    }
+    sample_index = {
+        "schema": "image2dng.raw_native_sample_index.v1",
+        "scene_count": 1,
+        "all_validations_ok": True,
+    }
+    (manifest_dir / "raw-native-node-batch.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    (manifest_dir / "sample-index.json").write_text(
+        json.dumps(sample_index),
+        encoding="utf-8",
+    )
+
+    _inspection, errors = module._inspect_project_dng_fixtures(batch_dir, repo_root)
+
+    assert any("project fixture DNG outside batch dir" in error for error in errors)
 
 
 def test_verify_adobe_validation_stack_refuses_unsafe_output_dirs(tmp_path):
@@ -3939,6 +5512,144 @@ def test_real_raw_sample_audit_writes_local_research_reports(tmp_path, monkeypat
     assert "metadata" not in ledger["optional_tools"]["exiftool"]
 
 
+def test_real_raw_sample_audit_rejects_malformed_tiff_metadata():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="tifffile metadata tags must be an object"):
+        module._detected_metadata(
+            {
+                "status": "passed",
+                "warnings": [],
+                "tags": [],
+                "preview_ifd_present": True,
+                "raw_ifd_present": True,
+                "subifd_present": False,
+            },
+            {
+                "result": "skipped",
+                "metadata": {},
+            },
+        )
+
+
+def test_real_raw_sample_audit_rejects_malformed_tiff_metadata_shape():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="tifffile metadata warnings must be a string list"):
+        module._redaction_report(
+            sample_id="bad-warnings",
+            input_path=Path("sample.dng"),
+            input_sha256="sha256:unit",
+            raw_format="dng",
+            tiff_metadata={
+                "status": "passed",
+                "warnings": ["ok", 3],
+                "tags": {},
+                "preview_ifd_present": False,
+                "raw_ifd_present": True,
+                "subifd_present": False,
+            },
+            exiftool={"result": "skipped", "metadata": {}},
+        )
+
+    with pytest.raises(
+        TypeError,
+        match="tifffile metadata preview_ifd_present must be a boolean or null",
+    ):
+        module._detected_metadata(
+            {
+                "status": "passed",
+                "warnings": [],
+                "tags": {},
+                "preview_ifd_present": "yes",
+                "raw_ifd_present": True,
+                "subifd_present": False,
+            },
+            {"result": "skipped", "metadata": {}},
+        )
+
+
+def test_real_raw_sample_audit_does_not_treat_boolean_tags_as_ifd_markers():
+    module = _load_script_module("audit_real_raw_sample")
+    detected = module._detected_metadata(
+        {
+            "status": "passed",
+            "warnings": [],
+            "tags": {
+                "NewSubfileType": False,
+                "254": [True],
+            },
+            "preview_ifd_present": module._preview_ifd_present(
+                [{"NewSubfileType": False, "254": [True]}]
+            ),
+            "raw_ifd_present": module._raw_ifd_present(
+                [{"NewSubfileType": False, "254": [True]}]
+            ),
+            "subifd_present": False,
+        },
+        {"result": "skipped", "metadata": {}},
+    )
+
+    assert detected["preview_ifd_present"] is False
+    assert detected["raw_ifd_present"] is False
+
+
+def test_real_raw_sample_audit_rejects_malformed_tool_summary():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="tool exit_code must be an integer or null"):
+        module._tool_summary(
+            {
+                "available": True,
+                "discovery": None,
+                "command": [],
+                "exit_code": False,
+                "duration_seconds": 0.0,
+                "result": "skipped",
+                "stdout_tail": [],
+                "stderr_tail": [],
+                "notes": "tool not found",
+            }
+        )
+
+    with pytest.raises(TypeError, match="tool duration_seconds must be finite numeric"):
+        module._tool_summary(
+            {
+                "available": True,
+                "discovery": None,
+                "command": [],
+                "exit_code": None,
+                "duration_seconds": True,
+                "result": "skipped",
+                "stdout_tail": [],
+                "stderr_tail": [],
+                "notes": "tool not found",
+            }
+        )
+
+    with pytest.raises(TypeError, match="tool duration_seconds must be finite numeric"):
+        module._tool_summary(
+            {
+                "available": True,
+                "discovery": None,
+                "command": [],
+                "exit_code": None,
+                "duration_seconds": float("inf"),
+                "result": "skipped",
+                "stdout_tail": [],
+                "stderr_tail": [],
+                "notes": "tool not found",
+            }
+        )
+
+
+def test_real_raw_sample_audit_rejects_malformed_redaction_status():
+    module = _load_script_module("audit_real_raw_sample")
+
+    with pytest.raises(TypeError, match="redaction status must be a string"):
+        module._next_actions({"status": []}, redistribution_allowed=True)
+
+
 def test_real_raw_sample_audit_rejects_missing_input(tmp_path):
     module = _load_script_module("audit_real_raw_sample")
 
@@ -4083,7 +5794,9 @@ def test_semantic_physics_manifest_builder_writes_local_manifest(tmp_path):
     assert manifest["schema"] == "image2dng.semantic_physics_dataset_manifest.v1"
     assert manifest["local_research_only"] is True
     assert manifest["all_validations_ok"] is True
+    assert sample["semantic_sidecar_bytes"] == semantic_path.stat().st_size
     assert sample["semantic_sidecar_sha256"].startswith("sha256:")
+    assert sample["semantic_sidecar_sha256"] == _sha256_test_file(semantic_path)
     assert sample["semantic_physics_fields"] == {
         "capture_physics": True,
         "camera_response": True,
@@ -4137,6 +5850,20 @@ def test_semantic_physics_manifest_builder_records_invalid_sidecar(tmp_path):
     )
 
 
+def test_semantic_physics_manifest_builder_rejects_malformed_validation_flag():
+    module = _load_script_module("build_semantic_physics_manifest")
+
+    with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
+        module._all_validations_ok([{"validation_ok": "yes"}])
+
+
+def test_generate_fivek_semantic_physics_sample_rejects_malformed_validation_flag():
+    module = _load_script_module("generate_fivek_semantic_physics_sample")
+
+    with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
+        module._all_validations_ok([{"validation_ok": "yes"}])
+
+
 def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path):
     module = _load_script_module("generate_fivek_semantic_physics_sample")
     fivek_dir = tmp_path / "fivek-smoke"
@@ -4164,6 +5891,12 @@ def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path
     assert exit_code == 0
     assert manifest["schema"] == "image2dng.semantic_physics_dataset_manifest.v1"
     assert manifest["all_validations_ok"] is True
+    assert manifest["samples"][0]["semantic_sidecar_bytes"] == (
+        output_dir / f"{sample_id}.semantic.json"
+    ).stat().st_size
+    assert manifest["samples"][0]["semantic_sidecar_sha256"] == _sha256_test_file(
+        output_dir / f"{sample_id}.semantic.json"
+    )
     assert manifest["samples"][0]["semantic_physics_fields"] == {
         "capture_physics": True,
         "camera_response": True,
@@ -4171,7 +5904,19 @@ def test_generate_fivek_semantic_physics_sample_writes_passing_manifest(tmp_path
     }
     assert (output_dir / "assets" / f"{sample_id}-neutral-preview.jpg").exists()
     assert (output_dir / "assets" / f"{sample_id}-center-mask.png").exists()
+    assert sidecar["producer"]["source_dng_bytes"] == (
+        fivek_dir / f"{sample_id}.dng"
+    ).stat().st_size
     assert sidecar["producer"]["source_dng_sha256"].startswith("sha256:")
+    assert sidecar["producer"]["source_dng_sha256"] == _sha256_test_file(
+        fivek_dir / f"{sample_id}.dng"
+    )
+    assert sidecar["producer"]["source_tiff_bytes"] == (
+        fivek_dir / f"{sample_id}.tif"
+    ).stat().st_size
+    assert sidecar["producer"]["source_tiff_sha256"] == _sha256_test_file(
+        fivek_dir / f"{sample_id}.tif"
+    )
     assert sidecar["regions"][0]["raw_statistics"]["clipped_pixel_ratio"] >= 0
 
 
@@ -4216,6 +5961,40 @@ def test_generate_fivek_semantic_physics_sample_rejects_path_like_sample_id(tmp_
     assert exit_code == 2
     assert not output_dir.exists()
     assert not (tmp_path / "outside.semantic.json").exists()
+
+
+def test_generate_fivek_semantic_physics_sample_refuses_tracked_output(tmp_path):
+    module = _load_script_module("generate_fivek_semantic_physics_sample")
+    fivek_dir = tmp_path / "fivek-smoke"
+    fivek_dir.mkdir()
+    sample_id = "sample-001"
+    (fivek_dir / f"{sample_id}.dng").write_bytes(b"fake local dng bytes")
+    tifffile.imwrite(fivek_dir / f"{sample_id}.tif", _gradient_image(18, 12))
+    output_dir = tmp_path / "tracked-semantic-physics"
+
+    exit_code = module.main(
+        [
+            "--fivek-dir",
+            str(fivek_dir),
+            "--sample-id",
+            sample_id,
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_dir.exists()
+
+
+def test_generate_visual_demo_rejects_malformed_validation_flag():
+    module = _load_script_module("generate_visual_demo")
+
+    with pytest.raises(TypeError, match="validation ok must be a boolean"):
+        module._validation_ok({"ok": "yes"})
+
+    with pytest.raises(TypeError, match="sample validation_ok must be a boolean"):
+        module._all_validations_ok([{"validation_ok": "yes"}])
 
 
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):
@@ -4279,6 +6058,8 @@ def test_processor_compatibility_fails_when_export_output_is_missing(tmp_path, m
     assert payload["exiftool"]["result"] == "passed"
     assert payload["dcraw"]["result"] == "failed"
     assert "missing output artifact" in payload["dcraw"]["notes"]
+    assert payload["dcraw"]["missing_output_artifacts"]
+    assert payload["dcraw"]["output_artifacts"] == []
 
 
 def test_demo_review_bundle_json_reader_rejects_invalid_json(tmp_path):
@@ -4346,6 +6127,16 @@ def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     assert kinds["report"] >= 3
     assert kinds["manifest"] >= 3
 
+    baseline_path = output_dir / report["source_reports"]["development_baseline_report"]
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert [step["name"] for step in baseline["steps"]] == [
+        "pytest",
+        "ruff",
+        "build",
+        "raw-native-batch",
+        "wheel-install-smoke",
+    ]
+
     dng_names = [
         artifact["bundle_path"]
         for artifact in report["artifacts"]
@@ -4360,6 +6151,652 @@ def test_demo_review_bundle_generates_portable_index(tmp_path, monkeypatch):
     assert "Review Entry Points" in index
     assert "review-bundle-report.json" in index
     assert "uv run python scripts/generate_demo_review_bundle.py" in index
+    assert f"--output-dir '{output_dir}'" in index
+
+
+def test_demo_review_bundle_records_callable_exception():
+    module = _load_script_module("generate_demo_review_bundle")
+    report = {"commands": [], "errors": []}
+
+    def fail():
+        raise RuntimeError("synthetic callable failure")
+
+    module._record_callable_command(
+        report,
+        name="synthetic-step",
+        command=["synthetic", "command"],
+        function=fail,
+    )
+
+    assert len(report["commands"]) == 1
+    command = report["commands"][0]
+    assert command["name"] == "synthetic-step"
+    assert command["command"] == ["synthetic", "command"]
+    assert command["exit_code"] == 1
+    assert isinstance(command["duration_seconds"], float)
+    assert command["status"] == "failed"
+    assert command["error"] == "synthetic callable failure"
+    assert report["errors"] == ["synthetic-step failed: synthetic callable failure"]
+
+
+def test_demo_review_bundle_collects_source_reports_after_command_failure(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    work_dir = output_dir / "_work"
+    paths = module.BundlePaths(
+        output_dir=output_dir,
+        work_dir=work_dir,
+        visual_dir=work_dir / "visual-demo",
+        raw_native_dir=work_dir / "raw-native-node-batch",
+        baseline_dir=work_dir / "development-baseline",
+        compatibility_dir=work_dir / "compatibility-evidence",
+    )
+    report = {
+        "artifacts": [],
+        "source_reports": {},
+    }
+    source_files = {
+        paths.visual_dir / "manifest.json": {"schema": "visual"},
+        paths.raw_native_dir / "manifests" / "raw-native-node-batch.json": {"schema": "raw"},
+        paths.raw_native_dir / "manifests" / "sample-index.json": {"schema": "sample"},
+        paths.baseline_dir / "verification-report.json": {"schema": "baseline"},
+        paths.compatibility_dir / "compatibility-report.json": {"schema": "compatibility"},
+    }
+    for path, payload in source_files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    (paths.compatibility_dir / "compatibility-summary.md").write_text(
+        "# Compatibility Summary\n\n## Fixture Integrity\n",
+        encoding="utf-8",
+    )
+
+    module._collect_available_source_reports(paths=paths, report=report)
+
+    assert report["source_reports"] == {
+        "visual_manifest": "artifacts/manifests/visual-demo-manifest.json",
+        "raw_native_manifest": "artifacts/manifests/raw-native-node-batch.json",
+        "raw_native_sample_index": "artifacts/manifests/raw-native-sample-index.json",
+        "development_baseline_report": "artifacts/reports/development-baseline-report.json",
+        "compatibility_report": "artifacts/reports/compatibility-report.json",
+        "compatibility_summary": "artifacts/reports/compatibility-summary.md",
+    }
+    assert all((output_dir / path).exists() for path in report["source_reports"].values())
+    assert all(artifact["sha256"] for artifact in report["artifacts"])
+    module._validate_bundle_report(output_dir, report)
+
+
+def test_demo_review_bundle_main_writes_partial_bundle_after_command_failure(
+    tmp_path, monkeypatch
+):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+
+    def fail_after_writing_source_reports(**kwargs):
+        paths = kwargs["paths"]
+        report = kwargs["report"]
+        source_files = {
+            paths.visual_dir / "manifest.json": {"schema": "visual"},
+            paths.raw_native_dir
+            / "manifests"
+            / "raw-native-node-batch.json": {"schema": "raw"},
+            paths.raw_native_dir / "manifests" / "sample-index.json": {"schema": "sample"},
+            paths.baseline_dir / "verification-report.json": {"schema": "baseline"},
+            paths.compatibility_dir / "compatibility-report.json": {"schema": "compatibility"},
+        }
+        for path, payload in source_files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload), encoding="utf-8")
+        (paths.compatibility_dir / "compatibility-summary.md").write_text(
+            "# Compatibility Summary\n\n## Fixture Integrity\n",
+            encoding="utf-8",
+        )
+        report["commands"].append(
+            {
+                "name": "compatibility-evidence",
+                "command": ["synthetic", "compatibility-evidence"],
+                "exit_code": 7,
+                "duration_seconds": 0.0,
+                "status": "failed",
+            }
+        )
+        report["errors"].append("compatibility-evidence failed with exit code 7")
+
+    monkeypatch.setattr(module, "_run_upstream_generators", fail_after_writing_source_reports)
+
+    assert module.main(["--output-dir", str(output_dir)]) == 1
+
+    report_path = output_dir / "review-bundle-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    source_reports = report["source_reports"]
+    artifact_paths = {artifact["bundle_path"] for artifact in report["artifacts"]}
+
+    assert report["ok"] is False
+    assert report["errors"] == ["compatibility-evidence failed with exit code 7"]
+    assert source_reports["compatibility_summary"] == (
+        "artifacts/reports/compatibility-summary.md"
+    )
+    assert all(path in artifact_paths for path in source_reports.values())
+    assert all((output_dir / path).exists() for path in source_reports.values())
+    assert "index.md" in artifact_paths
+    assert "## Errors" in (output_dir / "index.md").read_text(encoding="utf-8")
+    module._validate_bundle_report(output_dir, report)
+
+
+def test_demo_review_bundle_rejects_malformed_command_status():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(TypeError, match="command status must be a string"):
+        module._has_command_failure({"commands": [{"status": False}]})
+
+    with pytest.raises(TypeError, match="command status must be passed or failed"):
+        module._has_command_failure({"commands": [{"status": "skipped"}]})
+
+
+def test_demo_review_bundle_rejects_malformed_source_report_schema(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    report_path = tmp_path / "report.json"
+
+    report_path.write_text(json.dumps([]), encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON report must be an object"):
+        module._read_json(report_path, "example.schema.v1")
+
+    report_path.write_text(json.dumps({"schema": False}), encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON report schema must be a string"):
+        module._read_json_any(report_path, {"example.schema.v1"})
+
+    report_path.write_text(json.dumps({"schema": "example.other.v1"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected schema"):
+        module._read_json(report_path, "example.schema.v1")
+
+
+def test_demo_review_bundle_rejects_malformed_visual_manifest_lists():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(ValueError, match="visual manifest contact_sheets must be an object list"):
+        module._collect_contact_sheets(
+            paths=None,
+            report={},
+            visual_manifest={"contact_sheets": ["not-a-sheet"]},
+        )
+
+    with pytest.raises(ValueError, match="visual manifest assets must be an object list"):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={"assets": ["not-an-asset"]},
+        )
+
+
+def test_demo_review_bundle_rejects_malformed_visual_chart_fields():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate visual manifest asset slug: chart-gradient",
+    ):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={
+                "assets": [
+                    {"slug": "chart-gradient"},
+                    {"slug": "chart-gradient"},
+                ]
+            },
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="visual chart-gradient asset outputs must be an object",
+    ):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={"assets": [{"slug": "chart-gradient", "outputs": []}]},
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="visual chart-gradient asset validations must be an object",
+    ):
+        module._collect_visual_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            visual_manifest={
+                "assets": [
+                    {
+                        "slug": "chart-gradient",
+                        "outputs": {
+                            "phase_15_linearraw": "a.dng",
+                            "phase_2_cfa": "b.dng",
+                            "phase_3_linearraw_noisy": "c.dng",
+                            "phase_3_cfa_noisy": "d.dng",
+                        },
+                        "validations": [],
+                    }
+                ]
+            },
+        )
+
+
+def test_demo_review_bundle_rejects_malformed_compatibility_fixture_rows():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(
+        ValueError,
+        match="compatibility report fixtures must be an object list",
+    ):
+        module._collect_compatibility_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            compatibility_report={"fixtures": ["not-a-fixture"]},
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate compatibility fixture slug: srgb-gradient-linearraw",
+    ):
+        module._collect_compatibility_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            compatibility_report={
+                "fixtures": [
+                    {"slug": "srgb-gradient-linearraw"},
+                    {"slug": "srgb-gradient-linearraw"},
+                ]
+            },
+        )
+
+
+def test_demo_review_bundle_rejects_malformed_raw_native_scene_rows():
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(
+        ValueError,
+        match="raw-native manifest scenes must be an object list",
+    ):
+        module._collect_raw_native_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            raw_manifest={"scenes": ["not-a-scene"]},
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="sample: raw-native scene outputs must be an object",
+    ):
+        module._collect_raw_native_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            raw_manifest={"scenes": [{"slug": "sample", "outputs": []}]},
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate raw-native scene slug: sample",
+    ):
+        module._collect_raw_native_representatives(
+            paths=None,
+            repo_root=Path.cwd(),
+            report={},
+            raw_manifest={
+                "scenes": [
+                    {"slug": "sample", "outputs": {}},
+                    {"slug": "sample", "outputs": {}},
+                ]
+            },
+        )
+
+
+def test_demo_review_bundle_rejects_malformed_report_accessors():
+    module = _load_script_module("generate_demo_review_bundle")
+    report = {
+        "schema": "image2dng.demo_review_bundle.v1",
+        "generated_at": "2026-05-23T00:00:00Z",
+        "ok": True,
+        "output_dir": "demo-output/review-bundle",
+        "commands": [
+            {
+                "name": "baseline",
+                "status": "passed",
+                "exit_code": 0,
+                "duration_seconds": 0.1,
+            }
+        ],
+        "artifacts": [
+            {
+                "kind": "contact-sheet",
+                "name": "sheet",
+                "bundle_path": "artifacts/contact-sheets/sheet.png",
+            }
+        ],
+        "source_reports": {},
+        "errors": [],
+    }
+
+    with pytest.raises(TypeError, match="report schema must be a string"):
+        module._write_index(Path.cwd(), report | {"schema": 1})
+
+    with pytest.raises(TypeError, match="report generated_at must be a string"):
+        module._write_index(Path.cwd(), report | {"generated_at": []})
+
+    with pytest.raises(TypeError, match="report ok must be a boolean"):
+        module._write_index(Path.cwd(), report | {"ok": "true"})
+
+    with pytest.raises(TypeError, match="report output_dir must be a string"):
+        module._write_index(Path.cwd(), report | {"output_dir": False})
+
+    malformed = report | {"commands": [report["commands"][0] | {"name": []}]}
+    with pytest.raises(TypeError, match="command name must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"commands": [report["commands"][0] | {"exit_code": True}]}
+    with pytest.raises(TypeError, match="command exit_code must be an integer or null"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {
+        "commands": [report["commands"][0] | {"duration_seconds": "slow"}]
+    }
+    with pytest.raises(TypeError, match="command duration_seconds must be finite numeric"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {
+        "commands": [report["commands"][0] | {"duration_seconds": float("nan")}]
+    }
+    with pytest.raises(TypeError, match="command duration_seconds must be finite numeric"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"kind": False}]}
+    with pytest.raises(TypeError, match="artifact kind must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"kind": "bundle"}]}
+    with pytest.raises(
+        TypeError,
+        match=(
+            "artifact kind must be contact-sheet, index, manifest, report, "
+            "representative-dng, or validation-json"
+        ),
+    ):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"name": []}]}
+    with pytest.raises(TypeError, match="artifact name must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"bundle_path": 7}]}
+    with pytest.raises(TypeError, match="artifact bundle_path must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    with pytest.raises(TypeError, match="report commands must contain objects"):
+        module._commands({"commands": ["not-a-command"]})
+
+    with pytest.raises(TypeError, match="report artifacts must contain objects"):
+        module._artifacts({"artifacts": ["not-an-artifact"]})
+
+    with pytest.raises(TypeError, match="artifact bundle_path must be a string"):
+        module._append_existing_artifact(
+            output_dir=Path.cwd(),
+            report={
+                "artifacts": [
+                    {
+                        "kind": "index",
+                        "name": "index",
+                        "bundle_path": False,
+                    }
+                ]
+            },
+            source=Path.cwd() / "index.md",
+            kind="index",
+            name="index",
+        )
+
+    with pytest.raises(TypeError, match="report source_reports must be an object"):
+        module._source_reports({"source_reports": []})
+
+    malformed = report | {"source_reports": {False: "artifacts/reports/report.txt"}}
+    with pytest.raises(TypeError, match="source report name must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    malformed = report | {"source_reports": {"development_baseline_report": []}}
+    with pytest.raises(TypeError, match="source report path must be a string"):
+        module._write_index(Path.cwd(), malformed)
+
+    with pytest.raises(TypeError, match="report errors must be a list"):
+        module._errors({"errors": "none"})
+
+    with pytest.raises(TypeError, match="report errors must be a string list"):
+        module._write_index(Path.cwd(), report | {"errors": [False]})
+
+
+def test_demo_review_bundle_rejects_stale_artifact_integrity(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("current report", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "kind": "report",
+                "category": "reports",
+                "name": "report",
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {},
+    }
+
+    module._validate_bundle_report(output_dir, report)
+    report["artifacts"][0]["bytes"] += 1
+    with pytest.raises(ValueError, match="artifact byte count mismatch"):
+        module._validate_bundle_report(output_dir, report)
+
+    report["artifacts"][0]["bytes"] = artifact_path.stat().st_size
+    report["artifacts"][0]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="artifact sha256 mismatch"):
+        module._validate_bundle_report(output_dir, report)
+
+
+def test_demo_review_bundle_rejects_artifact_path_alias(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("current report", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "kind": "report",
+                "category": "reports",
+                "name": "report",
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/alias.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {},
+    }
+
+    with pytest.raises(ValueError, match="artifact path must match bundle_path"):
+        module._validate_bundle_report(output_dir, report)
+
+
+def test_demo_review_bundle_rejects_malformed_artifact_integrity_metadata(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("x", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "kind": "report",
+                "category": "reports",
+                "name": "report",
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {},
+    }
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"path": []}]}
+    with pytest.raises(TypeError, match="artifact path must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"category": []}]}
+    with pytest.raises(TypeError, match="artifact category must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"category": "manifest"}]}
+    with pytest.raises(ValueError, match="artifact category must match kind"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"name": []}]}
+    with pytest.raises(TypeError, match="artifact name must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"group": []}]}
+    with pytest.raises(TypeError, match="artifact group must be a string or null"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"bytes": True}]}
+    with pytest.raises(TypeError, match="artifact bytes must be an integer"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"artifacts": [report["artifacts"][0] | {"sha256": []}]}
+    with pytest.raises(TypeError, match="artifact sha256 must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+
+def test_demo_review_bundle_rejects_malformed_source_report_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("x", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "kind": "report",
+                "category": "reports",
+                "name": "report",
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {
+            "development_baseline_report": "artifacts/reports/report.txt",
+        },
+    }
+
+    malformed = report | {"source_reports": {False: "artifacts/reports/report.txt"}}
+    with pytest.raises(TypeError, match="source report name must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+    malformed = report | {"source_reports": {"development_baseline_report": []}}
+    with pytest.raises(TypeError, match="source report path must be a string"):
+        module._validate_bundle_report(output_dir, malformed)
+
+
+def test_demo_review_bundle_rejects_unsafe_manifest_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+
+    for value in ("../outside.txt", "/tmp/outside.txt", "C:\\tmp\\outside.txt", "C:outside.txt"):
+        with pytest.raises(ValueError, match="bundle path must be relative and local"):
+            module._validate_relative_existing_path(output_dir, value)
+
+
+def test_demo_review_bundle_requires_source_reports_to_be_artifacts(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    output_dir = tmp_path / "review-bundle"
+    artifact_path = output_dir / "artifacts" / "reports" / "report.txt"
+    extra_path = output_dir / "artifacts" / "reports" / "extra.txt"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("registered report", encoding="utf-8")
+    extra_path.write_text("unregistered report", encoding="utf-8")
+    report = {
+        "artifacts": [
+            {
+                "kind": "report",
+                "category": "reports",
+                "name": "report",
+                "bundle_path": "artifacts/reports/report.txt",
+                "path": "artifacts/reports/report.txt",
+                "bytes": artifact_path.stat().st_size,
+                "sha256": module._sha256(artifact_path),
+            }
+        ],
+        "source_reports": {
+            "development_baseline_report": "artifacts/reports/report.txt",
+            "compatibility_report": "artifacts/reports/extra.txt",
+        },
+    }
+
+    with pytest.raises(ValueError, match="source report is not a registered artifact"):
+        module._validate_bundle_report(output_dir, report)
+
+    report["source_reports"]["compatibility_report"] = "artifacts/reports/report.txt"
+    module._validate_bundle_report(output_dir, report)
+
+
+def test_demo_review_bundle_rejects_unsafe_reported_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+
+    assert module._join_reported_path(tmp_path, "contact-sheets\\phase-overview.png") == (
+        tmp_path / "contact-sheets" / "phase-overview.png"
+    )
+    for value in ("../outside.png", "/tmp/outside.png", "C:\\tmp\\outside.png", "C:outside.png"):
+        with pytest.raises(ValueError, match="unsafe relative path in report"):
+            module._join_reported_path(tmp_path, value)
+
+
+def test_demo_review_bundle_restricts_absolute_source_paths(tmp_path):
+    module = _load_script_module("generate_demo_review_bundle")
+    default_root = tmp_path / "work" / "visual-demo"
+    repo_root = tmp_path / "repo"
+    allowed_work_source = default_root / "phase-2-cfa" / "sample.dng"
+    allowed_repo_source = repo_root / "docs" / "compatibility.md"
+    outside_source = tmp_path / "outside" / "sample.dng"
+
+    assert module._resolve_source_path(str(allowed_work_source), default_root, repo_root) == (
+        allowed_work_source
+    )
+    assert module._resolve_source_path(str(allowed_repo_source), default_root, repo_root) == (
+        allowed_repo_source
+    )
+    with pytest.raises(ValueError, match="unsafe source path in report"):
+        module._resolve_source_path(str(outside_source), default_root, repo_root)
+
+
+def test_demo_review_bundle_skip_baseline_help_is_gate_oriented(capsys):
+    module = _load_script_module("generate_demo_review_bundle")
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--help"])
+
+    assert exc_info.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "without recursively running quality gates" in help_text
+    assert "without recursively running pytest/ruff" not in help_text
 
 
 def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch):
@@ -4401,6 +6838,8 @@ def test_raw_processor_setup_audit_writes_dry_run_package(tmp_path, monkeypatch)
         for search in tool["package_searches"]
     )
     assert "Discovery" in runbook
+    assert "- Auto install: `False`" in runbook
+    assert "Do not install tools until the user approves." in runbook
     assert "uv run python scripts/generate_compatibility_evidence.py" in runbook
     assert "Auto install is `False`" in prompt
     assert "local-only/manual-resource" in prompt
@@ -4552,6 +6991,226 @@ def test_raw_processor_setup_audit_ignores_non_exact_version_hints(tmp_path, mon
 
     assert dcraw_choco["version_hint"] is None
     assert rawtherapee_choco["version_hint"] == "5.8.0"
+
+
+def test_development_baseline_wheel_smoke_uses_built_wheel(tmp_path, monkeypatch):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    dist_dir = repo_root / "dist"
+    dist_dir.mkdir(parents=True)
+    wheel = dist_dir / "image2dng-0.2.0-py3-none-any.whl"
+    wheel.write_bytes(b"fake wheel")
+    output_dir = tmp_path / "baseline-output"
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module.platform, "system", lambda: "Windows")
+
+    step = module._run_wheel_smoke_step(output_dir=output_dir, repo_root=repo_root)
+
+    assert step["status"] == "passed"
+    assert [command[:2] for command in calls] == [
+        ["uv", "venv"],
+        ["uv", "pip"],
+        [str(output_dir / "wheel-smoke-venv" / "Scripts" / "image2dng.exe"), "--help"],
+        [str(output_dir / "wheel-smoke-venv" / "Scripts" / "image2dng.exe"), "validate"],
+    ]
+    assert str(wheel) in calls[1]
+
+
+def test_development_baseline_wheel_smoke_reports_missing_wheel(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    (repo_root / "dist").mkdir(parents=True)
+
+    step = module._run_wheel_smoke_step(
+        output_dir=tmp_path / "baseline-output",
+        repo_root=repo_root,
+    )
+
+    assert step["name"] == "wheel-install-smoke"
+    assert step["status"] == "failed"
+    assert step["exit_code"] == 1
+    assert step["stderr_tail"] == ["no built image2dng wheel found under dist/"]
+
+
+def test_development_baseline_validation_artifact_reads_json(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    validation_path = tmp_path / "sample-validation.json"
+    validation_path.write_text(
+        json.dumps({"ok": True, "errors": [], "checks": []}),
+        encoding="utf-8",
+    )
+
+    record = module._validation_artifact_record("linearraw_validation", validation_path)
+
+    assert record["validation_ok"] is True
+    assert record["validation_error_count"] == 0
+    assert record["sha256"] == module._sha256(validation_path)
+
+
+def test_development_baseline_validation_artifact_rejects_failed_json(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    validation_path = tmp_path / "sample-validation.json"
+    validation_path.write_text(
+        json.dumps({"ok": False, "errors": ["synthetic failure"]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="validation JSON is not ok"):
+        module._validation_artifact_record("linearraw_validation", validation_path)
+
+
+def test_development_baseline_validation_artifact_rejects_malformed_metadata(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    validation_path = tmp_path / "sample-validation.json"
+
+    validation_path.write_text(json.dumps({"ok": "yes", "errors": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="validation JSON ok must be a boolean"):
+        module._validation_artifact_record("linearraw_validation", validation_path)
+
+    validation_path.write_text(json.dumps({"ok": True, "errors": "none"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="validation JSON errors must be a list"):
+        module._validation_artifact_record("linearraw_validation", validation_path)
+
+
+def test_development_baseline_rejects_malformed_report_accessors():
+    module = _load_script_module("verify_development_baseline")
+
+    with pytest.raises(TypeError, match="report steps must contain objects"):
+        module._steps({"steps": ["not-a-step"]})
+
+    with pytest.raises(TypeError, match="report errors must be a list"):
+        module._errors({"errors": "none"})
+
+    with pytest.raises(TypeError, match="report errors must be a string list"):
+        module._error_messages({"errors": ["ok", 7]})
+
+    assert module._error_messages({"errors": ["synthetic failure"]}) == [
+        "synthetic failure"
+    ]
+
+
+def test_development_baseline_rejects_malformed_step_records():
+    module = _load_script_module("verify_development_baseline")
+
+    with pytest.raises(TypeError, match="step status must be passed or failed"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {"name": "pytest", "status": "skipped", "exit_code": 0},
+        )
+
+    with pytest.raises(TypeError, match="step name must be a non-empty string"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {"name": "", "status": "failed", "exit_code": 1},
+        )
+
+    with pytest.raises(TypeError, match="step exit_code must be an integer"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {"name": "pytest", "status": "failed", "exit_code": False},
+        )
+
+    with pytest.raises(TypeError, match="step duration_seconds must be finite numeric"):
+        module._append_step(
+            {"steps": [], "errors": []},
+            {
+                "name": "pytest",
+                "status": "failed",
+                "exit_code": 1,
+                "duration_seconds": float("nan"),
+            },
+        )
+
+
+def test_development_baseline_rejects_external_batch_artifact_paths(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    batch_dir = repo_root / "demo-output" / "development-baseline" / "raw-native-node-batch"
+    raw_dir = batch_dir / "raw"
+    external_dir = tmp_path / "external-artifacts"
+    raw_dir.mkdir(parents=True)
+    external_dir.mkdir()
+    external_dng = external_dir / "outside-linearraw.dng"
+    external_dng.write_bytes(b"outside dng")
+    scene = {
+        "slug": "sample",
+        "prompt_hash": "sha256:sample",
+        "nodes": [{"id": "source"}],
+        "outputs": {
+            "scene_linear_tiff": str(raw_dir / "sample.tif"),
+            "linearraw_dng": str(external_dng),
+            "cfa_dng": str(raw_dir / "sample-cfa.dng"),
+            "linearraw_jpeg": str(raw_dir / "sample-linearraw.jpg"),
+            "cfa_jpeg": str(raw_dir / "sample-cfa.jpg"),
+        },
+        "validations": {"linearraw": {"ok": True}, "cfa": {"ok": True}},
+        "raw_data_unique_ids": {"linearraw": "linear-id", "cfa": "cfa-id"},
+    }
+
+    with pytest.raises(ValueError, match="batch artifact path is outside batch dir"):
+        module._inspect_scene(scene, repo_root, batch_dir)
+
+
+def test_development_baseline_rejects_malformed_scene_manifest_records(tmp_path):
+    module = _load_script_module("verify_development_baseline")
+    repo_root = tmp_path / "repo"
+    batch_dir = repo_root / "demo-output" / "development-baseline" / "raw-native-node-batch"
+    raw_dir = batch_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    scene = {
+        "slug": "sample",
+        "prompt_hash": "sha256:sample",
+        "nodes": [{"id": "source"}],
+        "outputs": {
+            "scene_linear_tiff": str(raw_dir / "sample.tif"),
+            "linearraw_dng": str(raw_dir / "sample.dng"),
+            "cfa_dng": str(raw_dir / "sample-cfa.dng"),
+            "linearraw_jpeg": str(raw_dir / "sample-linearraw.jpg"),
+            "cfa_jpeg": str(raw_dir / "sample-cfa.jpg"),
+        },
+        "validations": {"linearraw": {"ok": True}, "cfa": {"ok": True}},
+        "raw_data_unique_ids": {"linearraw": "linear-id", "cfa": "cfa-id"},
+    }
+
+    malformed = scene | {"outputs": scene["outputs"] | {"linearraw_dng": []}}
+    with pytest.raises(ValueError, match="sample: output linearraw_dng must be a non-empty string"):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+    malformed = scene | {"validations": scene["validations"] | {"linearraw": []}}
+    with pytest.raises(
+        ValueError,
+        match="sample: validation summary for linearraw must be an object",
+    ):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+    malformed = scene | {"validations": scene["validations"] | {"linearraw": {"ok": "yes"}}}
+    with pytest.raises(
+        ValueError,
+        match="sample: validation summary for linearraw ok must be a boolean",
+    ):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+    malformed = scene | {
+        "raw_data_unique_ids": scene["raw_data_unique_ids"] | {"linearraw": []}
+    }
+    with pytest.raises(
+        ValueError,
+        match="sample: raw data unique id for linearraw must be a string or null",
+    ):
+        module._inspect_scene(malformed, repo_root, batch_dir)
+
+
+def test_development_baseline_rejects_malformed_sample_index_validation_flag():
+    module = _load_script_module("verify_development_baseline")
+
+    with pytest.raises(ValueError, match="sample index all_validations_ok must be a boolean"):
+        module._sample_index_all_validations_ok({"all_validations_ok": "yes"})
 
 
 def test_sensor_effects_are_deterministic_and_recorded(tmp_path):

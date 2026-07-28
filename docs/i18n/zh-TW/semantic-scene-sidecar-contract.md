@@ -43,7 +43,7 @@ v1 的目標是保存並驗證語意資料，讓 RAW-native pipeline 能追溯 s
 - `regions[].raw_statistics.mean_linear_rgb`、`p50_linear_rgb`、`p95_linear_rgb` 若存在，必須是三個非負有限數字。
 - 未知欄位會被保留並容忍，方便外部 producer 擴充。
 
-缺少 `assets[].sha256` 會產生 warning，但不會讓 validation 失敗。這代表 asset 可被 resolve，但完整性尚未被 sidecar 自身鎖定；若提供 hash，validator 會驗證內容是否相符。
+缺少 `assets[].sha256` 會產生 warning，但不會讓 validation 失敗。這代表 asset 可被 resolve，但完整性不由 sidecar 自身鎖定；若提供 hash，validator 會驗證內容是否相符。
 
 ## Semantic-Physics 欄位範例
 
@@ -130,7 +130,7 @@ External scene manifest 也可在 scene entry 設定全域 `highlight_headroom_e
 
 目前 reaction model matrix：
 
-| Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
+| Semantic hint | Model status | Current raw effect | Contract status | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` 已實作 | Yes | Yes | finite EV、mask-bound、linear-light only。 |
 | `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` 已實作 | Yes | Yes | deterministic soft shoulder；不是 camera tone curve、ISO response，也不證明 sensor clipping 後仍保留真實細節。 |

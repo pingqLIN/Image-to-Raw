@@ -18,6 +18,10 @@ NOISE_PRIORITY_REACTION_MODEL = "noise-priority-policy-v1"
 TARGET_MIDDLE_GRAY_REACTION_MODEL = "target-middle-gray-policy-v1"
 TARGET_WHITE_BALANCE_REACTION_MODEL = "target-white-balance-policy-v1"
 SUPPORTED_REACTION_INPUT_SPACES = frozenset({"linear-rec709", "acescg", "xyz"})
+_HIGHLIGHT_POLICY_SHOULDERS = {
+    "preserve-highlights": (0.90, 0.50),
+    "soft-rolloff": (0.75, 0.35),
+}
 
 
 @dataclass(frozen=True)
@@ -117,6 +121,7 @@ class SemanticReactionResult:
     regions: list[dict[str, Any]]
     affected_pixels: int = 0
     reason: str | None = None
+    affected_pixel_count_semantics: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -129,6 +134,8 @@ class SemanticReactionResult:
         }
         if self.reason is not None:
             payload["reason"] = self.reason
+        if self.affected_pixel_count_semantics is not None:
+            payload["affected_pixel_count_semantics"] = self.affected_pixel_count_semantics
         return payload
 
     def summary_dict(self) -> dict[str, Any]:
@@ -140,6 +147,8 @@ class SemanticReactionResult:
         }
         if self.reason is not None:
             payload["reason"] = self.reason
+        if self.affected_pixel_count_semantics is not None:
+            payload["affected_pixel_count_semantics"] = self.affected_pixel_count_semantics
         return payload
 
 

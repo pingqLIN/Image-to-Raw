@@ -43,7 +43,7 @@ The v1 goal is semantic preservation and validation. It lets the RAW-native pipe
 - `regions[].raw_statistics.mean_linear_rgb`, `p50_linear_rgb`, and `p95_linear_rgb`, when present, must be three finite non-negative numbers.
 - Unknown fields are tolerated and preserved so upstream producers can extend the sidecar.
 
-Missing `assets[].sha256` values produce warnings, not failures. This means the asset can be resolved, but the sidecar has not locked its integrity. When a hash is provided, the validator verifies it against the asset contents.
+Missing `assets[].sha256` values produce warnings, not failures. This means the asset can be resolved, but its integrity is not locked by the sidecar. When a hash is provided, the validator verifies it against the asset contents.
 
 ## Semantic-Physics Field Example
 
@@ -111,7 +111,7 @@ When `semantic_manifest` is present, the pipeline:
 - records `semantic_artifacts`, `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation` in `raw-native-node-batch.json`;
 - records `semantic_contract`, `semantic_to_raw_status`, and `semantic_validation` in `sample-index.json`.
 
-By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation yet.
+By default, `semantic_to_raw_status` is `preserved-not-applied`, meaning the sidecar is preserved and validated but does not affect raw buffer generation.
 
 When the external scene manifest explicitly sets `apply_semantic_reaction: true`, the pipeline can enable deterministic reaction models:
 
@@ -130,7 +130,7 @@ For applied reactions, the pipeline binds provenance to the copied batch inputs:
 
 Current reaction model matrix:
 
-| Semantic hint | Model status | Current raw effect | Intended raw effect | Boundary |
+| Semantic hint | Model status | Current raw effect | Contract status | Boundary |
 | --- | --- | --- | --- | --- |
 | `regions[].response_hints.exposure_bias_ev` | `region-exposure-mask-v1` implemented | Yes | Yes | Finite EV, mask-bound, linear-light only. |
 | `sensor_response_hints.clipping_policy` | `highlight-clipping-policy-v1` implemented | Yes | Yes | Deterministic soft shoulder; not a camera tone curve, ISO response, or proof of preserved sensor detail. |

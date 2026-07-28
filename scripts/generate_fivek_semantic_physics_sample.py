@@ -195,7 +195,9 @@ def _semantic_payload(
         "producer": {
             "name": "MIT-Adobe FiveK smoke sample",
             "version": "local-smoke",
+            "source_dng_bytes": dng_path.stat().st_size,
             "source_dng_sha256": _sha256_file(dng_path),
+            "source_tiff_bytes": tiff_path.stat().st_size,
             "source_tiff_sha256": _sha256_file(tiff_path),
             "notes": "DNG/TIFF bytes remain local-only under ignored data/.",
         },
@@ -283,7 +285,7 @@ def _manifest(output_dir: Path, semantic_paths: list[Path]) -> dict[str, Any]:
         },
         "output_dir": str(output_dir),
         "sample_count": len(samples),
-        "all_validations_ok": all(sample["validation_ok"] for sample in samples),
+        "all_validations_ok": _all_validations_ok(samples),
         "samples": samples,
     }
 
@@ -295,6 +297,7 @@ def _sample_record(path: Path) -> dict[str, Any]:
     return {
         "sample_id": validation.scene_id or path.stem,
         "semantic_sidecar_path": str(path),
+        "semantic_sidecar_bytes": path.stat().st_size,
         "semantic_sidecar_sha256": _sha256_file(path),
         "validation_ok": validation.ok,
         "validation": validation.to_dict(),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import zipfile
@@ -18,10 +19,24 @@ REQUIRED_KINDS = {
     "dng-specification",
 }
 
+RESOURCE_KINDS = REQUIRED_KINDS | {
+    "adobe-documentation",
+    "dng-profile-editor",
+    "lens-profile-creator-archive",
+    "other",
+    "profile-sdk-archive",
+    "tiff-reference",
+}
+
 INSTALLED_CONVERTER_FILENAMES = {
     "adobe dng converter.exe",
 }
 CONVERTER_RESOURCE_EXTENSIONS = {".exe", ".msi"}
+CONVERTER_RESOURCE_STATES = {
+    "installed-executable",
+    "missing",
+    "resource-present-not-installed",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -153,6 +168,7 @@ def _resource_records(root: Path, *, zip_entry_limit: int) -> list[dict[str, Any
             "path": _display_path(path),
             "kind": _classify_resource(path.name),
             "size_bytes": path.stat().st_size,
+            "sha256": _sha256_file(path),
         }
         if path.suffix.lower() == ".zip":
             record["zip"] = _zip_summary(path, entry_limit=zip_entry_limit)
@@ -221,16 +237,12 @@ def _zip_summary(path: Path, *, entry_limit: int) -> dict[str, Any]:
 def _zip_findings(resources: list[dict[str, Any]]) -> dict[str, bool]:
     dng_sdk_validate_project_detected = False
     for resource in resources:
-        if resource.get("kind") != "dng-sdk-archive":
+        if _resource_kind(resource) != "dng-sdk-archive":
             continue
-        zip_summary = resource.get("zip")
-        if not isinstance(zip_summary, dict):
-            continue
-        findings = zip_summary.get("findings")
-        if not isinstance(findings, dict):
-            continue
+        zip_summary = _resource_zip(resource)
         dng_sdk_validate_project_detected = dng_sdk_validate_project_detected or bool(
-            findings.get("dng_validate_solution") and findings.get("dng_validate_project")
+            _zip_finding(zip_summary, "dng_validate_solution")
+            and _zip_finding(zip_summary, "dng_validate_project")
         )
     return {"dng_sdk_validate_project_detected": dng_sdk_validate_project_detected}
 
@@ -249,12 +261,12 @@ def _blocking_findings(
 
 def _converter_resource_state(resources: list[dict[str, Any]]) -> str:
     converter_resources = [
-        resource for resource in resources if resource.get("kind") == "dng-converter-resource"
+        resource for resource in resources if _resource_kind(resource) == "dng-converter-resource"
     ]
     if not converter_resources:
         return "missing"
     if any(
-        str(resource.get("name", "")).lower() in INSTALLED_CONVERTER_FILENAMES
+        _resource_name(resource).lower() in INSTALLED_CONVERTER_FILENAMES
         for resource in converter_resources
     ):
         return "installed-executable"
@@ -265,39 +277,68 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Adobe Local Resource Audit",
         "",
-        f"- Schema: `{report['schema']}`",
-        f"- OK: `{str(report['ok']).lower()}`",
-        f"- Adobe dir: `{report['adobe_dir']}`",
-        f"- Local-only: `{str(report['local_only']).lower()}`",
+        f"- Schema: `{_report_schema(report)}`",
+        f"- OK: `{str(_report_ok(report)).lower()}`",
+        f"- Adobe dir: `{_adobe_dir(report)}`",
+        f"- Local-only: `{str(_local_only(report)).lower()}`",
         "",
         "## Readiness",
         "",
     ]
-    readiness = report["readiness"]
+    readiness = _readiness(report)
     for key in sorted(readiness):
         lines.append(f"- `{key}`: `{str(readiness[key]).lower()}`")
     lines.extend(["", "## Missing Required Kinds", ""])
-    missing = report["missing_required_kinds"]
+    missing = _missing_required_kinds(report)
     if missing:
         lines.extend(f"- `{kind}`" for kind in missing)
     else:
         lines.append("- none")
     lines.extend(["", "## Blocking Findings", ""])
-    blocking_findings = report["blocking_findings"]
+    blocking_findings = _blocking_findings_record(report)
     if blocking_findings:
         lines.extend(f"- {finding}" for finding in blocking_findings)
     else:
         lines.append("- none")
     lines.extend(["", "## Resources", ""])
-    for resource in report["resources"]:
+    for resource in _resources(report):
         lines.append(
-            f"- `{resource['name']}`: `{resource['kind']}`, {resource['size_bytes']} bytes"
+            f"- `{_resource_name(resource)}`: `{_resource_kind(resource)}`, "
+            f"{_resource_size_bytes(resource)} bytes, `{_resource_sha256(resource)}`"
         )
     lines.extend(["", "## Policy", ""])
-    for key, value in report["policy"].items():
+    for key, value in _policy(report).items():
         lines.append(f"- `{key}`: `{value}`")
     lines.append("")
     return "\n".join(lines)
+
+
+def _report_schema(report: dict[str, Any]) -> str:
+    schema = report["schema"]
+    if not isinstance(schema, str):
+        raise TypeError("report schema must be a string")
+    return schema
+
+
+def _report_ok(report: dict[str, Any]) -> bool:
+    ok = report["ok"]
+    if not isinstance(ok, bool):
+        raise TypeError("report ok must be a boolean")
+    return ok
+
+
+def _adobe_dir(report: dict[str, Any]) -> str:
+    adobe_dir = report["adobe_dir"]
+    if not isinstance(adobe_dir, str):
+        raise TypeError("report adobe_dir must be a string")
+    return adobe_dir
+
+
+def _local_only(report: dict[str, Any]) -> bool:
+    local_only = report["local_only"]
+    if not isinstance(local_only, bool):
+        raise TypeError("report local_only must be a boolean")
+    return local_only
 
 
 def _display_path(path: Path) -> str:
@@ -308,11 +349,121 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def _readiness(report: dict[str, Any]) -> dict[str, Any]:
+    readiness = report["readiness"]
+    if not isinstance(readiness, dict) or not all(
+        isinstance(key, str) and isinstance(value, (bool, str))
+        for key, value in readiness.items()
+    ):
+        raise TypeError("report readiness must be an object")
+    _readiness_converter_resource_state(readiness)
+    return readiness
+
+
+def _readiness_converter_resource_state(readiness: dict[str, Any]) -> str:
+    state = readiness["dng_converter_resource_state"]
+    if not isinstance(state, str):
+        raise TypeError("readiness dng_converter_resource_state must be a string")
+    if state not in CONVERTER_RESOURCE_STATES:
+        raise TypeError(
+            "readiness dng_converter_resource_state must be installed-executable, "
+            "missing, or resource-present-not-installed"
+        )
+    return state
+
+
+def _policy(report: dict[str, Any]) -> dict[str, Any]:
+    policy = report["policy"]
+    if not isinstance(policy, dict):
+        raise TypeError("report policy must be an object")
+    return policy
+
+
+def _missing_required_kinds(report: dict[str, Any]) -> list[str]:
+    missing = report["missing_required_kinds"]
+    if not isinstance(missing, list) or not all(isinstance(kind, str) for kind in missing):
+        raise TypeError("report missing_required_kinds must be a string list")
+    return missing
+
+
+def _blocking_findings_record(report: dict[str, Any]) -> list[str]:
+    findings = report["blocking_findings"]
+    if not isinstance(findings, list) or not all(isinstance(item, str) for item in findings):
+        raise TypeError("report blocking_findings must be a string list")
+    return findings
+
+
+def _resources(report: dict[str, Any]) -> list[dict[str, Any]]:
+    resources = report["resources"]
+    if not isinstance(resources, list) or not all(isinstance(item, dict) for item in resources):
+        raise TypeError("report resources must be an object list")
+    return resources
+
+
+def _resource_name(resource: dict[str, Any]) -> str:
+    name = resource["name"]
+    if not isinstance(name, str):
+        raise TypeError("resource name must be a string")
+    return name
+
+
+def _resource_kind(resource: dict[str, Any]) -> str:
+    kind = resource["kind"]
+    if not isinstance(kind, str):
+        raise TypeError("resource kind must be a string")
+    if kind not in RESOURCE_KINDS:
+        raise TypeError(
+            "resource kind must be adobe-documentation, dng-converter-resource, "
+            "dng-profile-editor, dng-sdk-archive, dng-specification, "
+            "lens-profile-creator-archive, other, profile-sdk-archive, or tiff-reference"
+        )
+    return kind
+
+
+def _resource_size_bytes(resource: dict[str, Any]) -> int:
+    size_bytes = resource["size_bytes"]
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool):
+        raise TypeError("resource size_bytes must be an integer")
+    return size_bytes
+
+
+def _resource_sha256(resource: dict[str, Any]) -> str:
+    sha256 = resource["sha256"]
+    if not isinstance(sha256, str):
+        raise TypeError("resource sha256 must be a string")
+    return sha256
+
+
+def _resource_zip(resource: dict[str, Any]) -> dict[str, Any]:
+    zip_summary = resource["zip"]
+    if not isinstance(zip_summary, dict):
+        raise TypeError("resource zip must be an object")
+    return zip_summary
+
+
+def _zip_finding(zip_summary: dict[str, Any], key: str) -> bool:
+    findings = zip_summary["findings"]
+    if not isinstance(findings, dict):
+        raise TypeError("resource zip findings must be an object")
+    value = findings.get(key, False)
+    if not isinstance(value, bool):
+        raise TypeError(f"resource zip finding {key} must be a boolean")
+    return value
+
+
 def _output_dir_is_allowed(output_dir: Path) -> bool:
     repo_root = Path(__file__).resolve().parents[1]
     demo_output = (repo_root / "demo-output").resolve()
     resolved = output_dir.resolve()
     return resolved == demo_output or demo_output in resolved.parents
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
 
 
 if __name__ == "__main__":
