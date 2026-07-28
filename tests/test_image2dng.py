@@ -21,6 +21,11 @@ from image2dng.compatibility import (
     processor_tool_inventory,
     run_processor_compatibility,
 )
+from image2dng.dng_private_data import (
+    DNG_PRIVATE_DATA_SCHEMA,
+    DngPrivateDataError,
+    build_dng_private_data_payload,
+)
 from image2dng.dng_writer import (
     TAG_CFA_PATTERN,
     TAG_CFA_REPEAT_PATTERN_DIM,
@@ -1885,6 +1890,36 @@ def test_semantic_physics_manifest_builder_records_invalid_sidecar(tmp_path):
         "capture_physics.source must be one of" in error
         for error in manifest["samples"][0]["validation"]["errors"]
     )
+
+
+def test_dng_private_data_payload_builder_preserves_sidecar_digest(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
+
+    payload_bytes = build_dng_private_data_payload(semantic_scene_path=semantic_path)
+
+    payload = json.loads(payload_bytes.decode("utf-8"))
+    assert payload["schema"] == DNG_PRIVATE_DATA_SCHEMA
+    assert payload["semantic_scene"]["schema"] == "image2dng.semantic_scene.v1"
+    assert payload["semantic_scene"]["sha256"].startswith("sha256:")
+    assert payload["privacy"] == {
+        "contains_absolute_paths": False,
+        "contains_source_pixels": False,
+        "contains_private_metadata": False,
+    }
+
+
+def test_dng_private_data_payload_builder_rejects_absolute_paths(tmp_path):
+    semantic_path = _write_semantic_scene(tmp_path, width=16, height=12, include_hash=True)
+    payload = json.loads(semantic_path.read_text(encoding="utf-8"))
+    payload["assets"][0]["path"] = "Q:\\private\\mask.png"
+    semantic_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        build_dng_private_data_payload(semantic_scene_path=semantic_path)
+    except DngPrivateDataError as exc:
+        assert "absolute path" in str(exc)
+    else:
+        raise AssertionError("absolute path was not rejected")
 
 
 def test_processor_compatibility_uses_darktable_common_install_path(tmp_path, monkeypatch):

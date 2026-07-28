@@ -11,6 +11,11 @@ from image2dng.api import (
     ValidationError,
     convert,
 )
+from image2dng.dng_private_data import (
+    DNG_PRIVATE_DATA_SCHEMA,
+    DngPrivateDataError,
+    build_dng_private_data_payload,
+)
 from image2dng.models import AIMetadataModel, CameraProfileModel, CoreRawModel
 from image2dng.pipeline import (
     ExternalSceneLinearInput,
@@ -43,6 +48,8 @@ __all__ = [
     "CameraProfileModel",
     "ConversionResult",
     "CoreRawModel",
+    "DNG_PRIVATE_DATA_SCHEMA",
+    "DngPrivateDataError",
     "ExternalSceneLinearInput",
     "GenerationScene",
     "HIGHLIGHT_CLIPPING_REACTION_MODEL",
@@ -61,6 +68,7 @@ __all__ = [
     "UnsupportedInputError",
     "ValidationError",
     "apply_region_exposure_reaction",
+    "build_dng_private_data_payload",
     "convert",
     "inspect_adobe_converted_dng",
     "load_external_scene_manifest",
