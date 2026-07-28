@@ -13,6 +13,11 @@ from image2dng.api import (
     ValidationError,
     convert,
 )
+from image2dng.dng_private_data import (
+    DNG_PRIVATE_DATA_SCHEMA,
+    DngPrivateDataError,
+    build_dng_private_data_payload,
+)
 from image2dng.models import (
     AIMetadataModel,
     CameraProfileModel,
@@ -61,6 +66,8 @@ __all__ = [
     "ConversionResult",
     "CfaPattern",
     "CoreRawModel",
+    "DNG_PRIVATE_DATA_SCHEMA",
+    "DngPrivateDataError",
     "ExternalSceneLinearInput",
     "ExposurePlacementModel",
     "GenerationScene",
@@ -91,6 +98,7 @@ __all__ = [
     "apply_region_exposure_reaction",
     "apply_target_middle_gray_reaction",
     "apply_target_white_balance_reaction",
+    "build_dng_private_data_payload",
     "convert",
     "inspect_adobe_converted_dng",
     "load_external_scene_manifest",
